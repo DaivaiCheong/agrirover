@@ -1,0 +1,113 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../apps/web/src/styles/theme.css">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+<style>
+ .app{width:1280px;background:var(--canvas);border:var(--hair) solid var(--line-strong)}
+ .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 26px;
+   background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+ .brand{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:.16em;color:var(--bp)}
+ .nav{display:flex;gap:22px}
+ .crumb{padding:9px 26px;border-bottom:var(--hair) solid var(--line);background:var(--surface)}
+ .head{padding:26px 26px 22px;background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+ .main{padding:22px 26px 26px}
+ .grid{display:grid;gap:14px}
+ .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)}
+ .g2{grid-template-columns:repeat(2,1fr)} .g23{grid-template-columns:2fr 1fr}
+ .g32{grid-template-columns:1.35fr 1fr}
+ a{color:inherit}
+</style></head><body style="padding:0;background:#DEDDDA">
+<div class="app">
+ <div class="topbar">
+   <div style="display:flex;align-items:center;gap:12px">
+     <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="var(--bp)" stroke-width="1.4">
+       <rect x="2.5" y="2.5" width="15" height="15"/><path d="M10 6v8M6 10h8"/></svg>
+     <span class="brand">AI AUTO FARM</span>
+   </div>
+   <div class="nav"><a class="lbl lbl-ink" style="text-decoration:none;color:var(--bp)">DASHBOARD</a><a class="lbl " style="text-decoration:none;">IRRIGATION</a><a class="lbl " style="text-decoration:none;">WATER</a><a class="lbl " style="text-decoration:none;">CROP</a><a class="lbl " style="text-decoration:none;">DEVICES</a><a class="lbl " style="text-decoration:none;">REPORTS</a></div>
+ </div>
+ <div class="crumb"><span class="lbl">HOME &gt; DASHBOARD</span></div>
+ <div class="head"><div style="display:flex;justify-content:space-between;align-items:flex-end">
+      <div><div class="lbl">SOK FARM · KAMPONG SPEU · 2 ZONES</div>
+           <div class="display d-xl" style="margin-top:8px">FARM OVERVIEW</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="tag tag-ok">LIVE</span><span class="lbl">UPDATED 4 S AGO</span>
+        <button class="btn btn-pill btn-sm" style="margin-left:8px">Request irrigation</button></div>
+    </div></div>
+ <div class="main"><div class="grid g4">
+   <div class="panel panel-pad metric reg">
+      <div class="lbl">SOIL MOISTURE · ZONE A</div>
+      <div style="margin-top:9px"><span class="v ">22.4</span><span class="u">%</span></div>
+      <div class="d"><span style='color:var(--alert)'>▼ BELOW 30% THRESHOLD</span></div></div>
+   <div class="panel panel-pad metric reg">
+      <div class="lbl">SOIL MOISTURE · ZONE B</div>
+      <div style="margin-top:9px"><span class="v ">41.0</span><span class="u">%</span></div>
+      <div class="d"><span style='color:var(--ok)'>WITHIN OPTIMAL BAND</span></div></div>
+   <div class="panel panel-pad metric reg">
+      <div class="lbl">WATER pH · TANK</div>
+      <div style="margin-top:9px"><span class="v ">6.4</span><span class="u">pH</span></div>
+      <div class="d"><span style='color:var(--warn)'>UNCALIBRATED — EVIDENCE ONLY</span></div></div>
+   <div class="panel panel-pad metric reg">
+      <div class="lbl">WATER USED TODAY</div>
+      <div style="margin-top:9px"><span class="v ">18.6</span><span class="u">L</span></div>
+      <div class="d">4 IRRIGATION EVENTS</div></div>
+ </div>
+
+ <div class="grid g32" style="margin-top:14px">
+   <div class="panel">
+     <div class="panel-head"><span class="lbl lbl-ink">SOIL MOISTURE — ZONE A</span><span class="lbl">24 HOUR</span></div>
+     <div class="panel-pad"><div class="ground ground-fine" style="height:170px;border:1px solid var(--line);position:relative;overflow:hidden">
+      <svg viewBox="0 0 600 170" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%">
+        <line x1="0" y1="88.4" x2="600" y2="88.4" stroke="#D8603E" stroke-width="1" stroke-dasharray="4 4"/>
+        <polyline fill="none" stroke="#101014" stroke-width="1.6"
+          points="0,51.0 60,57.800000000000004 120,71.39999999999999 180,85.0 240,103.7 300,112.2 330,51.0 390,56.1 450,69.7 510,81.6 600,93.50000000000001"/>
+        <rect x="300" y="0" width="30" height="170" fill="#1E56A9" opacity=".10"/>
+      </svg>
+      <span class="lbl" style="position:absolute;left:10px;top:8px">MOISTURE % · 24 H · THRESHOLD 30%</span>
+      <span class="lbl" style="position:absolute;right:10px;bottom:6px;color:var(--alert)">— THRESHOLD</span>
+    </div></div>
+   </div>
+   <div class="panel">
+     <div class="panel-head"><span class="lbl lbl-ink">FIELD STATE</span></div>
+     <div class="panel-pad" style="display:flex;flex-direction:column;gap:0">
+       <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)">
+         <span class="lbl">RAIN SENSOR</span><span class="led led-ok"><i></i><span>dry</span></span></div>
+       <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)">
+         <span class="lbl">INLET SOLENOID</span><span class="led led-alert"><i></i><span>open · 00:42</span></span></div>
+       <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)">
+         <span class="lbl">PUMP 6V SOLAR</span><span class="led led-idle"><i></i><span>off</span></span></div>
+       <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)">
+         <span class="lbl">SOLAR SUPPLY</span><span class="led led-ok"><i></i><span>charging</span></span></div>
+       <div style="display:flex;justify-content:space-between;padding:9px 0">
+         <span class="lbl">RAIN LOCKOUT</span><span class="tag">INACTIVE</span></div>
+     </div>
+   </div>
+ </div>
+
+ <div class="grid g2" style="margin-top:14px">
+  <div class="panel">
+   <div class="panel-head"><span class="lbl lbl-ink">ZONES</span><span class="lbl">2 ACTIVE</span></div>
+   <table class="tbl">
+     <tr><th>ZONE</th><th>CROP</th><th class="r">MOISTURE</th><th>STATE</th></tr>
+     <tr><td>ZONE-A</td><td>Lettuce</td><td class="r">22.4%</td><td><span class="led led-alert"><i></i><span>irrigating</span></span></td></tr>
+     <tr><td>ZONE-B</td><td>Cabbage</td><td class="r">41.0%</td><td><span class="led led-ok"><i></i><span>nominal</span></span></td></tr>
+   </table></div>
+  <div class="panel">
+   <div class="panel-head"><span class="lbl lbl-ink">DEVICES</span><span class="lbl">3 REGISTERED</span></div>
+   <table class="tbl">
+     <tr><th>DEVICE</th><th>ROLE</th><th>SEEN</th><th>STATE</th></tr>
+     <tr><td>PI-CORE-01</td><td>Server · AI</td><td>now</td><td><span class="led led-ok"><i></i><span>online</span></span></td></tr>
+     <tr><td>ESP-FIELD-01</td><td>Sensors · relays</td><td>12 s</td><td><span class="led led-ok"><i></i><span>online</span></span></td></tr>
+     <tr><td>ROVER-01</td><td>Survey · camera</td><td>—</td><td><span class="tag tag-wip">UNDER CONSTRUCTION</span></td></tr>
+   </table></div>
+ </div>
+
+ <div class="panel" style="margin-top:14px">
+   <div class="panel-head"><span class="lbl lbl-ink">RECENT EVENTS</span><span class="lbl">LAST 6 HOURS</span></div>
+   <table class="tbl">
+     <tr><th style="width:70px">TIME</th><th style="width:120px">TYPE</th><th>DETAIL</th><th style="width:130px">REASON</th></tr>
+     <tr><td>14:02</td><td><span class="tag tag-alert">IRRIGATION</span></td><td>Zone A fell to 22.4% — inlet solenoid opened, max run 90 s</td><td>auto_threshold</td></tr>
+     <tr><td>11:20</td><td><span class="tag tag-info">DEFERRED</span></td><td>Zone B irrigation skipped — rain sensor wet</td><td>rain_lockout</td></tr>
+     <tr><td>09:35</td><td><span class="tag tag-warn">FAILSAFE</span></td><td>Zone A valve closed at run-time limit</td><td>local_failsafe</td></tr>
+     <tr><td>08:04</td><td><span class="tag">pH</span></td><td>Tank pH 6.4 recorded — outside 6.5–7.5 advisory band</td><td>ph_out_of_band</td></tr>
+   </table></div></div>
+</div></body></html>

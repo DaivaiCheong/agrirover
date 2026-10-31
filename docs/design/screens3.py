@@ -1,0 +1,102 @@
+import pathlib, importlib.util
+spec=importlib.util.spec_from_file_location("gen","gen.py"); g=importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+shell,led=g.shell,g.led
+O={}
+
+def msg(who, body, tone="ai"):
+    if tone=="ai":
+        return f'''<div style="display:flex;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)">
+          <div style="flex:0 0 26px;height:26px;border:1px solid var(--bp);display:flex;align-items:center;justify-content:center">
+            <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="var(--bp)" stroke-width="1.6">
+              <rect x="3" y="3" width="14" height="14"/><path d="M10 6.5v7M6.5 10h7"/></svg></div>
+          <div style="flex:1"><div class="lbl" style="color:var(--bp)">{who}</div>
+            <div style="margin-top:6px;font-size:13.5px">{body}</div></div></div>'''
+    return f'''<div style="display:flex;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line);background:var(--surface-alt)">
+      <div style="flex:0 0 26px;height:26px;border:1px solid var(--ink-faint);display:flex;align-items:center;justify-content:center">
+        <span class="mono-sm" style="color:var(--ink-muted)">DC</span></div>
+      <div style="flex:1"><div class="lbl">{who}</div>
+        <div style="margin-top:6px;font-size:13.5px">{body}</div></div></div>'''
+
+PROPOSAL = '''
+<div style="border:1px solid var(--bp);margin-top:14px">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;
+       background:var(--info-soft);border-bottom:1px solid var(--bp)">
+    <span class="lbl" style="color:var(--bp)">PROPOSED ACTION · AWAITING YOUR APPROVAL</span>
+    <span class="tag tag-info">PRO-0148</span></div>
+  <table class="tbl">
+    <tr><td style="width:150px">Action</td><td><b>Open inlet solenoid</b></td></tr>
+    <tr><td>Relay channel</td><td>CH01 · 12 V solenoid</td></tr>
+    <tr><td>Duration</td><td><b>45 s</b> &nbsp;<span style="color:var(--ink-faint)">(firmware limit 90 s)</span></td></tr>
+    <tr><td>Estimated volume</td><td>1.5 L</td></tr>
+    <tr><td>Evidence</td><td>soil 22.4% &lt; 30% · rain DRY · 11:04 within 06:00–17:00 · last run 4 h 12 m ago</td></tr>
+    <tr><td>Safety checks</td><td>{ok}</td></tr>
+  </table>
+  <div style="display:flex;gap:8px;padding:14px;border-top:1px solid var(--line)">
+    <button class="btn btn-sm">Approve &amp; run</button>
+    <button class="btn btn-ghost btn-sm">Modify duration</button>
+    <button class="btn btn-ghost btn-sm">Reject</button>
+  </div>
+</div>'''.replace("{ok}", '<span class="led led-ok"><i></i><span>4 of 4 passed</span></span>')
+
+O["08_agent.html"]=shell("Assistant","HOME &gt; ASSISTANT",
+ '''<div style="display:flex;justify-content:space-between;align-items:flex-end">
+      <div><div class="lbl">HUMAN-IN-THE-LOOP · NOTHING RUNS WITHOUT YOUR APPROVAL</div>
+           <div class="display d-xl" style="margin-top:8px">FARM ASSISTANT</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="tag tag-ok">2 TOOLS READ</span><span class="tag tag-info">1 TOOL WRITE</span></div></div>''',
+ f'''<div class="grid g32">
+  <div class="panel" style="display:flex;flex-direction:column">
+   <div class="panel-head"><span class="lbl lbl-ink">CONVERSATION</span><span class="lbl">SESSION 26 AUG</span></div>
+   <div style="flex:1">
+     {msg("DAIVAI","How is Zone A doing? Should I water it?", "me")}
+     {msg("ASSISTANT","""I read the last hour from ESP-FIELD-01. Soil moisture has fallen to
+       <b>22.4%</b>, below the 30% trigger. The rain sensor is dry and the forecast shows no rain
+       before 18:00. Tank pH is 6.4, slightly under the advisory floor of 6.5 — usable for irrigation,
+       but worth correcting this week.
+       <br><br>It is 11:04, inside the solar pump's daylight window, and the last irrigation ended
+       4 hours 12 minutes ago, so the 30-minute cooldown has cleared. I recommend a short run on the
+       gravity feed rather than the pump, since the solenoid needs no battery.""" + PROPOSAL)}
+   </div>
+   <div style="border-top:1px solid var(--line-strong);padding:14px 18px;display:flex;gap:10px;align-items:center">
+     <div style="flex:1;border:1px solid var(--line-strong);padding:10px 12px" class="mono-sm"
+          >Ask about the plot, or describe what you want done…</div>
+     <button class="btn btn-round">↑</button>
+   </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+   <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">CONTROL HIERARCHY</span></div>
+    <table class="tbl">
+      <tr><td style="width:26px" class="idx">01</td><td>Firmware interlock<br>
+        <span style="color:var(--ink-muted);font-size:10.5px">absolute · cannot be overridden</span></td>
+        <td>{led("ok","armed")}</td></tr>
+      <tr><td class="idx">02</td><td>Deterministic rule engine<br>
+        <span style="color:var(--ink-muted);font-size:10.5px">autonomous baseline · runs without AI</span></td>
+        <td>{led("ok","active")}</td></tr>
+      <tr><td class="idx">03</td><td>AI assistant<br>
+        <span style="color:var(--ink-muted);font-size:10.5px">proposes only · needs approval</span></td>
+        <td>{led("warn","advisory")}</td></tr>
+    </table>
+    <div class="panel-pad" style="padding-top:12px"><div class="mono-sm" style="color:var(--ink-muted)">
+      The assistant can read everything and propose anything. It cannot energise a relay on its own,
+      and it can never exceed the limits enforced below it.</div></div></div>
+
+   <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">TOOLS AVAILABLE</span></div>
+    <table class="tbl">
+      <tr><th>TOOL</th><th>MODE</th></tr>
+      <tr><td>read_sensor_history</td><td><span class="tag tag-ok">READ</span></td></tr>
+      <tr><td>read_device_state</td><td><span class="tag tag-ok">READ</span></td></tr>
+      <tr><td>propose_relay_action</td><td><span class="tag tag-info">PROPOSE</span></td></tr>
+      <tr><td style="color:var(--ink-faint)">set_relay (direct)</td><td><span class="tag tag-alert">BLOCKED</span></td></tr>
+    </table></div>
+
+   <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">DECISION LOG</span></div>
+    <table class="tbl">
+      <tr><td>11:04</td><td>PRO-0148 proposed</td><td><span class="tag tag-info">PENDING</span></td></tr>
+      <tr><td>06:52</td><td>PRO-0147 open solenoid 30 s</td><td><span class="tag tag-ok">APPROVED</span></td></tr>
+      <tr><td>Yest 16:20</td><td>PRO-0146 run pump 60 s</td><td><span class="tag tag-alert">REJECTED</span></td></tr>
+    </table></div>
+  </div>
+ </div>''', nav="")
+for k,v in O.items(): pathlib.Path(k).write_text(v,encoding="utf-8")
+print("wrote",list(O))

@@ -1,0 +1,76 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../apps/web/src/styles/theme.css">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+<style>
+ .app{width:1280px;background:var(--canvas);border:var(--hair) solid var(--line-strong)}
+ .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 26px;
+   background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+ .brand{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:.16em;color:var(--bp)}
+ .nav{display:flex;gap:22px}
+ .crumb{padding:9px 26px;border-bottom:var(--hair) solid var(--line);background:var(--surface)}
+ .head{padding:26px 26px 22px;background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+ .main{padding:22px 26px 26px}
+ .grid{display:grid;gap:14px}
+ .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)}
+ .g2{grid-template-columns:repeat(2,1fr)} .g23{grid-template-columns:2fr 1fr}
+ .g32{grid-template-columns:1.35fr 1fr}
+ a{color:inherit}
+</style></head><body style="padding:0;background:#DEDDDA">
+<div class="app">
+ <div class="topbar">
+   <div style="display:flex;align-items:center;gap:12px">
+     <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="var(--bp)" stroke-width="1.4">
+       <rect x="2.5" y="2.5" width="15" height="15"/><path d="M10 6v8M6 10h8"/></svg>
+     <span class="brand">AI AUTO FARM</span>
+   </div>
+   <div class="nav"><a class="lbl " style="text-decoration:none;">DASHBOARD</a><a class="lbl " style="text-decoration:none;">IRRIGATION</a><a class="lbl " style="text-decoration:none;">WATER</a><a class="lbl lbl-ink" style="text-decoration:none;color:var(--bp)">CROP</a><a class="lbl " style="text-decoration:none;">DEVICES</a><a class="lbl " style="text-decoration:none;">REPORTS</a></div>
+ </div>
+ <div class="crumb"><span class="lbl">HOME &gt; CROP &gt; DISEASE DETECTION</span></div>
+ <div class="head"><div style="display:flex;justify-content:space-between;align-items:flex-end">
+      <div><div class="lbl">ZONE-A · LETTUCE · MOBILENETV2 · MODEL mnv2-v0 (NOT TRAINED)</div>
+           <div class="display d-xl" style="margin-top:8px">DISEASE DETECTION</div></div>
+      <button class="btn btn-pill btn-sm">Upload leaf image</button></div></div>
+ <div class="main"><div class="grid g2">
+  <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">CAPTURE</span><span class="lbl">MANUAL UPLOAD</span></div>
+   <div class="panel-pad">
+    <div class="ground ground-fine" style="height:230px;border:1.5px dashed var(--line-strong);display:flex;
+         flex-direction:column;align-items:center;justify-content:center;gap:10px">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#9A9A9E" stroke-width="1.2">
+        <rect x="3" y="5" width="18" height="14"/><circle cx="12" cy="12" r="3.5"/><path d="M8 5l1.5-2h5L16 5"/></svg>
+      <span class="lbl">DROP A LEAF PHOTO, OR TAP TO BROWSE</span>
+      <span class="mono-sm" style="color:var(--ink-faint)">JPEG / PNG · MAX 8 MB · ONE LEAF, FILLING THE FRAME</span></div>
+    <div class="mono-sm" style="color:var(--ink-muted);margin-top:12px">
+      Automated capture arrives with the survey rover. Until then the farmer photographs a leaf
+      with a phone and uploads it here — the classification path is identical either way.</div>
+   </div></div>
+
+  <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">RESULT</span><span class="tag tag-wip">AWAITING TRAINED MODEL</span></div>
+   <div class="panel-pad">
+    <div class="display d-lg">Early blight</div>
+    <div class="mono-sm" style="color:var(--ink-muted);margin-top:2px">Alternaria solani</div>
+    <div class="lbl" style="margin-top:18px">CONFIDENCE</div>
+    <div class="bar bar-warn" style="margin-top:7px"><i style="width:87%"></i>
+      <span class="bar-mark" style="left:90%"></span></div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px">
+      <span class="mono-sm" style="color:var(--warn)"><b>0.87</b></span>
+      <span class="mono-sm" style="color:var(--ink-faint)">ALERT GATE 0.90</span></div>
+    <table class="tbl" style="margin-top:16px">
+      <tr><th>ALTERNATIVE</th><th class="r">P</th></tr>
+      <tr><td>Early blight</td><td class="r">0.87</td></tr>
+      <tr><td>Late blight</td><td class="r">0.08</td></tr>
+      <tr><td>Leaf mould</td><td class="r">0.03</td></tr>
+      <tr><td>Healthy</td><td class="r">0.02</td></tr>
+    </table>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-sm">Confirm</button><button class="btn btn-ghost btn-sm">Dismiss</button></div>
+    <div class="mono-sm" style="color:var(--ink-muted);margin-top:12px">
+      Below the gate the result is shown for confirmation and actuates nothing. The system advises; it never doses.</div>
+   </div></div>
+ </div>
+ <div class="panel" style="margin-top:14px"><div class="panel-head"><span class="lbl lbl-ink">CLASSIFICATION HISTORY</span></div>
+  <table class="tbl">
+    <tr><th>WHEN</th><th>ZONE</th><th>SOURCE</th><th>CLASS</th><th class="r">CONF.</th><th>MODEL</th><th>OUTCOME</th></tr>
+    <tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:26px">
+      NO CLASSIFICATIONS YET — MODEL TRAINING SCHEDULED 29 SEP – 12 OCT 2026</td></tr>
+  </table></div></div>
+</div></body></html>

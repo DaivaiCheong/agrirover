@@ -1,0 +1,186 @@
+import os, pathlib
+CSS = "../../apps/web/src/styles/theme.css"
+
+def shell(title, crumb, head, body, nav="DASHBOARD", w=1280):
+    links = ["DASHBOARD","IRRIGATION","WATER","CROP","DEVICES","REPORTS"]
+    navhtml = "".join(
+        f'<a class="lbl {"lbl-ink" if n==nav else ""}" style="text-decoration:none;{"color:var(--bp)" if n==nav else ""}">{n}</a>'
+        for n in links)
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="{CSS}">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+<style>
+ .app{{width:{w}px;background:var(--canvas);border:var(--hair) solid var(--line-strong)}}
+ .topbar{{display:flex;align-items:center;justify-content:space-between;padding:14px 26px;
+   background:var(--surface);border-bottom:var(--hair) solid var(--line)}}
+ .brand{{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:.16em;color:var(--bp)}}
+ .nav{{display:flex;gap:22px}}
+ .crumb{{padding:9px 26px;border-bottom:var(--hair) solid var(--line);background:var(--surface)}}
+ .head{{padding:26px 26px 22px;background:var(--surface);border-bottom:var(--hair) solid var(--line)}}
+ .main{{padding:22px 26px 26px}}
+ .grid{{display:grid;gap:14px}}
+ .g4{{grid-template-columns:repeat(4,1fr)}} .g3{{grid-template-columns:repeat(3,1fr)}}
+ .g2{{grid-template-columns:repeat(2,1fr)}} .g23{{grid-template-columns:2fr 1fr}}
+ .g32{{grid-template-columns:1.35fr 1fr}}
+ a{{color:inherit}}
+</style></head><body style="padding:0;background:#DEDDDA">
+<div class="app">
+ <div class="topbar">
+   <div style="display:flex;align-items:center;gap:12px">
+     <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="var(--bp)" stroke-width="1.4">
+       <rect x="2.5" y="2.5" width="15" height="15"/><path d="M10 6v8M6 10h8"/></svg>
+     <span class="brand">AI AUTO FARM</span>
+   </div>
+   <div class="nav">{navhtml}</div>
+ </div>
+ <div class="crumb"><span class="lbl">{crumb}</span></div>
+ <div class="head">{head}</div>
+ <div class="main">{body}</div>
+</div></body></html>"""
+
+def led(kind,txt): return f'<span class="led led-{kind}"><i></i><span>{txt}</span></span>'
+def metric(lbl,val,unit,note,cls=""):
+    return f"""<div class="panel panel-pad metric reg">
+      <div class="lbl">{lbl}</div>
+      <div style="margin-top:9px"><span class="v {cls}">{val}</span><span class="u">{unit}</span></div>
+      <div class="d">{note}</div></div>"""
+
+# ---------- isometric line-art: the field schematic ----------
+ISO = """
+<svg viewBox="0 0 520 340" width="100%" style="display:block">
+ <defs><style>
+  .l{fill:none;stroke:rgba(255,255,255,.85);stroke-width:1.1;stroke-linejoin:round}
+  .lf{fill:none;stroke:rgba(255,255,255,.4);stroke-width:.85}
+  .t{font-family:'IBM Plex Mono',monospace;font-size:8.5px;fill:rgba(255,255,255,.8);letter-spacing:.1em}
+  .fillw{fill:rgba(255,255,255,.07)}
+ </style></defs>
+ <!-- ground grid -->
+ <g class="lf">
+  <path d="M40 232 L250 122 L470 232 L250 342 Z"/>
+  <path d="M92 258 L302 148"/><path d="M144 284 L354 174"/><path d="M196 310 L406 200"/>
+  <path d="M110 180 L320 290"/><path d="M162 154 L372 264"/><path d="M214 128 L424 238"/>
+ </g>
+ <!-- water tank -->
+ <g><path class="l fillw" d="M92 120 L146 92 L200 120 L200 168 L146 196 L92 168 Z"/>
+    <path class="l" d="M92 120 L146 148 L200 120 M146 148 L146 196"/>
+    <text class="t" x="86" y="220">TANK 200L</text></g>
+ <!-- solenoid valve -->
+ <g><path class="l fillw" d="M214 178 L238 166 L262 178 L262 196 L238 208 L214 196 Z"/>
+    <path class="l" d="M214 178 L238 190 L262 178 M238 190 L238 208"/>
+    <text class="t" x="196" y="240">SOLENOID 12V</text></g>
+ <!-- pump -->
+ <g><path class="l fillw" d="M282 200 L302 190 L322 200 L322 214 L302 224 L282 214 Z"/>
+    <path class="l" d="M282 200 L302 210 L322 200 M302 210 L302 224"/>
+    <circle class="lf" cx="302" cy="200" r="6"/>
+    <text class="t" x="276" y="258">PUMP 6V SOLAR</text></g>
+ <!-- pipe run -->
+ <path class="l" d="M146 196 L146 214 L238 208"/>
+ <path class="l" d="M238 208 L302 224"/>
+ <path class="l" d="M302 224 L340 246 L392 220"/>
+ <!-- beds -->
+ <g class="lf">
+  <path d="M330 250 L372 226 L414 250 L372 274 Z"/>
+  <path d="M372 274 L414 250 L456 274 L414 298 Z"/>
+ </g>
+ <g class="l">
+  <path d="M362 244 v-9 M372 240 v-11 M382 244 v-9"/>
+  <path d="M404 268 v-9 M414 264 v-11 M424 268 v-9"/>
+ </g>
+ <text class="t" x="352" y="316">ZONE A / ZONE B</text>
+ <!-- sensor mast -->
+ <g><path class="l" d="M258 262 v-30"/><circle class="l fillw" cx="258" cy="230" r="5"/>
+    <text class="t" x="230" y="292">SOIL + pH</text></g>
+ <!-- rain sensor -->
+ <g><path class="l" d="M420 150 v-24"/><path class="l fillw" d="M408 126 h24 v7 h-24 z"/>
+    <path class="lf" d="M412 116 v-7 M420 114 v-9 M428 116 v-7"/>
+    <text class="t" x="404" y="176">RAIN</text></g>
+</svg>"""
+
+OUT = {}
+
+# ============================ 00 STYLE GUIDE ============================
+sg_body = f"""
+<div class="grid g2">
+ <div class="panel">
+  <div class="panel-head"><span class="lbl lbl-ink">01 — Colour</span><span class="lbl">TOKENS</span></div>
+  <div class="panel-pad">
+   {"".join(f'''<div style="display:flex;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--line)">
+     <span style="width:34px;height:22px;background:{v};border:1px solid var(--line-strong);display:block"></span>
+     <span class="mono-sm" style="width:120px">{n}</span><span class="mono-sm" style="color:var(--ink-muted)">{v}</span></div>'''
+   for n,v in [("--canvas","#EFEEEC"),("--surface","#FFFFFF"),("--ink","#101014"),("--ink-muted","#6A6A6E"),
+               ("--line","#D9D8D4"),("--bp  blueprint","#1E56A9"),("--ok","#4E8A3C"),("--warn","#B8862B"),
+               ("--alert","#D8603E"),("--idle","#9A9A9E")])}
+  </div></div>
+
+ <div class="panel">
+  <div class="panel-head"><span class="lbl lbl-ink">02 — Type</span><span class="lbl">3 FAMILIES</span></div>
+  <div class="panel-pad">
+    <div class="lbl">DISPLAY / ARCHIVO 700</div>
+    <div class="display d-lg" style="margin:4px 0 14px">Irrigation Control</div>
+    <div class="lbl">MONO / IBM PLEX MONO — DATA &amp; LABELS</div>
+    <div class="mono" style="margin:4px 0 14px">ZONE-A · 34.2% · 14:02:11 · auto_threshold</div>
+    <div class="lbl">BODY / IBM PLEX SANS</div>
+    <div style="margin-top:4px">Readings are averaged on the device before publication.</div>
+    <hr class="rule" style="margin:14px 0">
+    <div class="lbl">ACCENT / INSTRUMENT SERIF ITALIC</div>
+    <div class="display d-md" style="margin-top:4px">Measured, <span class="serif-em">not guessed</span></div>
+  </div></div>
+</div>
+
+<div class="grid g3" style="margin-top:14px">
+ <div class="panel">
+  <div class="panel-head"><span class="lbl lbl-ink">03 — Status</span></div>
+  <div class="panel-pad" style="display:flex;flex-direction:column;gap:11px">
+   {led('ok','online · nominal')}{led('warn','threshold near')}{led('alert','action required')}{led('idle','offline')}
+   <hr class="rule">
+   <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <span class="tag tag-ok">VALID</span><span class="tag tag-warn">UNCALIBRATED</span>
+    <span class="tag tag-alert">FAILSAFE</span><span class="tag tag-info">AUTO</span>
+    <span class="tag tag-wip">UNDER CONSTRUCTION</span></div>
+  </div></div>
+
+ <div class="panel">
+  <div class="panel-head"><span class="lbl lbl-ink">04 — Controls</span></div>
+  <div class="panel-pad" style="display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+   <button class="btn btn-pill">Request irrigation</button>
+   <button class="btn btn-ghost btn-pill">Learn more</button>
+   <button class="btn btn-alert btn-sm">Stop now</button>
+   <div style="display:flex;gap:8px;align-items:center">
+     <button class="btn btn-round" style="background:var(--ink)">→</button>
+     <span class="lbl">ROUND ACTION</span></div>
+  </div></div>
+
+ <div class="panel">
+  <div class="panel-head"><span class="lbl lbl-ink">05 — Index rows</span></div>
+  <div>
+   {"".join(f'''<div style="display:flex;gap:14px;padding:11px 16px;border-bottom:1px solid var(--line)">
+     <span class="idx">{i}</span><span class="mono">{t}</span></div>'''
+     for i,t in [("01","Measure before acting"),("02","Fail safe, in firmware"),("03","Report state, not intent")])}
+  </div></div>
+</div>
+
+<div style="margin-top:14px" class="blueprint reg">
+ <div style="display:grid;grid-template-columns:1.15fr 1fr">
+  <div style="padding:22px">{ISO}</div>
+  <div style="padding:22px 24px;border-left:1px solid var(--bp-line)">
+    <div class="lbl">06 — BLUEPRINT PANEL</div>
+    <div class="display d-lg" style="color:#fff;margin:12px 0 16px">ENGINEERED FOR THE FIELD.<br>BUILT TO FAIL SAFE.</div>
+    <div class="bp-box" style="padding:0">
+     {"".join(f'''<div style="display:flex;gap:14px;padding:9px 14px;{'border-bottom:1px solid var(--bp-line)' if i!='03' else ''}">
+       <span class="idx" style="color:var(--bp-ink-soft)">{i}</span>
+       <span class="mono" style="color:#fff">{t}</span></div>'''
+       for i,t in [("01","Soil moisture &amp; pH sensing"),("02","Rain-aware irrigation logic"),("03","Hardware run-time limit")])}
+    </div>
+    <div class="bp-box" style="padding:10px 14px;margin-top:12px">
+      <span class="mono" style="color:var(--bp-ink-soft)">Kirirom Institute of Technology · B11-P01 · 2026</span></div>
+  </div></div></div>
+"""
+OUT["00_style_guide.html"] = shell("Style guide","HOME &gt; DESIGN SYSTEM",
+  '<div class="lbl">DESIGN SYSTEM</div><div class="display d-xl" style="margin-top:8px">INDUSTRIAL BLUEPRINT</div>'
+  '<div style="margin-top:10px;max-width:660px;color:var(--ink-muted)">Hairline rules, monospace data, square corners, one blueprint accent. '
+  'Every token below is defined once in <span class="mono">theme.css</span> and consumed by both the application and this sheet.</div>',
+  sg_body, nav="")
+
+for name,html in OUT.items():
+    pathlib.Path(name).write_text(html, encoding="utf-8")
+print("wrote:", list(OUT))

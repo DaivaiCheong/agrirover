@@ -1,0 +1,133 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../apps/web/src/styles/theme.css">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+<style>
+ .app{width:1280px;background:var(--canvas);border:var(--hair) solid var(--line-strong)}
+ .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 26px;
+   background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+ .brand{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:.16em;color:var(--bp)}
+ .nav{display:flex;gap:22px}
+ .crumb{padding:9px 26px;border-bottom:var(--hair) solid var(--line);background:var(--surface)}
+ .head{padding:26px 26px 22px;background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+ .main{padding:22px 26px 26px}
+ .grid{display:grid;gap:14px}
+ .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)}
+ .g2{grid-template-columns:repeat(2,1fr)} .g23{grid-template-columns:2fr 1fr}
+ .g32{grid-template-columns:1.35fr 1fr}
+ a{color:inherit}
+</style></head><body style="padding:0;background:#DEDDDA">
+<div class="app">
+ <div class="topbar">
+   <div style="display:flex;align-items:center;gap:12px">
+     <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="var(--bp)" stroke-width="1.4">
+       <rect x="2.5" y="2.5" width="15" height="15"/><path d="M10 6v8M6 10h8"/></svg>
+     <span class="brand">AI AUTO FARM</span>
+   </div>
+   <div class="nav"><a class="lbl " style="text-decoration:none;">DASHBOARD</a><a class="lbl " style="text-decoration:none;">IRRIGATION</a><a class="lbl " style="text-decoration:none;">WATER</a><a class="lbl " style="text-decoration:none;">CROP</a><a class="lbl lbl-ink" style="text-decoration:none;color:var(--bp)">DEVICES</a><a class="lbl " style="text-decoration:none;">REPORTS</a></div>
+ </div>
+ <div class="crumb"><span class="lbl">HOME &gt; DEVICES</span></div>
+ <div class="head"><div style="display:flex;justify-content:space-between;align-items:flex-end">
+      <div><div class="lbl">3 REGISTERED · 2 ONLINE</div>
+           <div class="display d-xl" style="margin-top:8px">DEVICE REGISTRY</div></div>
+      <button class="btn btn-ghost btn-sm">Provision device</button></div></div>
+ <div class="main"><div class="grid g3">
+  <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">PI-CORE-01</span><span class="led led-ok"><i></i><span>online</span></span></div>
+   <div class="panel-pad"><div class="lbl">RASPBERRY PI · CENTRAL SERVER</div>
+    <table class="tbl" style="margin-top:10px">
+      <tr><td>Role</td><td class="r">API · DB · broker · AI</td></tr>
+      <tr><td>Services</td><td class="r">6 / 6 up</td></tr>
+      <tr><td>Uptime</td><td class="r">4 d 02 h</td></tr>
+      <tr><td>Firmware</td><td class="r">core-1.0.0</td></tr></table></div></div>
+
+  <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">ESP-FIELD-01</span><span class="led led-ok"><i></i><span>online</span></span></div>
+   <div class="panel-pad"><div class="lbl">ESP8266 · FIELD NODE</div>
+    <table class="tbl" style="margin-top:10px">
+      <tr><td>Soil moisture</td><td class="r">ADS1115 CH1</td></tr>
+      <tr><td>Water pH</td><td class="r">ADS1115 CH0</td></tr>
+      <tr><td>Rain</td><td class="r">D7 digital</td></tr>
+      <tr><td>Relays</td><td class="r">D1 D2 D5 D6</td></tr>
+      <tr><td>Last seen</td><td class="r">12 s ago</td></tr></table></div></div>
+
+  <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">ROVER-01</span><span class="tag tag-wip">WIP</span></div>
+   <div class="panel-pad"><div class="lbl">SURVEY ROVER · CAMERA</div>
+    <div class="ground ground-fine" style="height:96px;border:1.5px dashed var(--line-strong);
+      display:flex;align-items:center;justify-content:center;margin-top:10px">
+      <span class="lbl">NOT COMMISSIONED</span></div>
+    <div class="mono-sm" style="color:var(--ink-muted);margin-top:11px">
+      Chassis and camera not yet built. Its MQTT topics and database rows are already defined,
+      so it registers without a schema change.</div></div></div>
+ </div>
+
+ <div class="panel" style="margin-top:14px"><div class="panel-head">
+   <span class="lbl lbl-ink">SENSOR CHANNELS</span><span class="lbl">ESP-FIELD-01</span></div>
+  <table class="tbl">
+    <tr><th style="width:34px">#</th><th>CHANNEL</th><th>PIN</th><th class="r">LATEST</th><th>QUALITY</th><th>STATE</th></tr>
+    <tr><td>01</td><td>Soil moisture · capacitive</td><td>ADS1115 A1</td><td class="r">22.4 %</td><td><span class="tag tag-ok">VALID</span></td><td><span class="led led-alert"><i></i><span>below threshold</span></span></td></tr>
+    <tr><td>02</td><td>Water pH · PH-4502C</td><td>ADS1115 A0</td><td class="r">6.4 pH</td><td><span class="tag tag-warn">UNCALIBRATED</span></td><td><span class="led led-warn"><i></i><span>advisory</span></span></td></tr>
+    <tr><td>03</td><td>Rain · digital</td><td>D7 · GPIO13</td><td class="r">DRY</td><td><span class="tag tag-ok">VALID</span></td><td><span class="led led-ok"><i></i><span>nominal</span></span></td></tr>
+    <tr><td>04</td><td>Supply voltage · solar</td><td>divider</td><td class="r">6.8 V</td><td><span class="tag tag-ok">VALID</span></td><td><span class="led led-ok"><i></i><span>charging</span></span></td></tr>
+  </table></div>
+
+ <div class="blueprint reg" style="margin-top:14px">
+  <div style="display:grid;grid-template-columns:1.1fr 1fr">
+   <div style="padding:20px">
+<svg viewBox="0 0 520 340" width="100%" style="display:block">
+ <defs><style>
+  .l{fill:none;stroke:rgba(255,255,255,.85);stroke-width:1.1;stroke-linejoin:round}
+  .lf{fill:none;stroke:rgba(255,255,255,.4);stroke-width:.85}
+  .t{font-family:'IBM Plex Mono',monospace;font-size:8.5px;fill:rgba(255,255,255,.8);letter-spacing:.1em}
+  .fillw{fill:rgba(255,255,255,.07)}
+ </style></defs>
+ <!-- ground grid -->
+ <g class="lf">
+  <path d="M40 232 L250 122 L470 232 L250 342 Z"/>
+  <path d="M92 258 L302 148"/><path d="M144 284 L354 174"/><path d="M196 310 L406 200"/>
+  <path d="M110 180 L320 290"/><path d="M162 154 L372 264"/><path d="M214 128 L424 238"/>
+ </g>
+ <!-- water tank -->
+ <g><path class="l fillw" d="M92 120 L146 92 L200 120 L200 168 L146 196 L92 168 Z"/>
+    <path class="l" d="M92 120 L146 148 L200 120 M146 148 L146 196"/>
+    <text class="t" x="86" y="220">TANK 200L</text></g>
+ <!-- solenoid valve -->
+ <g><path class="l fillw" d="M214 178 L238 166 L262 178 L262 196 L238 208 L214 196 Z"/>
+    <path class="l" d="M214 178 L238 190 L262 178 M238 190 L238 208"/>
+    <text class="t" x="196" y="240">SOLENOID 12V</text></g>
+ <!-- pump -->
+ <g><path class="l fillw" d="M282 200 L302 190 L322 200 L322 214 L302 224 L282 214 Z"/>
+    <path class="l" d="M282 200 L302 210 L322 200 M302 210 L302 224"/>
+    <circle class="lf" cx="302" cy="200" r="6"/>
+    <text class="t" x="276" y="258">PUMP 6V SOLAR</text></g>
+ <!-- pipe run -->
+ <path class="l" d="M146 196 L146 214 L238 208"/>
+ <path class="l" d="M238 208 L302 224"/>
+ <path class="l" d="M302 224 L340 246 L392 220"/>
+ <!-- beds -->
+ <g class="lf">
+  <path d="M330 250 L372 226 L414 250 L372 274 Z"/>
+  <path d="M372 274 L414 250 L456 274 L414 298 Z"/>
+ </g>
+ <g class="l">
+  <path d="M362 244 v-9 M372 240 v-11 M382 244 v-9"/>
+  <path d="M404 268 v-9 M414 264 v-11 M424 268 v-9"/>
+ </g>
+ <text class="t" x="352" y="316">ZONE A / ZONE B</text>
+ <!-- sensor mast -->
+ <g><path class="l" d="M258 262 v-30"/><circle class="l fillw" cx="258" cy="230" r="5"/>
+    <text class="t" x="230" y="292">SOIL + pH</text></g>
+ <!-- rain sensor -->
+ <g><path class="l" d="M420 150 v-24"/><path class="l fillw" d="M408 126 h24 v7 h-24 z"/>
+    <path class="lf" d="M412 116 v-7 M420 114 v-9 M428 116 v-7"/>
+    <text class="t" x="404" y="176">RAIN</text></g>
+</svg></div>
+   <div style="padding:22px 24px;border-left:1px solid var(--bp-line)">
+     <div class="lbl">FIELD TOPOLOGY</div>
+     <div class="display d-md" style="color:#fff;margin:10px 0 14px">ONE NODE, FOUR CHANNELS,<br>TWO WATER PATHS.</div>
+     <div class="bp-box">
+      <div style="display:flex;gap:12px;padding:9px 13px;border-bottom:1px solid var(--bp-line)">
+        <span class="idx" style="color:var(--bp-ink-soft)">01</span><span class="mono" style="color:#fff">Gravity feed · 12 V solenoid</span></div>
+      <div style="display:flex;gap:12px;padding:9px 13px;border-bottom:1px solid var(--bp-line)">
+        <span class="idx" style="color:var(--bp-ink-soft)">02</span><span class="mono" style="color:#fff">Pressured feed · 6 V solar pump</span></div>
+      <div style="display:flex;gap:12px;padding:9px 13px">
+        <span class="idx" style="color:var(--bp-ink-soft)">03</span><span class="mono" style="color:#fff">Rain lockout overrides both</span></div>
+     </div></div></div></div></div>
+</div></body></html>

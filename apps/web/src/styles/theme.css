@@ -1,0 +1,222 @@
+/* ============================================================================
+   AI AUTO FARM — INDUSTRIAL / TECHNICAL BLUEPRINT DESIGN SYSTEM
+   Palette sampled directly from the approved theme references.
+   Single source of truth: consumed by the React app and by docs/design mockups.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root{
+  /* ---- canvas & surface ---- */
+  --canvas:        #EFEEEC;
+  --canvas-warm:   #FAF7F5;
+  --surface:       #FFFFFF;
+  --surface-alt:   #F6F6F5;
+  --surface-sunk:  #E9E8E5;
+
+  /* ---- ink ---- */
+  --ink:           #101014;
+  --ink-strong:    #000000;
+  --ink-muted:     #6A6A6E;
+  --ink-faint:     #9A9A9E;
+  --ink-invert:    #FFFFFF;
+
+  /* ---- line work ---- */
+  --line:          #D9D8D4;
+  --line-strong:   #B9B8B3;
+  --grid:          #E4E3DF;
+
+  /* ---- blueprint inverse panel ---- */
+  --bp:            #1E56A9;
+  --bp-deep:       #164380;
+  --bp-line:       rgba(255,255,255,.34);
+  --bp-line-soft:  rgba(255,255,255,.16);
+  --bp-ink:        #FFFFFF;
+  --bp-ink-soft:   rgba(255,255,255,.72);
+
+  /* ---- status ---- */
+  --ok:        #4E8A3C;  --ok-soft:    #E8F0E3;
+  --warn:      #B8862B;  --warn-soft:  #F6EFDC;
+  --alert:     #D8603E;  --alert-soft: #FAEAE4;
+  --idle:      #9A9A9E;  --idle-soft:  #ECECEA;
+  --info:      #1E56A9;  --info-soft:  #E4EBF5;
+
+  /* ---- type ---- */
+  --font-display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-body:    'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+
+  /* ---- metrics ---- */
+  --r:      0px;      /* industrial: square corners */
+  --r-pill: 999px;    /* pills reserved for primary actions only */
+  --hair:   1px;
+  --gut:    24px;
+}
+
+/* ---------- reset-ish ---------- */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--canvas);
+  color:var(--ink);
+  font-family:var(--font-body);
+  font-size:14px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------- graph-paper ground ---------- */
+.ground{
+  background-color:var(--canvas);
+  background-image:
+    linear-gradient(var(--grid) var(--hair), transparent var(--hair)),
+    linear-gradient(90deg, var(--grid) var(--hair), transparent var(--hair));
+  background-size:28px 28px;
+}
+.ground-fine{ background-size:7px 7px; }
+
+/* ---------- type scale ---------- */
+.display   {font-family:var(--font-display);font-weight:700;letter-spacing:-.025em;line-height:1.04}
+.d-xxl     {font-size:52px}
+.d-xl      {font-size:38px}
+.d-lg      {font-size:27px}
+.d-md      {font-size:20px}
+.serif-em  {font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-weight:400;letter-spacing:-.01em}
+
+/* micro-label: the workhorse of this system */
+.lbl{
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:.13em;
+  text-transform:uppercase;
+  color:var(--ink-muted);
+}
+.lbl-ink{color:var(--ink)}
+.mono{font-family:var(--font-mono);font-size:12px}
+.mono-sm{font-family:var(--font-mono);font-size:11px}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+/* ---------- index numeral (01 / 02 / 03) ---------- */
+.idx{
+  font-family:var(--font-mono);font-size:11px;font-weight:500;
+  color:var(--ink-faint);letter-spacing:.06em;
+}
+
+/* ---------- panels ---------- */
+.panel{
+  background:var(--surface);
+  border:var(--hair) solid var(--line);
+  border-radius:var(--r);
+}
+.panel-sunk{background:var(--surface-alt)}
+.panel-pad{padding:18px 20px}
+
+.panel-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 16px;
+  border-bottom:var(--hair) solid var(--line);
+  background:var(--surface);
+}
+
+/* ---------- blueprint inverse panel ---------- */
+.blueprint{
+  background:var(--bp);
+  color:var(--bp-ink);
+  border:var(--hair) solid var(--bp-deep);
+  background-image:
+    linear-gradient(var(--bp-line-soft) var(--hair), transparent var(--hair)),
+    linear-gradient(90deg, var(--bp-line-soft) var(--hair), transparent var(--hair));
+  background-size:26px 26px;
+}
+.blueprint .lbl{color:var(--bp-ink-soft)}
+.blueprint .bp-box{border:var(--hair) solid var(--bp-line)}
+
+/* ---------- registration / crosshair marks ---------- */
+.reg{position:relative}
+.reg::before,.reg::after{
+  content:'';position:absolute;width:9px;height:9px;pointer-events:none;
+  border-color:var(--line-strong);
+}
+.reg::before{top:-1px;left:-1px;border-top:var(--hair) solid;border-left:var(--hair) solid}
+.reg::after{bottom:-1px;right:-1px;border-bottom:var(--hair) solid;border-right:var(--hair) solid}
+
+/* ---------- status LED ---------- */
+.led{display:inline-flex;align-items:center;gap:7px}
+.led i{width:7px;height:7px;border-radius:50%;display:block;flex:0 0 7px}
+.led-ok    i{background:var(--ok)}
+.led-warn  i{background:var(--warn)}
+.led-alert i{background:var(--alert)}
+.led-idle  i{background:var(--idle)}
+.led span{font-family:var(--font-mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase}
+
+/* ---------- tag ---------- */
+.tag{
+  display:inline-block;font-family:var(--font-mono);font-size:9.5px;font-weight:500;
+  letter-spacing:.11em;text-transform:uppercase;padding:3px 8px;
+  border:var(--hair) solid var(--line-strong);color:var(--ink-muted);
+}
+.tag-ok{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.tag-warn{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+.tag-alert{background:var(--alert-soft);border-color:var(--alert);color:var(--alert)}
+.tag-info{background:var(--info-soft);border-color:var(--info);color:var(--info)}
+.tag-wip{background:repeating-linear-gradient(45deg,#F4F3F0,#F4F3F0 5px,#E8E7E3 5px,#E8E7E3 10px);
+         border-color:var(--line-strong);color:var(--ink-muted)}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;justify-content:center;
+  font-family:var(--font-mono);font-size:11px;font-weight:500;
+  letter-spacing:.09em;text-transform:uppercase;
+  padding:10px 18px;border:var(--hair) solid var(--ink);
+  background:var(--ink);color:var(--ink-invert);cursor:pointer;
+}
+.btn-ghost{background:transparent;color:var(--ink)}
+.btn-alert{background:var(--alert);border-color:var(--alert);color:#fff}
+.btn-pill{border-radius:var(--r-pill);padding:11px 22px}
+.btn-sm{padding:7px 12px;font-size:10px}
+.btn-round{width:38px;height:38px;border-radius:50%;padding:0}
+
+/* ---------- data table ---------- */
+.tbl{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:11.5px}
+.tbl th{
+  text-align:left;padding:9px 12px;font-weight:500;font-size:9.5px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-muted);
+  border-bottom:var(--hair) solid var(--line-strong);background:var(--surface-alt);
+}
+.tbl td{padding:10px 12px;border-bottom:var(--hair) solid var(--line);color:var(--ink)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .r{text-align:right}
+
+/* ---------- metric block ---------- */
+.metric .v{font-family:var(--font-display);font-weight:700;font-size:34px;letter-spacing:-.02em;line-height:1}
+.metric .u{font-family:var(--font-mono);font-size:13px;color:var(--ink-muted);margin-left:3px}
+.metric .d{font-family:var(--font-mono);font-size:10.5px;margin-top:6px}
+
+/* ---------- bar / gauge ---------- */
+.bar{height:5px;background:var(--surface-sunk);position:relative;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink);display:block}
+.bar-ok i{background:var(--ok)} .bar-warn i{background:var(--warn)} .bar-alert i{background:var(--alert)}
+.bar-mark{position:absolute;top:-3px;bottom:-3px;width:var(--hair);background:var(--ink)}
+
+/* ---------- rule ---------- */
+.rule{height:var(--hair);background:var(--line);border:0}
+.rule-strong{background:var(--line-strong)}
+
+/* ---------- application shell ---------- */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 26px;
+  background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+.brandmark{display:flex;align-items:center;gap:12px}
+.brand{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:.16em;color:var(--bp)}
+.nav{display:flex;gap:22px}
+.nav a{text-decoration:none}
+.nav .nav-on{color:var(--bp)}
+.crumb{padding:9px 26px;border-bottom:var(--hair) solid var(--line);background:var(--surface)}
+.head{padding:26px;background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+.main{padding:22px 26px 40px}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g32{grid-template-columns:1.35fr 1fr}
+@media (max-width:900px){.g4,.g3,.g2,.g32{grid-template-columns:1fr}.nav{display:none}}
+button:disabled{opacity:.45;cursor:not-allowed}

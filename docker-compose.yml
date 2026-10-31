@@ -1,0 +1,57 @@
+# AgriRover / AI Auto Farm — full stack.  Runs on a laptop for development and
+# on the Raspberry Pi for deployment; the Pi is the production host.
+#   docker compose up -d                 farm server + dashboard
+#   docker compose --profile sim up -d   ... plus a simulated rover for demos
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes: [ "./pgdata:/var/lib/postgresql/data" ]
+    ports: [ "5432:5432" ]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  broker:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./infra/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports: [ "1883:1883" ]
+
+  api:
+    build: ./apps/api
+    env_file: [ .env ]
+    depends_on:
+      db: { condition: service_healthy }
+      broker: { condition: service_started }
+    ports: [ "8000:8000" ]
+    volumes: [ "./apps/api:/srv" ]
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  web:
+    build: ./apps/web
+    env_file: [ .env ]
+    depends_on: [ api ]
+    ports: [ "5173:5173" ]
+    volumes:
+      - ./apps/web:/srv
+      - /srv/node_modules
+    command: npm run dev -- --host 0.0.0.0
+
+  rover-sim:
+    # Simulated rover (drive + camera) on the real broker. The physical rover
+    # runs the same agent on its own Raspberry Pi: python -m rover run
+    build: ./edge/rover-agent
+    profiles: [ "sim" ]
+    environment:
+      MQTT_HOST: broker
+      ROVER_REPORT_DIR: /srv/reports
+    depends_on: [ broker ]
+    volumes: [ "./edge/rover-agent/reports:/srv/reports" ]

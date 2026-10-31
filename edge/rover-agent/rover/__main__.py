@@ -1,0 +1,132 @@
+"""AgriRover command line.
+
+    python -m rover sim                  simulated survey, no hardware, no broker
+    python -m rover sim --battery 11.3   ... and watch the low-battery guard stop it
+    python -m rover run                  on the rover: MQTT + motor controller + Pi camera
+    python -m rover run --sim-hardware   full-stack demo: real broker, simulated rover
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import sys
+import time
+
+from rover.camera import SimCamera, SimField
+from rover.config import RoverConfig
+from rover.drive import Pose, SimDrive
+from rover.mission import MissionReport, MissionRunner, MissionSpec, planned_stats
+from rover.planner import Cell
+from rover.report import save_report
+from rover.safety import Guards
+
+
+def sim_runner(cfg: RoverConfig, spec: MissionSpec, seed: int, guards: Guards,
+               battery_v: float = 12.6, on_frame=None,
+               speedup: float = 0.0) -> tuple[MissionRunner, SimField]:
+    """speedup 0 = instant; 1 = real time; 10 = ten times faster than the real rover."""
+    field = SimField(spec.rows, spec.cols, seed=seed)
+    start = Cell(0, 0).center(spec.cell_m)
+    sleep = (lambda s: time.sleep(s / speedup)) if speedup > 0 else None
+    drive = SimDrive(cfg.drive, Pose(*start, 0.0),
+                     fence=(spec.cols * spec.cell_m, spec.rows * spec.cell_m),
+                     battery_v=battery_v, sleep=sleep)
+    return MissionRunner(cfg, drive, SimCamera(field), guards, on_frame=on_frame), field
+
+
+def agreement(report: MissionReport, field: SimField) -> dict[str, float]:
+    """How often the vision agrees with the simulator's ground truth."""
+    if not report.results:
+        return {}
+    n = len(report.results)
+    truths = [field.truth(Cell(r.row, r.col)) for r in report.results]
+    return {
+        "plant": sum(r.obs.plant == t.plant for r, t in zip(report.results, truths)) / n,
+        "needs_water": sum(r.obs.needs_water == t.needs_water for r, t in zip(report.results, truths)) / n,
+        "yellowing": sum(r.obs.flagged == (t.chlorosis > 0) for r, t in zip(report.results, truths)) / n,
+    }
+
+
+def cmd_sim(args: argparse.Namespace) -> int:
+    cfg = RoverConfig(report_dir=args.out)
+    spec = MissionSpec(args.mission or f"sim-seed{args.seed}", "zone-a", args.rows, args.cols, args.cell)
+    spec.validate(cfg.drive)
+    frames: dict = {}
+    runner, field = sim_runner(cfg, spec, args.seed, Guards(), args.battery,
+                               on_frame=lambda cell, img: frames.__setitem__((cell.row, cell.col), img))
+    report = runner.run(spec)
+    paths = save_report(report, args.out, frames)
+
+    plan = planned_stats(spec)
+    print(f"\nAgriRover simulated survey · {spec.rows} x {spec.cols} cells of {spec.cell_m} m")
+    print(f"  status            {report.status}" + (f" ({report.abort_reason})" if report.abort_reason else ""))
+    print(f"  cells scanned     {report.cells_scanned} / {spec.rows * spec.cols}")
+    print(f"  plants detected   {report.plants_detected}")
+    print(f"  need water        {report.plants_needing_water}  "
+          f"({sum(t['ml'] for t in report.watering_targets)} ml proposed in total)")
+    print(f"  flagged (yellow)  {report.cells_flagged}")
+    print(f"  path              {report.distance_m:.1f} m driven of {plan['distance_m']} m planned, "
+          f"{plan['turns']} turns")
+    print(f"  est. duration     {report.est_duration_s / 60:.1f} min "
+          f"(drive {report.drive_time_s:.0f} s + {cfg.capture_s:.0f} s per photo)")
+    for key, value in agreement(report, field).items():
+        print(f"  vision vs truth   {key:<12} {value:.0%}")
+    for kind, path in paths.items():
+        print(f"  wrote {kind:<6} {path}")
+    return 0 if report.status == "completed" else 2
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    cfg = RoverConfig.from_env()
+    guards = Guards()
+    if args.sim_hardware:
+        def runner_for(spec: MissionSpec) -> MissionRunner:
+            return sim_runner(cfg, spec, args.seed, guards, speedup=args.speedup)[0]
+    else:
+        from rover.camera import OpenCVCamera, PiCamera
+        from rover.drive import SerialDrive
+        drive = SerialDrive(cfg.drive, cfg.serial_port, cfg.serial_baud)
+        camera = OpenCVCamera() if args.usb_camera else PiCamera()
+
+        def runner_for(spec: MissionSpec) -> MissionRunner:
+            # Before each mission the rover must stand on cell (0, 0) facing east.
+            return MissionRunner(cfg, drive, camera, guards)
+
+    from rover.link import RoverLink
+    try:
+        asyncio.run(RoverLink(cfg, runner_for, guards).run_forever())
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="rover", description="AgriRover agent")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser("sim", help="simulated survey; writes report.json and field-map.svg")
+    s.add_argument("--rows", type=int, default=4)
+    s.add_argument("--cols", type=int, default=10)
+    s.add_argument("--cell", type=float, default=0.5, help="cell size in metres")
+    s.add_argument("--seed", type=int, default=7)
+    s.add_argument("--battery", type=float, default=12.6, help="starting battery voltage")
+    s.add_argument("--mission", default=None)
+    s.add_argument("--out", default="reports")
+    s.set_defaults(func=cmd_sim)
+
+    r = sub.add_parser("run", help="connect to the farm broker and wait for missions")
+    r.add_argument("--sim-hardware", action="store_true", help="simulated drive and camera")
+    r.add_argument("--usb-camera", action="store_true", help="USB webcam instead of the Pi camera")
+    r.add_argument("--seed", type=int, default=7)
+    r.add_argument("--speedup", type=float, default=10.0,
+                   help="with --sim-hardware: 1 = real time, 10 = 10x faster (default), 0 = instant")
+    r.set_defaults(func=cmd_run)
+
+    args = p.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

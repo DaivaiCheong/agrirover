@@ -1,0 +1,66 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../apps/web/src/styles/theme.css">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+<style>
+ .app{width:1280px;background:var(--canvas);border:var(--hair) solid var(--line-strong)}
+ .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 26px;
+   background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+ .brand{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:.16em;color:var(--bp)}
+ .nav{display:flex;gap:22px}
+ .crumb{padding:9px 26px;border-bottom:var(--hair) solid var(--line);background:var(--surface)}
+ .head{padding:26px 26px 22px;background:var(--surface);border-bottom:var(--hair) solid var(--line)}
+ .main{padding:22px 26px 26px}
+ .grid{display:grid;gap:14px}
+ .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)}
+ .g2{grid-template-columns:repeat(2,1fr)} .g23{grid-template-columns:2fr 1fr}
+ .g32{grid-template-columns:1.35fr 1fr}
+ a{color:inherit}
+</style></head><body style="padding:0;background:#DEDDDA">
+<div class="app">
+ <div class="topbar">
+   <div style="display:flex;align-items:center;gap:12px">
+     <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="var(--bp)" stroke-width="1.4">
+       <rect x="2.5" y="2.5" width="15" height="15"/><path d="M10 6v8M6 10h8"/></svg>
+     <span class="brand">AI AUTO FARM</span>
+   </div>
+   <div class="nav"><a class="lbl " style="text-decoration:none;">DASHBOARD</a><a class="lbl " style="text-decoration:none;">IRRIGATION</a><a class="lbl " style="text-decoration:none;">WATER</a><a class="lbl " style="text-decoration:none;">CROP</a><a class="lbl " style="text-decoration:none;">DEVICES</a><a class="lbl lbl-ink" style="text-decoration:none;color:var(--bp)">REPORTS</a></div>
+ </div>
+ <div class="crumb"><span class="lbl">HOME &gt; REPORTS</span></div>
+ <div class="head"><div style="display:flex;justify-content:space-between;align-items:flex-end">
+      <div><div class="lbl">01 – 31 OCTOBER 2026 · ALL ZONES</div>
+           <div class="display d-xl" style="margin-top:8px">REPORTS</div></div>
+      <div style="display:flex;gap:8px"><button class="btn btn-ghost btn-sm">01 Oct – 31 Oct ▾</button>
+        <button class="btn btn-ghost btn-sm">CSV</button><button class="btn btn-sm">PDF</button></div></div></div>
+ <div class="main"><div class="grid g4">
+   <div class="panel panel-pad metric reg">
+      <div class="lbl">WATER USED</div>
+      <div style="margin-top:9px"><span class="v ">412</span><span class="u">L</span></div>
+      <div class="d"><span style='color:var(--ok)'>▼ 23% vs SEPTEMBER</span></div></div>
+   <div class="panel panel-pad metric reg">
+      <div class="lbl">IRRIGATION EVENTS</div>
+      <div style="margin-top:9px"><span class="v ">96</span><span class="u"></span></div>
+      <div class="d">81 AUTO · 9 MANUAL · 6 DEFERRED</div></div>
+   <div class="panel panel-pad metric reg">
+      <div class="lbl">RAIN DEFERRALS</div>
+      <div style="margin-top:9px"><span class="v ">14</span><span class="u"></span></div>
+      <div class="d">≈ 47 L NOT APPLIED</div></div>
+   <div class="panel panel-pad metric reg">
+      <div class="lbl">TELEMETRY UPTIME</div>
+      <div style="margin-top:9px"><span class="v ">97.4</span><span class="u">%</span></div>
+      <div class="d">TARGET ≥ 90%</div></div>
+ </div>
+ <div class="grid g2" style="margin-top:14px">
+   <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">WATER BY ZONE</span><span class="lbl">PER WEEK</span></div>
+    <div class="panel-pad"><div class="ground ground-fine" style="height:180px;border:1px solid var(--line);position:relative">
+      <svg viewBox="0 0 560 180" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%">
+       <rect x="30" y="84" width="26" height="96" fill="#101014"/><rect x="58" y="108" width="26" height="72" fill="#1E56A9"/><rect x="100" y="68" width="26" height="112" fill="#101014"/><rect x="128" y="96" width="26" height="84" fill="#1E56A9"/><rect x="170" y="102" width="26" height="78" fill="#101014"/><rect x="198" y="120" width="26" height="60" fill="#1E56A9"/><rect x="240" y="56" width="26" height="124" fill="#101014"/><rect x="268" y="88" width="26" height="92" fill="#1E56A9"/><rect x="310" y="92" width="26" height="88" fill="#101014"/><rect x="338" y="114" width="26" height="66" fill="#1E56A9"/>
+      </svg></div></div></div>
+   <div class="panel"><div class="panel-head"><span class="lbl lbl-ink">ZONE SUMMARY</span></div>
+    <table class="tbl">
+      <tr><th>ZONE</th><th>CROP</th><th class="r">WATER</th><th class="r">EVENTS</th><th class="r">AVG MOIST.</th><th class="r">ALERTS</th></tr>
+      <tr><td>ZONE-A</td><td>Lettuce</td><td class="r">241 L</td><td class="r">57</td><td class="r">34.2%</td><td class="r">9</td></tr>
+      <tr><td>ZONE-B</td><td>Cabbage</td><td class="r">171 L</td><td class="r">39</td><td class="r">39.8%</td><td class="r">3</td></tr>
+      <tr><td style="color:var(--ink-faint)">ZONE-C</td><td style="color:var(--ink-faint)">—</td><td class="r" colspan="4" style="color:var(--ink-faint)">NOT PLANTED</td></tr>
+    </table></div>
+ </div></div>
+</div></body></html>

@@ -1,0 +1,47 @@
+# --- secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+secrets.h
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# --- node ---
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+
+# --- data / artefacts ---
+pgdata/
+minio-data/
+*.sqlite3
+*.h5
+*.tflite
+*.pt
+datasets/
+models/checkpoints/
+
+# --- rover outputs ---
+reports/
+
+# --- os / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- build ---
+build/
+.arduino-build/
