@@ -103,6 +103,9 @@ async def store_telemetry(session: AsyncSession, topic: str, payload: object,
             unit=str(m.get("unit", "")), quality=_quality(quality),
             sample_count=payload.get("sampleCount"), recorded_at=at))
     session.add_all(rows)
+    device.last_seen_at = at
+    if payload.get("fw"):
+        device.firmware_version = str(payload["fw"])[:32]
     await session.commit()
     return len(rows)
 

@@ -50,8 +50,10 @@ async def seed_stage1(session: AsyncSession, farm_name: str | None = None,
         await session.flush()
         session.add(IrrigationRule(zone_id=zone.id))            # engine defaults
 
-    if (await session.execute(select(Device).where(Device.code == device_code))).scalar_one_or_none() is None:
-        session.add(Device(farm_id=farm.id, code=device_code, kind=DeviceKind.field_node))
+    for code, kind, commissioned in ((device_code, DeviceKind.field_node, True),
+                                     ("ROVER-01", DeviceKind.rover, False)):
+        if (await session.execute(select(Device).where(Device.code == code))).scalar_one_or_none() is None:
+            session.add(Device(farm_id=farm.id, code=code, kind=kind, commissioned=commissioned))
 
     await session.commit()
 

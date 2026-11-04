@@ -1,5 +1,7 @@
 import { NavLink, Route, Routes } from "react-router-dom";
+import Crop from "./pages/Crop";
 import Dashboard from "./pages/Dashboard";
+import Devices from "./pages/Devices";
 import Irrigation from "./pages/Irrigation";
 import Placeholder from "./pages/Placeholder";
 
@@ -37,8 +39,8 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/irrigation" element={<Irrigation />} />
         <Route path="/water" element={<Placeholder title="WATER TREATMENT" sprint="Sprint 3" />} />
-        <Route path="/crop" element={<Placeholder title="DISEASE DETECTION" sprint="Sprints 6–7" />} />
-        <Route path="/devices" element={<Placeholder title="DEVICE REGISTRY" sprint="Sprint 2" />} />
+        <Route path="/crop" element={<Crop />} />
+        <Route path="/devices" element={<Devices />} />
         <Route path="/reports" element={<Placeholder title="REPORTS" sprint="Sprint 5" />} />
       </Routes>
     </>

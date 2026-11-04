@@ -1,12 +1,13 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.db import get_db
+from app.services.registry import list_devices
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
 @router.get("")
-async def list_devices():
-    return [
-        {"code": "PI-CORE-01",   "kind": "pi_core",    "commissioned": True},
-        {"code": "ESP-FIELD-01", "kind": "field_node", "commissioned": True},
-        {"code": "ROVER-01",     "kind": "rover",      "commissioned": False},
-    ]
+async def devices(session: AsyncSession = Depends(get_db)):
+    """Registered devices with when each was last heard from."""
+    return await list_devices(session)

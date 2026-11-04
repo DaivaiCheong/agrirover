@@ -14,9 +14,62 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type ZoneDecision = {
+  zone: string;
+  decision: string;
+  text: string;
+  durationSeconds: number;
+  reason: string;
+  moisturePct: number | null;
+  decisionAt: string;
+};
+
+export type ZoneNow = {
+  zone: string;
+  moisturePct: number | null;
+  rain: boolean | null;
+  supplyVoltage: number | null;
+  waterPh: number | null;
+  recordedAt: string | null;
+};
+
+export type DeviceRow = {
+  code: string;
+  kind: string;
+  zone: string | null;
+  commissioned: boolean;
+  status: "online" | "stale" | "never" | "not_commissioned";
+  lastSeenAt: string | null;
+  firmwareVersion: string | null;
+};
+
+export type PhotoResult = {
+  status: "ok" | "uncertain";
+  label: string | null;
+  confidence: number | null;
+  note: string;
+};
+
+/** Photo upload: multipart, so no JSON content-type (the browser sets the boundary). */
+async function checkPhoto(file: File): Promise<PhotoResult> {
+  const body = new FormData();
+  body.append("photo", file);
+  const res = await fetch(`${BASE}/photos/check`, { method: "POST", body });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch { /* keep the status text */ }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<PhotoResult>;
+}
+
 export const api = {
-  zones: () => request<unknown[]>("/zones"),
-  devices: () => request<unknown[]>("/devices"),
+  zones: () => request<ZoneNow[]>("/zones"),
+  devices: () => request<DeviceRow[]>("/devices"),
+  decisionsToday: () => request<ZoneDecision[]>("/decisions/today"),
+  checkPhoto,
   series: (zone: string, metric = "soil_moisture", hours = 24) =>
     request<{ points: { t: string; v: number }[] }>(
       `/telemetry/${zone}?metric=${metric}&hours=${hours}`),

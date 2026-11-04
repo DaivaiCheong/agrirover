@@ -81,6 +81,22 @@ def decide(zone: str, cfg: RuleConfig, *, moisture: float | None, rain: bool,
                         reason=out.reason, moisture_pct=moisture, decision_at=now)
 
 
+async def newest_readings(session: AsyncSession, zone_ids: list) -> dict:
+    """{zone_id: [(metric, value, recorded_at), ...]} with the newest reading per metric."""
+    if not zone_ids:
+        return {}
+    rows = (await session.execute(
+        select(SensorReading.zone_id, SensorReading.metric, SensorReading.value, SensorReading.recorded_at)
+        .where(SensorReading.zone_id.in_(zone_ids))
+        .distinct(SensorReading.zone_id, SensorReading.metric)          # Postgres DISTINCT ON
+        .order_by(SensorReading.zone_id, SensorReading.metric, SensorReading.recorded_at.desc())
+    )).all()
+    out: dict = {}
+    for zone_id, metric, value, at in rows:
+        out.setdefault(zone_id, []).append((metric.value, float(value), at))
+    return out
+
+
 async def decisions_for_farm(session: AsyncSession, farm_name: str,
                              now: datetime | None = None) -> list[ZoneDecision]:
     now = now or datetime.now(timezone.utc)
@@ -94,16 +110,7 @@ async def decisions_for_farm(session: AsyncSession, farm_name: str,
         .order_by(Zone.name))).scalars().all()
     zone_ids = [z.id for z in zones]
 
-    # newest reading per (zone, metric)
-    readings = (await session.execute(
-        select(SensorReading.zone_id, SensorReading.metric, SensorReading.value, SensorReading.recorded_at)
-        .where(SensorReading.zone_id.in_(zone_ids))
-        .distinct(SensorReading.zone_id, SensorReading.metric)          # Postgres DISTINCT ON
-        .order_by(SensorReading.zone_id, SensorReading.metric, SensorReading.recorded_at.desc())
-    )).all() if zone_ids else []
-    by_zone: dict = {}
-    for zone_id, metric, value, at_r in readings:
-        by_zone.setdefault(zone_id, []).append((metric.value, value, at_r))
+    by_zone = await newest_readings(session, zone_ids)
 
     out: list[ZoneDecision] = []
     for z in zones:
