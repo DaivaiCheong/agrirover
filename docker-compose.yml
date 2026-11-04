@@ -32,7 +32,7 @@ services:
     ports: [ "8000:8000" ]
     volumes: [ "./apps/api:/srv" ]
     command: >
-      sh -c "alembic upgrade head &&
+      sh -c "until alembic upgrade head; do echo 'waiting for db...'; sleep 2; done &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   web:
