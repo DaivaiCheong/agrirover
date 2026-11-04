@@ -14,3 +14,4 @@ python-multipart==0.0.20
 pytest==8.3.4
 pytest-asyncio==0.25.0
 tzdata==2025.2
+bcrypt==4.0.1          # passlib 1.7.4 breaks with bcrypt >= 4.1 (wrap-bug probe)

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import assistant, auth, devices, irrigation, missions, telemetry, zones
+from app.routers import assistant, auth, decisions, devices, irrigation, missions, telemetry, zones
 from app.workers.mqtt_ingest import ingest_lifespan
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -40,6 +40,7 @@ app.include_router(irrigation.router, prefix=V1)
 app.include_router(devices.router,    prefix=V1)
 app.include_router(assistant.router,  prefix=V1)
 app.include_router(missions.router,   prefix=V1)
+app.include_router(decisions.router,  prefix=V1)
 
 
 @app.get("/health", tags=["system"])

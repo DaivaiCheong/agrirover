@@ -20,10 +20,15 @@ import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 
 import aiomqtt
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.db import SessionLocal
+from app.models.entities import Device, Farm, Metric, Quality, SensorReading, Zone
 
 log = logging.getLogger("ingest")      # not "mqtt": aiomqtt owns that logger and pins it to WARNING
 
@@ -57,6 +62,51 @@ def readings(payload: object) -> list[dict]:
     return [m for m in items if _valid(m)]
 
 
+def _quality(raw: object) -> Quality:
+    try:
+        return Quality(raw)
+    except ValueError:
+        return Quality.suspect
+
+
+async def store_telemetry(session: AsyncSession, topic: str, payload: object,
+                           now: datetime | None = None) -> int:
+    """Persist one telemetry batch. The zone comes from the topic, the device from
+    the payload. Unknown zone, unknown device or unknown metric -> nothing stored.
+    Returns the number of readings written."""
+    parts = topic.split("/")                 # farm/{farm}/zone/{zone}/telemetry
+    if len(parts) != 5 or not isinstance(payload, dict):
+        return 0
+    farm_name, zone_name = parts[1], parts[3]
+    device_code = payload.get("device")
+
+    zone = (await session.execute(
+        select(Zone).join(Zone.farm).where(Zone.name == zone_name,
+                                           Zone.farm.has(name=farm_name)))).scalar_one_or_none()
+    device = (await session.execute(
+        select(Device).where(Device.code == device_code))).scalar_one_or_none()
+    if zone is None or device is None:
+        log.warning("telemetry for unknown zone %s/%s or device %s dropped",
+                    farm_name, zone_name, device_code)
+        return 0
+
+    at = now or datetime.now(timezone.utc)
+    rows = []
+    for m in readings(payload):
+        try:
+            metric = Metric(m["metric"])
+        except ValueError:
+            continue
+        quality = m.get("quality", "valid")
+        rows.append(SensorReading(
+            device_id=device.id, zone_id=zone.id, metric=metric, value=float(m["value"]),
+            unit=str(m.get("unit", "")), quality=_quality(quality),
+            sample_count=payload.get("sampleCount"), recorded_at=at))
+    session.add_all(rows)
+    await session.commit()
+    return len(rows)
+
+
 async def _consume() -> None:
     while True:
         try:
@@ -83,9 +133,12 @@ async def _consume() -> None:
                         if not good:
                             log.warning("dropped invalid telemetry on %s", topic)
                             continue
-                        # TODO(sprint-2): persist SensorReading, then call
-                        # rule_engine.evaluate() and publish valve/set if needed.
-                        log.info("telemetry %s %s", topic, good)
+                        try:
+                            async with SessionLocal() as session:
+                                stored = await store_telemetry(session, topic, payload)
+                            log.info("stored %d readings from %s", stored, topic)
+                        except Exception:                 # noqa: BLE001 — keep the loop alive
+                            log.exception("could not store telemetry from %s", topic)
                     elif topic.endswith("/valve/state"):
                         # Authoritative actuator position — always recorded as
                         # reported, never as commanded.

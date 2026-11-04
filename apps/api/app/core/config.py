@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     weather_api_url: str | None = None
     weather_api_key: str | None = None
 
+    # Stage 1 runs one farm; the topic segment farm/{name}/... must match it.
+    farm_name: str = "farm-01"
+
     admin_email: str = "admin@aiautofarm.local"
     admin_password: str = "change-me"
 
