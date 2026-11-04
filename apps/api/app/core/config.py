@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Stage 1 runs one farm; the topic segment farm/{name}/... must match it.
     farm_name: str = "farm-01"
 
+    # Daily Telegram message. Both must be set, or the worker stays off.
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    daily_message_time: str = "06:05"          # farm-local HH:MM
+
     admin_email: str = "admin@aiautofarm.local"
     admin_password: str = "change-me"
 

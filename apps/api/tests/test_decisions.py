@@ -6,8 +6,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-import asyncpg
-import pytest
+import pgdb
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -125,24 +124,6 @@ def test_endpoint_returns_decisions_in_the_documented_shape(monkeypatch):
 # ------------------------------------------------ integration (real Postgres)
 
 TEST_DB = "aaf_s4_test"
-ADMIN_DSN = "postgresql://aaf:change-me@127.0.0.1:5432/postgres"
-ASYNC_URL = f"postgresql+asyncpg://aaf:change-me@127.0.0.1:5432/{TEST_DB}"
-
-
-async def _recreate_db() -> None:
-    conn = await asyncpg.connect(ADMIN_DSN, timeout=3)
-    try:
-        await conn.execute(f'DROP DATABASE IF EXISTS "{TEST_DB}" WITH (FORCE)')
-        await conn.execute(f'CREATE DATABASE "{TEST_DB}"')
-    finally:
-        await conn.close()
-
-
-def _require_postgres() -> None:
-    try:
-        asyncio.run(_recreate_db())
-    except (OSError, asyncpg.PostgresError, asyncio.TimeoutError) as exc:
-        pytest.skip(f"no Postgres reachable ({exc.__class__.__name__})")
 
 
 def _payload(moisture: float, rain: int = 0) -> dict:
@@ -156,10 +137,10 @@ def _payload(moisture: float, rain: int = 0) -> dict:
 
 
 def test_telemetry_is_stored_and_drives_todays_decision():
-    _require_postgres()
+    url = pgdb.require(TEST_DB)
 
     async def scenario():
-        engine = create_async_engine(ASYNC_URL)
+        engine = create_async_engine(url)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)
@@ -189,10 +170,10 @@ def test_telemetry_is_stored_and_drives_todays_decision():
 
 
 def test_telemetry_from_an_unknown_device_is_dropped_not_stored():
-    _require_postgres()
+    url = pgdb.require(TEST_DB)
 
     async def scenario():
-        engine = create_async_engine(ASYNC_URL)
+        engine = create_async_engine(url)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         Session = async_sessionmaker(engine, expire_on_commit=False)

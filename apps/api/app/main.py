@@ -7,13 +7,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routers import assistant, auth, decisions, devices, irrigation, missions, telemetry, zones
 from app.workers.mqtt_ingest import ingest_lifespan
+from app.workers.telegram_worker import telegram_lifespan
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+# httpx logs each request URL at INFO, and a Telegram URL contains the bot token.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with ingest_lifespan():
+    async with ingest_lifespan(), telegram_lifespan():
         yield
 
 
