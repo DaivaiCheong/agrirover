@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Led, Panel, Tag } from "../components/ui";
+import { Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
 
 export default function Irrigation() {
