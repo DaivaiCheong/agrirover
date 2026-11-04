@@ -4,8 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_db
-from app.models.entities import Farm, FarmSetting
+from app.models.entities import Farm
 from app.services.errors import NotFound
+from app.services.farm_data import farm_settings  # noqa: F401  (re-exported for the routers)
 
 
 async def farm_dep(session: AsyncSession = Depends(get_db)) -> Farm:
@@ -14,12 +15,3 @@ async def farm_dep(session: AsyncSession = Depends(get_db)) -> Farm:
     if farm is None:
         raise NotFound("the farm is not set up yet")
     return farm
-
-
-async def farm_settings(session: AsyncSession, farm: Farm) -> FarmSetting:
-    row = await session.get(FarmSetting, farm.id)
-    if row is None:
-        row = FarmSetting(farm_id=farm.id)
-        session.add(row)
-        await session.flush()
-    return row
