@@ -22,11 +22,6 @@ export default function NewCropForm({ onAdded }: { onAdded: (slug: string) => vo
 
   return (
     <form className="form" onSubmit={add} style={{ maxWidth: 560 }}>
-      <Notice>
-        Tomato comes with a researched growing guide. Another crop needs its water numbers: a crop factor (Kc) for three
-        stages and the length of four stages in days. An agronomist or the FAO-56 tables can give them. What you enter is
-        marked "entered by the farmer, not checked", and the crop gets a water plan but no feeding or harvest notes.
-      </Notice>
       <Field label="Crop name"><input required value={name} onChange={(e) => setName(e.target.value)} /></Field>
       <div className="row3">
         {(["ini", "mid", "end"] as const).map((k) => (

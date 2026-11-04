@@ -65,8 +65,12 @@ def _r(v, n=2):
 
 def cop_dict(r: cost.CopReport, cycle: dict, khr_per_usd: float | None, water_m3: float | None) -> dict:
     total = r.total_cost_usd
+    fc = cycle.get("forecast")
+    # What a kilo will cost if the crop reaches the setup's benchmark yield, at the costs recorded so far.
+    cost_if = ({"atLowYield": round(total / fc["kgLow"], 3), "atHighYield": round(total / fc["kgHigh"], 3)}
+               if fc and total > 0 and fc["kgLow"] > 0 else None)
     return {
-        "cycle": cycle, "currency": "USD", "khrPerUsd": khr_per_usd,
+        "cycle": cycle, "currency": "USD", "khrPerUsd": khr_per_usd, "costPerKgIfBenchmark": cost_if,
         "lines": [{"category": x.category, "label": cost.CATEGORY_LABELS[x.category],
                    "amountUsd": round(x.amount_usd, 2), "sharePct": round(100 * x.amount_usd / total, 2) if total else 0,
                    "estimate": x.estimate} for x in r.lines],

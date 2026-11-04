@@ -84,6 +84,35 @@ a.btn{text-decoration:none}
   padding:4px 2px;text-decoration:none}
 .linkbtn:hover{text-decoration:underline}
 .linkbtn-alert{color:var(--alert)}
+.btn-danger-ghost{background:var(--surface);color:var(--alert);border-color:var(--alert)}
+.btn-danger-ghost:hover:not(:disabled){background:var(--alert-soft);border-color:var(--alert)}
+.rowactions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:4px 0}
+.nowrap{white-space:nowrap}
+/* row action menu: a list, drawn above the page */
+.menu{position:fixed;z-index:60;min-width:216px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-sm);box-shadow:0 10px 28px rgba(23,38,29,.16);padding:6px;display:grid;gap:2px}
+.menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;background:transparent;
+  font:inherit;font-size:14.5px;font-weight:600;color:var(--ink);text-align:left;text-decoration:none;
+  border-radius:8px;cursor:pointer;min-height:42px}
+.menu-item svg{color:var(--ink-muted);flex:0 0 16px}
+.menu-item:hover,.menu-item:focus-visible{background:var(--surface-alt);outline:0}
+.menu-item-danger,.menu-item-danger svg{color:var(--alert)}
+.menu-item-danger:hover{background:var(--alert-soft)}
+.menu-sep{height:1px;background:var(--line);margin:4px 6px}
+/* on a phone a table row becomes a card: no sideways scroll, every action visible */
+@media (max-width:600px){
+  .tbl.crops thead{display:none}
+  .tbl.crops, .tbl.crops tbody{display:block}
+  .tbl.crops tr{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:16px;border-bottom:1px solid var(--line)}
+  .tbl.crops tr:last-child{border-bottom:0}
+  .tbl.crops td{padding:0;border:0;text-align:left}
+  .tbl.crops td.r{text-align:left}
+  .tbl.crops td:first-child{grid-column:1/-1;font-size:16px}
+  .tbl.crops td.act{grid-column:1/-1;text-align:left;white-space:normal}
+  .tbl.crops td.act .rowactions{justify-content:flex-start}
+  .tbl.crops td:not(:first-child):not(.act)::before{content:attr(data-label);display:block;font-size:11.5px;
+    font-weight:600;color:var(--ink-muted);margin-bottom:2px}
+}
 
 /* ---------- tables ---------- */
 .tbl{width:100%;border-collapse:collapse;font-size:14px}
@@ -96,7 +125,7 @@ a.btn{text-decoration:none}
 .pickable{cursor:pointer}
 .pickable:hover td{background:var(--surface-alt)}
 .picked td{background:var(--brand-soft)}
-.tablewrap{overflow-x:auto}
+.tablewrap{overflow-x:auto;position:relative}
 
 /* ---------- metrics ---------- */
 .metric .v{font-weight:800;font-size:30px;letter-spacing:-.02em;line-height:1}
@@ -121,7 +150,7 @@ a.btn{text-decoration:none}
 .grid{display:grid;gap:16px}
 .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)}
 .g2{grid-template-columns:repeat(2,1fr)} .g32{grid-template-columns:1.35fr 1fr}
-.stack{display:grid;gap:16px}
+.stack{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
 .grid>*,.stack>*{min-width:0}              /* let a wide table scroll inside its card, not push the page */
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
@@ -195,6 +224,20 @@ a.btn{text-decoration:none}
   color:var(--ink-muted);cursor:pointer;min-height:40px}
 .seg .on{background:var(--surface);color:var(--brand-deep);box-shadow:var(--shadow)}
 .bignum-input input{font-size:34px;font-weight:800;min-height:68px;letter-spacing:-.02em}
+.bignum-input-row{display:flex;align-items:center;gap:8px}
+.bignum-input-row input{flex:1;min-width:0;font-size:26px;font-weight:800;letter-spacing:-.02em;text-align:center;
+  min-height:50px;padding:6px 12px;border:1.5px solid var(--line-strong);border-radius:var(--r-sm);background:#fff}
+.step-btn{width:46px;height:46px;flex:0 0 46px;display:grid;place-items:center;font-size:20px;font-weight:700;
+  border:1.5px solid var(--line-strong);background:var(--surface);border-radius:var(--r-sm);color:var(--ink);cursor:pointer;
+  transition:all .15s}
+.step-btn:hover:not(:disabled){background:var(--surface-alt);border-color:var(--brand)}
+.preset-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.preset-chip{display:inline-flex;align-items:center;justify-content:center;padding:7px 14px;border-radius:var(--r-pill);
+  border:1.5px solid var(--line);background:var(--surface);font-size:13.5px;font-weight:600;color:var(--ink);
+  cursor:pointer;min-height:36px;transition:all .15s;text-decoration:none}
+.preset-chip:hover:not(:disabled){background:var(--surface-alt);border-color:var(--line-strong)}
+.preset-chip.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+.preset-chip:disabled{opacity:.4;cursor:not-allowed}
 details.more > summary{cursor:pointer;font-weight:600;color:var(--brand);padding:6px 0;list-style:none;
   display:flex;align-items:center;gap:6px}
 details.more > summary::-webkit-details-marker{display:none}
@@ -246,3 +289,417 @@ details.more > summary::-webkit-details-marker{display:none}
 .source{padding:12px 0;border-top:1px solid var(--line);font-size:13.5px}
 .source:first-child{border-top:0}
 .source a{font-weight:600}
+
+/* ---------- plan page: inputs stay beside the answer, results are split into tabs ---------- */
+.plan-grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:20px;align-items:start}
+.plan-form{position:sticky;top:16px}
+@media (max-width:1000px){.plan-grid{grid-template-columns:minmax(0,1fr)}.plan-form{position:static}}
+.tabs-in{padding:0;margin:0;max-width:none}
+.tabs-in .tab{cursor:pointer;font:inherit;font-size:14.5px;font-weight:600}
+.startbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px;padding:12px;border-radius:12px;
+  background:#fff;color:var(--ink)}
+.startbar-msg{font-size:14px;font-weight:600;display:inline-flex;gap:8px;align-items:center;flex:1 1 auto}
+.startbar select,.startbar input{font:inherit;font-size:15px;padding:9px 12px;min-height:44px;min-width:0;flex:1 1 150px;
+  border:1.5px solid var(--line-strong);border-radius:var(--r-sm);background:#fff;color:var(--ink)}
+.startbar .btn{flex:0 0 auto}
+details.stagecard > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:16px}
+details.stagecard > summary::-webkit-details-marker{display:none}
+.chip-now{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-deep)}
+
+/* ---------- modal dialog ---------- */
+.modal-overlay{position:fixed;inset:0;background:rgba(23,38,29,.48);backdrop-filter:blur(3px);
+  z-index:90;display:flex;align-items:center;justify-content:center;padding:16px;animation:fadeIn .15s ease}
+.modal-card{background:var(--surface);border-radius:var(--r);border:1px solid var(--line);
+  box-shadow:0 12px 36px rgba(23,38,29,.2);width:100%;max-width:540px;max-height:92vh;
+  display:flex;flex-direction:column;overflow:hidden;animation:slideUp .18s ease}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
+.modal-title{font-size:18px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:10px}
+.modal-close{background:transparent;border:0;color:var(--ink-muted);cursor:pointer;padding:6px;border-radius:8px;
+  display:grid;place-items:center;transition:background .15s}
+.modal-close:hover{background:var(--surface-alt);color:var(--ink)}
+.modal-body{padding:20px;overflow-y:auto}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.spin{animation:spin 1s linear infinite}
+
+/* ---------- ERP Form & Modal System ---------- */
+.modal-card.erp-dialog {
+  max-width: 680px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 18px 42px rgba(23, 38, 29, 0.18), 0 2px 8px rgba(23, 38, 29, 0.08);
+}
+.modal-head-erp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.erp-head-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-body-erp {
+  padding: 14px 20px;
+  overflow-y: auto;
+  max-height: calc(88vh - 110px);
+  background: var(--canvas);
+}
+
+.modal-foot-erp {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  gap: 10px;
+}
+.erp-foot-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ERP Sections & Fields */
+.erp-section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.erp-section:last-child {
+  margin-bottom: 0;
+}
+.erp-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.erp-section-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.erp-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.erp-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (max-width: 600px) {
+  .erp-grid-2, .erp-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.erp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.erp-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.erp-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.erp-label .req {
+  color: var(--alert);
+  margin-left: 2px;
+}
+.erp-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+.erp-quick-link {
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--brand);
+  cursor: pointer;
+  padding: 0;
+}
+.erp-quick-link:hover {
+  text-decoration: underline;
+}
+.erp-sep {
+  color: var(--ink-faint);
+}
+
+.erp-input, .erp-select {
+  width: 100%;
+  height: 36px;
+  min-height: 36px;
+  padding: 5px 9px;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  box-sizing: border-box;
+  transition: border-color .15s, box-shadow .15s;
+}
+.erp-input:focus, .erp-select:focus {
+  outline: 0;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+.erp-input:disabled, .erp-select:disabled {
+  background: var(--surface-alt);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.erp-input-group {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+.erp-input-group .erp-input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  flex: 1;
+  min-width: 0;
+}
+.erp-input-addon {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--line-strong);
+  border-left: 0;
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
+  white-space: nowrap;
+}
+
+.erp-nested-panel {
+  margin-top: 8px;
+  padding: 9px 11px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+/* ERP Live Summary Bar */
+.erp-summary-banner {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 14px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+}
+@media (max-width: 600px) {
+  .erp-summary-banner {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.erp-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.erp-summary-item .k {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--ink-muted);
+}
+.erp-summary-item .v {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ERP Confirmation Receipt */
+.erp-receipt-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.erp-receipt-head {
+  padding: 10px 14px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.erp-receipt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  .erp-receipt-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.erp-receipt-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.erp-receipt-row:nth-child(even) {
+  background: var(--surface-alt);
+}
+.erp-receipt-row .label {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+.erp-receipt-row .val {
+  font-weight: 600;
+  color: var(--ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================================
+   Soil and air conditions: the seven-reading ribbon, the telemetry table, trend charts, symptom cross-check.
+   Status is never colour alone: a bar, a glyph (triangle = warning, circle = critical, clock = old) and words.
+   ========================================================================== */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);
+  white-space:nowrap;border:0}
+
+.ribbon{border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
+.rb-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 10px;background:var(--surface-alt);
+  border-bottom:1px solid var(--line);font-size:12.5px}
+.rb-stage{font-weight:600;color:var(--ink);min-width:0}
+.rb-age{margin-left:auto;color:var(--ink-muted);white-space:nowrap}
+.rb-empty{padding:12px 10px;font-size:13px;color:var(--ink-muted)}
+/* four columns, so two rows: moisture, pH, EC, soil C / N.P.K (two wide), air C, humidity.
+   A 1px gap over the line colour draws every hairline. */
+.rb-grid{display:grid;gap:1px;background:var(--line);grid-template-columns:repeat(4,minmax(0,1fr))}
+.rb-cell.npk{grid-column:span 2}
+.rb-cell{position:relative;background:var(--surface);padding:9px 8px 7px;display:grid;gap:1px;align-content:start;min-width:0}
+.rb-cell::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--st,var(--line-strong))}
+.rb-cell:focus-visible{outline-offset:-3px}
+.rb-k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-warning .rb-k,.st-critical .rb-k,.st-stale .rb-k{padding-right:15px}      /* room for the glyph */
+.rb-v{display:flex;align-items:baseline;gap:2px;flex-wrap:nowrap;font-size:17px;line-height:1.3;color:var(--ink);white-space:nowrap}
+.rb-v b{font-weight:700}
+.rb-v svg{align-self:center;flex:0 0 11px}
+.rb-sep{font-style:normal;color:var(--ink-faint);margin:0 3px}
+.rb-t{font-size:10.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:1.2em}
+.rb-glyph{position:absolute;right:7px;top:9px}
+.st-normal{--st:var(--ok)}
+.st-warning{--st:var(--warn)} .st-warning .rb-glyph{color:var(--warn)}
+.st-critical{--st:var(--alert)} .st-critical .rb-glyph{color:var(--alert)}
+.st-stale,.st-nodata,.st-unrated{--st:var(--line-strong)}
+.st-stale .rb-glyph{color:var(--ink-faint)}
+.v-warning{color:var(--warn)} .v-critical{color:var(--alert)}
+.v-stale,.v-nodata{color:var(--ink-faint)}
+.rb-alerts{list-style:none;display:grid}
+.rb-alerts li{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;background:var(--alert-soft);
+  border-top:1px solid #EFC1B5;font-size:12.5px;line-height:1.45}
+.rb-alerts svg{color:var(--alert);flex:0 0 14px;margin-top:2px}
+@media (max-width:600px){
+  .rb-k{font-size:9.5px;letter-spacing:.02em}
+  .rb-v{font-size:16px}
+  .rb-age{margin-left:0;width:100%}
+}
+
+/* ---------- telemetry table and trend charts (Beds and land) ---------- */
+.tm{font-size:13.5px}
+.tm th,.tm td{white-space:nowrap;padding-left:8px;padding-right:8px}
+.tm th small{font-weight:500;color:var(--ink-faint)}
+.tm td.m{vertical-align:top}
+.tm td.crop{white-space:normal;min-width:96px;max-width:150px}
+.tm td.status{white-space:normal;min-width:130px;max-width:170px}   /* an alert title can be long */
+.rd{display:inline-block;vertical-align:top;position:relative}
+.rd + .rd{margin-left:9px}
+.mv{display:inline-flex;align-items:center;gap:3px;font-weight:600;font-variant-numeric:tabular-nums}
+.mv.v-warning{color:var(--warn)} .mv.v-critical{color:var(--alert)}
+.mt{display:block;font-size:11px;color:var(--ink-faint);font-weight:500;font-variant-numeric:tabular-nums}
+.tm tr.open > td{background:var(--surface-alt)}
+.bedlink{background:none;border:0;font:inherit;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:3px;padding:0;text-align:left}
+.bedlink svg{color:var(--ink-faint);flex:0 0 15px;margin-left:-3px}
+.trend-section{border-top:1px solid var(--line);background:var(--surface-alt)}
+.trend-section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px 0;font-size:15px}
+.trend-wrap{padding:10px 14px 16px;max-width:100%}
+.trend-bar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
+.trend-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.trend-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.trend-grid{grid-template-columns:minmax(0,1fr)}}
+.trend{border:1px solid var(--line);border-radius:8px;padding:8px 10px 2px;background:var(--surface);min-width:0}
+.trend-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.trend-title{font-size:12.5px;font-weight:600;color:var(--ink-muted)}
+.trend-now{font-size:15px;font-weight:700;color:var(--ink)}
+.trend-now small{font-size:11px;font-weight:500;color:var(--ink-muted);margin-left:2px}
+.trend-note{font-size:11px;color:var(--ink-faint);padding:0 0 7px}
+.trend-empty{height:110px;display:grid;place-items:center;font-size:12.5px;color:var(--ink-faint)}
+.is-loading{opacity:.55;transition:opacity .15s}
+.chart-tip{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px;
+  box-shadow:var(--shadow);font-size:12px;color:var(--ink-muted)}
+.chart-tip b{display:block;font-size:14px;color:var(--ink)}
+.chart-tip i{display:inline-block;width:12px;height:2px;background:#2563A8;vertical-align:middle;margin-right:6px}
+.trend-table{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.trend-table .tbl th{position:sticky;top:0}
+
+/* ---------- symptom cross-check ---------- */
+.corr{display:grid;gap:12px}
+.corr-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.corr-title{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.corr-sub{font-size:13px;color:var(--ink-muted)}
+.ev{width:100%;border-collapse:collapse;font-size:13.5px}
+.ev td{padding:8px 10px;border-top:1px solid var(--line);vertical-align:middle}
+.ev tr:first-child td{border-top:0}
+.ev .num{font-variant-numeric:tabular-nums;font-weight:700}
+.ev-fit{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.ev-fit.met{color:var(--warn)} .ev-fit.no{color:var(--ink-muted)} .ev-fit.gap{color:var(--ink-faint)}
+.corr-say{padding:12px 14px;border-radius:var(--r-sm);background:var(--surface-alt);border:1px solid var(--line);
+  font-size:14.5px;line-height:1.55}
+.corr-say .basis{margin-left:6px}
+.pick-row{display:grid;grid-template-columns:minmax(0,420px) max-content;justify-content:start;gap:10px;align-items:end}
+@media (max-width:700px){.pick-row{grid-template-columns:1fr}}
+
+/* ---------- growing setup in the crop form ---------- */
+.erp-hint{font-size:11.5px;color:var(--ink-muted);margin-top:2px}
+.erp-forecast{margin-top:8px}
+.erp-flag{margin-top:8px;padding:7px 10px;border-radius:5px;background:var(--warn-soft);border:1px solid #EAD39B;
+  font-size:12.5px;display:flex;gap:8px;align-items:flex-start}
+.erp-flag svg{color:var(--warn);flex:0 0 14px;margin-top:2px}

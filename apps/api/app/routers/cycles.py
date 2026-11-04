@@ -12,6 +12,7 @@ from app.models.entities import CropProfile, Farm, Harvest, Planting, Sale, Zone
 from app.routers._deps import farm_dep
 from app.services import cost
 from app.services import crops as crop_svc
+from app.services import setups as setups_svc
 from app.services.clock import farm_today
 from app.services.cop_report import build_cop
 from app.services.errors import Conflict, Invalid, NotFound
@@ -32,6 +33,8 @@ class CycleIn(_Camel):
     plant_count: int | None = Field(None, gt=0, le=1_000_000)
     area_m2: float | None = Field(None, gt=0, le=1_000_000)
     variety: str | None = Field(None, max_length=80)
+    setup: str | None = Field(None, max_length=24)                                 # services/setups.py
+    expected_price_usd_per_kg: float | None = Field(None, ge=0, le=1_000)         # for the revenue forecast
 
 
 class CyclePatch(_Camel):
@@ -39,6 +42,8 @@ class CyclePatch(_Camel):
     plant_count: int | None = Field(None, gt=0, le=1_000_000)
     area_m2: float | None = Field(None, gt=0, le=1_000_000)
     variety: str | None = Field(None, max_length=80)
+    setup: str | None = Field(None, max_length=24)
+    expected_price_usd_per_kg: float | None = Field(None, ge=0, le=1_000)
 
 
 class CloseIn(_Camel):
@@ -62,10 +67,12 @@ async def create_cycle(body: CycleIn, farm: Farm = Depends(farm_dep), session: A
     if zone is None:
         raise NotFound(f"unknown bed {body.zone!r}")
     crop = await crop_svc.get_crop(session, body.crop)
+    setups_svc.check(crop.slug, body.setup)
     if (await session.execute(select(Planting).where(Planting.zone_id == zone.id, Planting.ended_on.is_(None)))).first():
         raise Conflict(f"{zone.label or zone.name} already has an open cycle; close it first")
     p = Planting(zone_id=zone.id, crop_id=crop.id, planted_on=body.planted_on, plant_count=body.plant_count,
-                 area_m2=body.area_m2, variety=body.variety)
+                 area_m2=body.area_m2, variety=body.variety, setup=body.setup,
+                 expected_price_usd_per_kg=body.expected_price_usd_per_kg)
     session.add(p)
     if zone.crop_id is None:
         zone.crop_id = crop.id
@@ -77,6 +84,7 @@ async def create_cycle(body: CycleIn, farm: Farm = Depends(farm_dep), session: A
 async def update_cycle(cycle_id: str, body: CyclePatch, farm: Farm = Depends(farm_dep),
                        session: AsyncSession = Depends(get_db)):
     p, zone, crop = await load_cycle(session, farm, cycle_id)
+    setups_svc.check(crop.slug, body.setup)
     for name in body.model_fields_set:
         value = getattr(body, name)
         if value is not None:

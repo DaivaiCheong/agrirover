@@ -12,7 +12,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Integer,
+    Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Integer,
     Numeric, SmallInteger, String, Text, UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -43,9 +43,18 @@ class DeviceKind(str, enum.Enum):
 
 class Metric(str, enum.Enum):
     soil_moisture = "soil_moisture"
-    water_ph = "water_ph"
+    water_ph = "water_ph"            # the irrigation water, not the soil
     rain = "rain"
     supply_voltage = "supply_voltage"
+    # The 7-in-1 RS485 soil probe (soil_moisture above is its seventh reading) and the ambient air sensor.
+    soil_ph = "soil_ph"
+    soil_ec = "soil_ec"
+    soil_temperature = "soil_temperature"
+    nitrogen = "nitrogen"
+    phosphorus = "phosphorus"
+    potassium = "potassium"
+    air_temperature = "air_temperature"
+    air_humidity = "air_humidity"
 
 
 class Trigger(str, enum.Enum):
@@ -149,6 +158,8 @@ class Contact(Base):
 class Planting(Base):
     """What is growing in a zone, and since when. Day 21 of tomato comes from planted_on."""
     __tablename__ = "planting"
+    __table_args__ = (CheckConstraint("expected_price_usd_per_kg IS NULL OR expected_price_usd_per_kg >= 0",
+                                      name="ck_planting_price"),)
     id: Mapped[uuid.UUID] = _pk()
     zone_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"), nullable=False)
     crop_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crop_profile.id", ondelete="RESTRICT"), nullable=False)
@@ -157,6 +168,9 @@ class Planting(Base):
     ended_on: Mapped[date | None] = mapped_column(Date)                 # empty while the cycle is open
     plant_count: Mapped[int | None] = mapped_column(Integer)
     area_m2: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    # Growing setup (services/setups.py): picks the spacing and the yield benchmark. Empty = not chosen.
+    setup: Mapped[str | None] = mapped_column(String(24))
+    expected_price_usd_per_kg: Mapped[float | None] = mapped_column(Numeric(10, 4))   # for the revenue forecast
 
 
 class Sensor(Base):
@@ -175,6 +189,11 @@ class Sensor(Base):
 
 class SensorReading(Base):
     __tablename__ = "sensor_reading"
+    # "newest reading of each metric in a zone" and "this metric over the last day" both start here. It is the
+    # ONLY index on recorded_at, on purpose: next to a plain recorded_at index, Postgres answers "newest reading
+    # of this metric in this bed" by scanning the whole table backwards, which for a bed that has no such reading
+    # means every row (4.7 s per lookup at 1.4 million rows). See migration 0005.
+    __table_args__ = (Index("ix_sensor_reading_zone_metric_time", "zone_id", "metric", "recorded_at"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), nullable=False)
     zone_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"))
@@ -185,7 +204,7 @@ class SensorReading(Base):
     quality: Mapped[Quality] = mapped_column(Enum(Quality, name="reading_quality"),
                                              default=Quality.valid, nullable=False)
     sample_count: Mapped[int | None] = mapped_column(SmallInteger)
-    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

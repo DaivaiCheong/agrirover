@@ -34,11 +34,62 @@ const send = <T,>(method: string, path: string, body?: unknown) =>
 
 export type ZoneDecision = {
   zone: string; decision: string; text: string; durationSeconds: number;
-  reason: string; moisturePct: number | null; decisionAt: string;
+  reason: string; moisturePct: number | null; thresholdPct: number | null; decisionAt: string;
+};
+
+// ---- conditions: every reading rated against the crop's stage (advice only; nothing here opens a valve)
+
+export type RatingStatus = "normal" | "warning" | "critical" | "stale" | "no_data" | "unrated";
+
+export type CondParam = {
+  metric: string; label: string; short: string; unit: string; decimals: number; value: number | null;
+  recordedAt: string | null; status: RatingStatus; direction: "low" | "high" | null; target: [number, number] | null;
+};
+export type CondAlert = { id: string; severity: "critical"; title: string; message: string; metrics: string[] };
+export type CondStage = {
+  n: number; key: string; title: string; firstDay: number; lastDay: number; day: number; extended: boolean;
+  moisture: [number, number]; ec: [number, number]; focus: string;
+};
+export type BedConditions = {
+  zone: string; label: string | null; areaM2: number | null; crop: string | null; cropName: string | null;
+  variety: string | null; day: number | null; recordedAt: string | null; rated: boolean; status: RatingStatus;
+  basis: string; source: string; stage: CondStage | null; params: CondParam[]; alerts: CondAlert[];
+};
+
+export type TelemetrySeries = {
+  zone: string; hours: number; bucketSeconds: number; from: string; to: string;
+  series: Record<string, { t: string; v: number }[]>;
+};
+
+// ---- growing setups and the yield forecast
+
+export type SetupInfo = {
+  id: string; label: string; method: string | null; plantsForArea: number | null;
+  density: [number, number]; kgPerPlant: [number, number]; referenceBedM2: number;
+  plantsPerReferenceBed: [number, number]; kgPerReferenceBed: [number, number];
+  rowCm: number; plantCm: number; spacingPlantsPerM2: number; basis: string; spacingBasis: string;
+};
+export type Forecast = {
+  setup: string; label: string; plants: number; kgLow: number; kgHigh: number; kgMid: number;
+  pricePerKgUsd: number | null; revenueLowUsd: number | null; revenueHighUsd: number | null; basis: string;
+};
+
+// ---- a symptom set against live readings
+
+export type Symptom = { id: string; title: string };
+export type Evidence = {
+  metric: string; label: string; unit: string; decimals: number; op: "<" | ">"; limit: number;
+  value: number | null; ageSeconds: number | null; stale: boolean; met: boolean | null;
+};
+export type Correlation = {
+  symptom: string; title: string; verdict: "supported" | "not_supported" | "no_data"; evidence: Evidence[];
+  explanation: string | null; basis: "spec" | "practice" | null; caveat: string | null;
+  stage: { key: string; title: string; day: number } | null; zone: string; label: string | null;
+  source: "named" | "photo";
 };
 
 export type ZoneNow = {
-  zone: string; label: string | null; moisturePct: number | null; rain: boolean | null;
+  zone: string; label: string | null; areaM2?: number | null; moisturePct: number | null; rain: boolean | null;
   supplyVoltage: number | null; waterPh: number | null; recordedAt: string | null;
 };
 
@@ -109,12 +160,13 @@ export type CropPlanQuery = {
 
 export type PhotoResult = {
   status: "ok" | "uncertain"; label: string | null; confidence: number | null; note: string;
+  symptom: string | null; correlation: Correlation | null;
 };
 
-async function checkPhoto(file: File): Promise<PhotoResult> {
+async function checkPhoto(file: File, zone?: string): Promise<PhotoResult> {
   const body = new FormData();
   body.append("photo", file);                       // multipart: the browser sets the content type
-  const res = await fetch(`${BASE}/photos/check`, { method: "POST", body });
+  const res = await fetch(`${BASE}/photos/check${zone ? `?${new URLSearchParams({ zone })}` : ""}`, { method: "POST", body });
   if (!res.ok) {
     let detail: unknown;
     try { detail = (await res.json()).detail; } catch { /* keep status */ }
@@ -139,6 +191,7 @@ export type Cycle = {
   id: string; zone: string; bedLabel: string; trialArm: string | null; crop: string; cropName: string;
   variety: string | null; plantedOn: string; endedOn: string | null; status: "active" | "closed";
   day: number | null; stage: string | null; stageTitle: string | null; plantCount: number | null; areaM2: number | null;
+  setup: string | null; setupLabel: string | null; expectedPriceUsdPerKg: number | null; forecast: Forecast | null;
 };
 
 export type CostEntry = {
@@ -168,6 +221,7 @@ export type Cop = {
   kgTotal: number; kgMarketable: number; kgHome: number; kgLost: number;
   revenueUsd: number; marginUsd: number | null; copPerKg: number | null; breakEvenPricePerKg: number | null;
   costPerPlant: number | null; costPerM2: number | null; kgPerM3Water: number | null; waterM3: number | null;
+  costPerKgIfBenchmark: { atLowYield: number; atHighYield: number } | null;
   flags: string[];
 };
 
@@ -181,6 +235,14 @@ export const api = {
   zones: () => request<ZoneNow[]>("/zones"),
   devices: () => request<DeviceRow[]>("/devices"),
   decisionsToday: () => request<ZoneDecision[]>("/decisions/today"),
+  conditions: () => request<BedConditions[]>("/conditions"),
+  telemetry: (zone: string, metrics: string[], hours: number) =>
+    request<TelemetrySeries>(`/telemetry/${encodeURIComponent(zone)}?${new URLSearchParams({ metrics: metrics.join(","), hours: String(hours), points: "240" })}`),
+  setups: (crop: string, areaM2?: number) =>
+    request<SetupInfo[]>(`/setups?${new URLSearchParams({ crop, ...(areaM2 ? { area: String(areaM2) } : {}) })}`),
+  symptoms: () => request<Symptom[]>("/diagnosis/symptoms"),
+  diagnose: (zone: string, symptom: string) =>
+    request<Correlation>(`/diagnosis?${new URLSearchParams({ zone, symptom })}`),
   checkPhoto,
   cropPlan: (q: CropPlanQuery) => {
     const qs = new URLSearchParams({ crop: q.crop, plants: String(q.plants), plantedOn: q.plantedOn });
@@ -200,9 +262,11 @@ export const api = {
 
   // cycles
   cycles: () => request<Cycle[]>("/cycles"),
-  addCycle: (b: { zone: string; crop: string; plantedOn: string; plantCount?: number; areaM2?: number; variety?: string }) =>
+  addCycle: (b: { zone: string; crop: string; plantedOn: string; plantCount?: number; areaM2?: number; variety?: string;
+                  setup?: string; expectedPriceUsdPerKg?: number }) =>
     send<Cycle>("POST", "/cycles", b),
-  updateCycle: (id: string, b: { plantCount?: number; areaM2?: number; variety?: string; plantedOn?: string }) =>
+  updateCycle: (id: string, b: { plantCount?: number; areaM2?: number; variety?: string; plantedOn?: string;
+                                 setup?: string; expectedPriceUsdPerKg?: number }) =>
     send<Cycle>("PATCH", `/cycles/${id}`, b),
   closeCycle: (id: string, endedOn?: string) => send<Cycle>("POST", `/cycles/${id}/close`, { endedOn }),
   cop: (id: string) => request<Cop>(`/cycles/${id}/cop`),

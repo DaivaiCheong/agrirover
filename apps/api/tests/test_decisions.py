@@ -116,9 +116,26 @@ def test_endpoint_returns_decisions_in_the_documented_shape(monkeypatch):
     assert r.status_code == 200
     assert r.json()[0] == {
         "zone": "zone-a", "decision": "irrigate", "text": "zone-a: water 40 s",
-        "durationSeconds": 40, "reason": "auto_threshold", "moisturePct": 20.0,
+        "durationSeconds": 40, "reason": "auto_threshold", "moisturePct": 20.0, "thresholdPct": None,
         "decisionAt": AT_6.isoformat().replace("+00:00", "Z"),
     }
+
+
+def test_endpoint_tells_which_threshold_the_bed_is_watered_by(monkeypatch):
+    async def fake(session, farm_name, now=None):
+        return [svc.ZoneDecision("zone-a", Decision.HOLD_IN_RANGE, 0, "within_range", 40.0, AT_6,
+                                 inputs={"threshold_pct": 30.0})]
+
+    async def no_db():
+        yield None
+
+    monkeypatch.setattr(decisions_router, "decisions_for_farm", fake)
+    app.dependency_overrides[get_db] = no_db
+    try:
+        r = TestClient(app).get("/api/v1/decisions/today")
+    finally:
+        app.dependency_overrides.clear()
+    assert r.json()[0]["thresholdPct"] == 30.0
 
 
 # ------------------------------------------------ integration (real Postgres)

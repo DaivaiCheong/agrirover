@@ -109,6 +109,21 @@ Total after the change: 15 − 2 + 7 = **20 tables**.
 
 What the farmer reads: **"Tomato bed A (day 21): water 17 s. Tomato bed B: skip, soil is wet enough."**
 
+## Soil probe, air sensor and growing setup (migration `0005`)
+
+| Change | What it is for |
+|---|---|
+| `metric_type` gains `soil_ph`, `soil_ec`, `soil_temperature`, `nitrogen`, `phosphorus`, `potassium`, `air_temperature`, `air_humidity` | The 7-in-1 RS485 probe (its seventh reading is the existing `soil_moisture`) and the ambient air sensor. `water_ph` stays: it is the irrigation water, not the soil. Units are stored as `pct`, `pH`, `mS/cm`, `C`, `mg/kg`; `services/metrics.py` converts (EC in uS/cm becomes mS/cm) and refuses impossible values (pH 655.35 from a dead RS485 link) before they reach the table. |
+| index `ix_sensor_reading_zone_metric_time` on (`zone_id`, `metric`, `recorded_at`), **replacing** the plain `recorded_at` index | "Newest reading of each metric in a bed" and "this metric over the last week". Next to the plain index, Postgres answered "newest reading of this metric in this bed" by scanning the whole table backwards, which for a bed with no such reading is every row: 4.7 s per lookup at 1.4 million rows (a week of the simulator). The Today page went from 5 s to under 20 ms. A test keeps it to one time index. |
+| `planting.setup` (`open_field` / `raised_bed` / `net_house`, validated in the API) | The growing setup chosen for the cycle. It fills the spacing and gives the harvest forecast. |
+| `planting.expected_price_usd_per_kg` | The price the revenue forecast uses. Empty means "no price entered", never a guess. |
+
+Everything the soil probe measures is filed under the bed's deciding probe, like moisture always was; air, rain and supply readings belong to the node.
+
+**No alert table.** An alert is worked out from the newest readings every time it is asked for (`services/agronomy.py`), so it cannot go stale and the readings stay the only record. The old `alert` table was dropped in `0002` for the same reason. If alerts ever need a history or a push (Telegram), that is when a table is earned.
+
+**Downgrading `0005` deletes** every reading of the eight new metrics (Postgres cannot drop a value from an enum, so the type is rebuilt).
+
 ## Decisions I need from you
 
 1. Build the schema as above, or smaller?

@@ -6,7 +6,8 @@ rule engine what to do. Runs inside the API process; on the Pi that keeps the
 whole control loop in one supervised service.
 
 Topics (farm/{farm}/zone/{zone}/...):
-    telemetry     device -> server   soil moisture, water pH, rain, supply V
+    telemetry     device -> server   soil probe (moisture, pH, EC, temperature, N, P, K), air temperature
+                                     and humidity, water pH, rain, supply V  (services/metrics.py)
     valve/set     server -> device   {command, channel, maxOnMs, requestId}
     valve/state   device -> server   actual relay position + reason   (retained)
 Rover (devices/rover-01/...):
@@ -19,6 +20,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 
@@ -28,7 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import SessionLocal
-from app.models.entities import Device, Farm, Metric, Quality, Sensor, SensorReading, Zone
+from app.models.entities import Device, Farm, Sensor, SensorReading, Zone
+from app.services.metrics import SOIL_PROBE_METRICS, Refused, clean
 
 log = logging.getLogger("ingest")      # not "mqtt": aiomqtt owns that logger and pins it to WARNING
 
@@ -45,10 +48,9 @@ def _valid(payload: dict) -> bool:
     if "metric" not in payload or "value" not in payload:
         return False
     try:
-        float(payload["value"])
+        return math.isfinite(float(payload["value"]))       # json.loads accepts NaN and Infinity
     except (TypeError, ValueError):
         return False
-    return True
 
 
 def readings(payload: object) -> list[dict]:
@@ -62,23 +64,22 @@ def readings(payload: object) -> list[dict]:
     return [m for m in items if _valid(m)]
 
 
-def _quality(raw: object) -> Quality:
-    try:
-        return Quality(raw)
-    except ValueError:
-        return Quality.suspect
-
-
 async def store_telemetry(session: AsyncSession, topic: str, payload: object,
                            now: datetime | None = None) -> int:
-    """Persist one telemetry batch. The zone comes from the topic, the device from
-    the payload. Unknown zone, unknown device or unknown metric -> nothing stored.
+    """Persist one telemetry batch. The zone comes from the topic, the device from the payload.
+    Unknown zone or device, or a payload that names a different zone than its topic -> nothing stored.
+    Within a batch each reading stands alone: an unknown metric, a unit we do not understand or an
+    impossible value (a dead RS485 link reads 655.35 pH) drops that reading and keeps the rest.
     Returns the number of readings written."""
     parts = topic.split("/")                 # farm/{farm}/zone/{zone}/telemetry
     if len(parts) != 5 or not isinstance(payload, dict):
         return 0
     farm_name, zone_name = parts[1], parts[3]
     device_code = payload.get("device")
+    named_zone = payload.get("zone")
+    if named_zone is not None and str(named_zone) != zone_name:      # a node set up for another bed
+        log.warning("telemetry on %s says it is for zone %r; dropped", topic, named_zone)
+        return 0
 
     zone = (await session.execute(
         select(Zone).join(Zone.farm).where(Zone.name == zone_name,
@@ -96,26 +97,28 @@ async def store_telemetry(session: AsyncSession, topic: str, payload: object,
     deciding = next((p for p in probes.values() if p.used_for_decision), None)
 
     rows = []
+    refused: list[str] = []
     for m in readings(payload):
         try:
-            metric = Metric(m["metric"])
-        except ValueError:
+            c = clean(m)
+        except Refused as why:
+            refused.append(str(why))
             continue
         sensor = None
-        if metric is Metric.soil_moisture:
-            if m.get("sensor") is not None:                # the node named the probe
-                sensor = probes.get(str(m["sensor"]))
+        if c.metric in SOIL_PROBE_METRICS:                 # everything the soil probe measures belongs to a probe
+            if c.sensor is not None:                       # the node named the probe
+                sensor = probes.get(c.sensor)
                 if sensor is None:
-                    log.warning("reading from unknown probe %r dropped", m["sensor"])
+                    refused.append(f"{c.metric.value}: unknown probe {c.sensor!r}")
                     continue
-            else:                                          # older firmware: one probe, the deciding one
+            else:                                          # one probe on the node: the deciding one
                 sensor = deciding
-        quality = m.get("quality", "valid")
         rows.append(SensorReading(
             device_id=device.id, zone_id=zone.id, sensor_id=sensor.id if sensor else None,
-            metric=metric, value=float(m["value"]),
-            unit=str(m.get("unit", "")), quality=_quality(quality),
+            metric=c.metric, value=c.value, unit=c.unit, quality=c.quality,
             sample_count=payload.get("sampleCount"), recorded_at=at))
+    if refused:
+        log.warning("dropped %d reading(s) on %s: %s", len(refused), topic, "; ".join(refused[:6]))
     session.add_all(rows)
     device.last_seen_at = at
     if payload.get("fw"):

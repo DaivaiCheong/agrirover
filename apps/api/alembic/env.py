@@ -12,7 +12,9 @@ import app.models.entities  # noqa: F401  — registers every model
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
 if config.config_file_name:
-    fileConfig(config.config_file_name)
+    # Without this, fileConfig silently disables every logger that already exists (the app's own, when
+    # migrations run in the same process, as the migration tests do).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 target_metadata = Base.metadata
 
 

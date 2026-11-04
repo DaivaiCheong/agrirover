@@ -16,6 +16,7 @@ import Harvest from "./pages/Harvest";
 import Plan from "./pages/Plan";
 import Settings from "./pages/Settings";
 import Stock from "./pages/Stock";
+import Beds from "./pages/Beds";
 
 const money = (page: ReactNode) => <Section id="money">{page}</Section>;
 const results = (page: ReactNode) => <Section id="results">{page}</Section>;
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/cop" element={results(<CopSummary />)} />
         <Route path="/harvest" element={results(<Harvest />)} />
         <Route path="/compare" element={results(<Compare />)} />
+        <Route path="/beds" element={farm(<Beds />)} />
         <Route path="/settings" element={farm(<Settings />)} />
         <Route path="/devices" element={farm(<Devices />)} />
         <Route path="/crop" element={farm(<Crop />)} />

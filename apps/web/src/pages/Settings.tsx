@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Field, Notice, PageIntro, Panel } from "../components/ui";
+import { Plus, Sprout, X } from "lucide-react";
+import { Field, Notice, PageIntro, Panel, Tag } from "../components/ui";
+import NewCropForm from "../components/NewCropForm";
 import { api, type Settings as SettingsT } from "../lib/api";
 import { useData } from "../lib/useData";
 
@@ -13,8 +15,11 @@ const FIELDS: { key: keyof SettingsT; label: string; hint: string }[] = [
 
 export default function Settings() {
   const { data, error, reload } = useData(api.settings);
+  const crops = useData(api.crops);
   const [form, setForm] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ kind: "ok" | "alert"; text: string } | null>(null);
+  const [showAddCrop, setShowAddCrop] = useState(false);
+  const [cropMsg, setCropMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -57,6 +62,66 @@ export default function Settings() {
           </form>
           {msg && <div style={{ marginTop: 12 }}><Notice kind={msg.kind}>{msg.text}</Notice></div>}
         </Panel>
+
+        <Panel
+          title="Crops"
+          icon={Sprout}
+          right={!showAddCrop ? (
+            <button className="btn btn-sm" onClick={() => setShowAddCrop(true)}>
+              <Plus size={16} aria-hidden />Add crop
+            </button>
+          ) : undefined}
+        >
+          {cropMsg && <div style={{ marginBottom: 14 }}><Notice kind="ok">{cropMsg}</Notice></div>}
+
+          <div style={{ display: "grid", gap: 8 }}>
+            {(crops.data ?? []).map((c) => (
+              <div
+                key={c.slug}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "12px 14px",
+                  background: "var(--surface-alt)",
+                  borderRadius: "var(--r-sm)",
+                  border: "1px solid var(--line)",
+                }}
+              >
+                <div>
+                  <b style={{ fontSize: 15 }}>{c.name}</b>
+                  {c.stageDays && (
+                    <span className="small muted" style={{ marginLeft: 10 }}>
+                      {c.stageDays.reduce((a, b) => a + b, 0)} cycle days
+                    </span>
+                  )}
+                </div>
+                <Tag kind={c.hasWaterData ? "ok" : "idle"}>
+                  {c.hasWaterData ? "Water data ready" : "No water data"}
+                </Tag>
+              </div>
+            ))}
+          </div>
+
+          {showAddCrop && (
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <b style={{ fontSize: 16 }}>New crop profile</b>
+                <button className="linkbtn" onClick={() => setShowAddCrop(false)}>
+                  <X size={16} aria-hidden style={{ verticalAlign: -2 }} /> Cancel
+                </button>
+              </div>
+              <NewCropForm
+                onAdded={() => {
+                  crops.reload();
+                  setShowAddCrop(false);
+                  setCropMsg("New crop added to farm.");
+                }}
+              />
+            </div>
+          )}
+        </Panel>
+
         <Notice>
           Empty means not set. A missing number is never guessed: the cost report says what is left out.
         </Notice>

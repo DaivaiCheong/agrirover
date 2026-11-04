@@ -52,6 +52,7 @@ async def latest_by_zone(session: AsyncSession, farm_name: str) -> list[dict]:
         out.append({
             "zone": z.name,
             "label": z.label,
+            "areaM2": z.area_m2,
             "moisturePct": moisture,
             "rain": bool(newest["rain"]) if "rain" in newest else None,
             "supplyVoltage": newest.get("supply_voltage"),

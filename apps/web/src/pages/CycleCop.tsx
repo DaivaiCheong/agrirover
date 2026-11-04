@@ -1,4 +1,4 @@
-import { Calculator, ChevronLeft } from "lucide-react";
+import { Calculator, ChevronLeft, Wheat } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { Empty, Metric, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
@@ -37,6 +37,49 @@ export default function CycleCop() {
               <Metric label="Profit" value={cop.marginUsd === null ? "—" : usd(cop.marginUsd)}
                       note={cop.marginUsd === null ? "No sales yet" : `${usd(cop.revenueUsd)} sold`} />
             </div>
+
+            {c?.forecast && (
+              <Panel title="Expected harvest" icon={Wheat} pad={false}
+                     right={<span className="small muted">{c.setupLabel} · {c.forecast.plants.toLocaleString()} plants</span>}>
+                <div className="tablewrap">
+                  <table className="tbl">
+                    <thead>
+                      <tr><th /><th className="r">Setup benchmark</th><th className="r">{cop.open ? "So far" : "Final"}</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Harvest</td>
+                        <td className="r"><b>{num(c.forecast.kgLow, 0)}–{num(c.forecast.kgHigh, 0)} kg</b></td>
+                        <td className="r">
+                          <b>{num(cop.kgTotal, 1)} kg</b>
+                          {c.forecast.kgLow > 0 && <div className="mono-sm muted">{num((100 * cop.kgTotal) / c.forecast.kgLow, 0)}% of the low end</div>}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Revenue</td>
+                        <td className="r">
+                          {c.forecast.revenueLowUsd === null || c.forecast.revenueHighUsd === null
+                            ? <span className="muted">No price set</span>
+                            : <b>{usd(c.forecast.revenueLowUsd, 0)}–{usd(c.forecast.revenueHighUsd, 0)}</b>}
+                          {c.forecast.pricePerKgUsd !== null && <div className="mono-sm muted">at {usd(c.forecast.pricePerKgUsd)} a kg</div>}
+                        </td>
+                        <td className="r"><b>{usd(cop.revenueUsd)}</b></td>
+                      </tr>
+                      <tr>
+                        <td>Cost per kg</td>
+                        <td className="r">
+                          {cop.costPerKgIfBenchmark
+                            ? <><b>{usd(cop.costPerKgIfBenchmark.atHighYield)}–{usd(cop.costPerKgIfBenchmark.atLowYield)}</b>
+                                <div className="mono-sm muted">if the benchmark is reached, at the costs so far</div></>
+                            : <span className="muted">Needs a recorded cost</span>}
+                        </td>
+                        <td className="r"><b>{cop.copPerKg === null ? "—" : usd(cop.copPerKg)}</b></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </Panel>
+            )}
 
             <div className="grid g32">
               <Panel title="Where the money went" pad={false}>

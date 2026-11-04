@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BRAND } from "../lib/brand";
 import {
-  Calculator, Camera, ChartColumn, Cpu, Leaf, Package, Receipt, Scale, Settings, Sprout, Sun, Tractor, Wallet, Wheat,
+  Calculator, Camera, ChartColumn, Cpu, Leaf, MapPin, Package, Receipt, Scale, Settings, Sprout, Sun, Tractor, Wallet, Wheat,
   Wrench, type LucideIcon,
 } from "lucide-react";
 
@@ -21,9 +21,11 @@ export const SECTIONS = {
              tabs: [{ to: "/cop", label: "Cost of production", icon: Calculator },
                     { to: "/harvest", label: "Harvest and sales", icon: Wheat },
                     { to: "/compare", label: "Compare beds", icon: Scale }] },
-  farm:    { to: "/settings", label: "Farm",     icon: Tractor,     title: "Farm",
-             sub: "Your numbers, and the devices and checks in the field.",
-             tabs: [{ to: "/settings", label: "Settings", icon: Settings }, { to: "/devices", label: "Devices", icon: Cpu },
+  farm:    { to: "/beds",     label: "Farm",     icon: Tractor,     title: "Farm",
+             sub: "Your land, beds, equipment, devices, and farm configuration.",
+             tabs: [{ to: "/beds", label: "Beds & Land", icon: MapPin },
+                    { to: "/settings", label: "Settings", icon: Settings },
+                    { to: "/devices", label: "Devices", icon: Cpu },
                     { to: "/crop", label: "Disease check", icon: Camera }] },
 } as const;
 

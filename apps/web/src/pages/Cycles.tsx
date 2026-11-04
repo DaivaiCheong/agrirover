@@ -1,17 +1,16 @@
-import { Fragment, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
-import { Plus, Sprout } from "lucide-react";
+import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Calculator, Droplets, Pencil, Plus, Sprout, Square, X } from "lucide-react";
 import { Empty, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api, type Cycle } from "../lib/api";
 import { dayLabel, dayMonthYear, suggestedArea } from "../lib/format";
 import { useData } from "../lib/useData";
-
-/** Links in a row, with a dot between each. */
-const Dotted = ({ items }: { items: ReactNode[] }) => (
-  <>{items.map((x, i) => <Fragment key={i}>{i > 0 && " · "}{x}</Fragment>)}</>
-);
+import RowMenu from "../components/RowMenu";
+import AddCropModal from "../components/AddCropModal";
 
 export default function Cycles() {
+  const [qs, setQs] = useSearchParams();
+  const [showAdd, setShowAdd] = useState(qs.get("add") === "true");
   const cycles = useData(api.cycles);
   const crops = useData(api.crops);
 
@@ -59,8 +58,8 @@ export default function Cycles() {
 
   return (
     <>
-      <PageHead icon={Sprout} title="My crops" sub="Every crop you are growing or have grown, one bed at a time."
-                actions={<Link className="btn" to="/plan"><Plus size={18} aria-hidden />Plan a new crop</Link>} />
+      <PageHead icon={Sprout} title="My crops"
+                actions={<button className="btn" onClick={() => setShowAdd(true)}><Plus size={18} aria-hidden />Add crop</button>} />
       <main className="main stack">
         {cycles.error && <Notice kind="alert">Cannot reach the farm server ({cycles.error}).</Notice>}
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
@@ -68,43 +67,44 @@ export default function Cycles() {
         <Panel title="Crops" icon={Sprout} pad={false}>
           {rows.length === 0 ? (
             <Empty icon={Sprout}>
-              No crop yet. Plan one: tell us how many plants and we do the rest.
-              <Link className="btn" to="/plan" style={{ marginTop: 6 }}><Plus size={18} aria-hidden />Plan your first crop</Link>
+              No crop yet.
+              <button className="btn" onClick={() => setShowAdd(true)} style={{ marginTop: 6 }}><Plus size={18} aria-hidden />Add your first crop</button>
             </Empty>
           ) : (
             <div className="tablewrap">
-              <table className="tbl">
-                <thead><tr><th>Bed</th><th>Crop</th><th>Planted</th><th>Status</th><th className="r">Plants</th>
-                  <th className="r">Area m²</th><th /></tr></thead>
+              <table className="tbl crops">
+                <thead><tr><th>Bed</th><th>Crop</th><th className="nowrap">Planted</th><th>Status</th><th className="r nowrap">Plants</th>
+                  <th className="r nowrap">Area m²</th><th /></tr></thead>
                 <tbody>
                   {rows.map((c) => (
                     <tr key={c.id}>
                       <td><b>{c.bedLabel}</b>{c.trialArm && <> <Tag kind="info">{c.trialArm}</Tag></>}</td>
-                      <td>{c.cropName}{c.variety ? ` (${c.variety})` : ""}</td>
-                      <td>{dayMonthYear(c.plantedOn)}</td>
-                      <td>{c.status === "active" ? <Tag kind="ok">{dayLabel(c)}</Tag> : <Tag>Closed {c.endedOn}</Tag>}</td>
-                      <td className="r">{editing === c.id
+                      <td data-label="Crop">{c.cropName}{c.variety ? ` (${c.variety})` : ""}
+                        {c.setupLabel && <div className="mono-sm muted">{c.setupLabel}</div>}</td>
+                      <td data-label="Planted" className="nowrap">{dayMonthYear(c.plantedOn)}</td>
+                      <td data-label="Status" className="nowrap">{c.status === "active" ? <Tag kind="ok">{dayLabel(c)}</Tag> : <Tag>Closed {c.endedOn}</Tag>}</td>
+                      <td data-label="Plants" className="r nowrap">{editing === c.id
                         ? <input className="cell-input" type="number" min={1} value={ePlants} autoFocus
                                  onChange={(e) => plantsChanged(c, e.target.value)} aria-label="Plants" />
-                        : c.plantCount ?? <span className="muted">not set</span>}</td>
-                      <td className="r">{editing === c.id
+                        : c.plantCount ?? <Tag kind="warn">Add plants</Tag>}</td>
+                      <td data-label="Area m²" className="r nowrap">{editing === c.id
                         ? <input className="cell-input" type="number" min={0} step="any" value={eArea}
                                  onChange={(e) => { setEArea(e.target.value); setAreaTouched(true); }} aria-label="Area" />
-                        : c.areaM2 ?? <span className="muted">not set</span>}</td>
+                        : c.areaM2 ?? <span className="muted">—</span>}</td>
                       <td className="act">
                         {/* while editing, only Save and Cancel: nothing else can be pressed by mistake */}
                         {editing === c.id ? (
-                          <Dotted items={[
-                            <button className="linkbtn" onClick={() => saveEdit(c.id)}>Save</button>,
-                            <button className="linkbtn" onClick={() => setEditing(null)}>Cancel</button>,
-                          ]} />
+                          <div className="rowactions">
+                            <button className="btn btn-sm" onClick={() => saveEdit(c.id)}>Save</button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => setEditing(null)}><X size={15} aria-hidden />Cancel</button>
+                          </div>
                         ) : (
-                          <Dotted items={[
-                            <button className="linkbtn" onClick={() => startEdit(c)}>Set plants and area</button>,
-                            ...(c.plantCount ? [<Link to={planLink(c)} className="linkbtn">Water plan</Link>] : []),
-                            <Link to={`/cycles/${c.id}`} className="linkbtn">Cost report</Link>,
-                            ...(c.status === "active"
-                              ? [<button className="linkbtn linkbtn-alert" onClick={() => end(c.id, c.bedLabel)}>End crop</button>] : []),
+                          <RowMenu items={[
+                            { label: "Plants and area", icon: Pencil, onSelect: () => startEdit(c) },
+                            c.plantCount ? { label: "Water plan", icon: Droplets, to: planLink(c) } : null,
+                            { label: "Cost report", icon: Calculator, to: `/cycles/${c.id}` },
+                            c.status === "active" && "separator",
+                            c.status === "active" && { label: "End crop", icon: Square, danger: true, onSelect: () => end(c.id, c.bedLabel) },
                           ]} />
                         )}
                       </td>
@@ -115,16 +115,12 @@ export default function Cycles() {
             </div>
           )}
         </Panel>
-        {rows.some((c) => c.status === "active" && !c.plantCount) && (
-          <Notice kind="warn">
-            A crop without a plant count has no water plan, and its report cannot show cost per plant. Press "Set plants and
-            area". The area fills in from the plant count; change it if your bed is a different size.
-          </Notice>
-        )}
-        <p className="small muted">
-          To grow something that is not on the list, choose "A crop that is not in the list" in Plan a crop.
-        </p>
       </main>
+      <AddCropModal
+        isOpen={showAdd}
+        onClose={() => { setShowAdd(false); setQs({}, { replace: true }); }}
+        onAdded={() => cycles.reload()}
+      />
     </>
   );
 }

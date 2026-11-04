@@ -27,7 +27,7 @@ flowchart LR
     C[Camera] --> V[Vision<br/>plant · dryness · yellowing]
   end
   S[(Farm server<br/>Raspberry Pi on the farm)]
-  F[ESP8266 field node<br/>soil · rain · pH] -- telemetry --> S
+  F[Field node<br/>7-in-1 soil probe · air sensor · rain] -- telemetry --> S
   S -- mission --> P
   V -- survey report --> S
   S --> D[Dashboard]
@@ -58,6 +58,9 @@ Details: [control hierarchy](docs/architecture/control-hierarchy.md) · [rover d
 | Rover hardware — chassis, motors, camera | — | Under construction |
 | Field node — soil, rain, pH, 4 relays, run-time interlock | `edge/esp8266-field-node` | **Implemented** |
 | Irrigation rule engine | `apps/api/app/services/rule_engine.py` | **Implemented** · tested |
+| Stage-aware crop conditions and alerts (advice only) | `apps/api/app/services/agronomy.py` | **Implemented** · tested |
+| 7-in-1 soil probe and air sensor: ingest, history, ribbon | `apps/api/app/services/metrics.py` | **Implemented** · firmware reader not written |
+| Growing setups and yield forecast, symptom cross-check | `apps/api/app/services/setups.py`, `diagnosis.py` | **Implemented** · tested |
 | Mission API `POST /api/v1/missions` | `apps/api/app/routers/missions.py` | **Implemented** · tested |
 | AI assistant — propose / approve | `apps/api/app/services/assistant.py` | Safety checks implemented; model wiring in progress |
 | Disease model — MobileNetV2, tomato leaves | `rover/vision.py` (adapter) | Prototype; model file not in this repo |
@@ -85,7 +88,8 @@ docker compose --profile sim up -d
 curl -X POST localhost:8000/api/v1/missions -H "content-type: application/json" \
      -d '{"zoneId": "zone-a", "rows": 4, "cols": 10}'
 docker compose logs -f rover-sim
-docker compose logs -f field-sim   # simulated field node; SIM_SCENARIO=dry|wet|rain in .env
+docker compose logs -f field-sim   # simulated field node; SIM_SCENARIO=dry|wet|rain|heat|humid|salty and
+                                   # SIM_PROBE=basic|7in1 in .env (7in1 adds the soil probe and air sensor)
 ```
 
 Platform tests: `cd apps/api && pip install -r requirements.txt && python -m pytest`

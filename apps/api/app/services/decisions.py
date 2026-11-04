@@ -16,12 +16,15 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import Boolean, Enum as SAEnum, column, or_, select, true, values
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.entities import (CropProfile, DailyDecision, Farm, IrrigationEvent, IrrigationRule,
-                                 Planting, Sensor, SensorReading, Zone)
+from app.models.entities import (DailyDecision, Farm, IrrigationEvent, IrrigationRule, Metric, Sensor,
+                                 SensorReading, Zone)
+from app.services.farm_data import active_plantings
+from app.services.metrics import SOIL_PROBE_METRICS
 from app.services.rule_engine import Decision, RuleConfig, RuleInput, evaluate
 from app.services.water_plan import crop_day
 
@@ -121,23 +124,29 @@ async def deciding_sensors(session: AsyncSession, zone_ids: list) -> dict:
 
 
 async def newest_readings(session: AsyncSession, zone_ids: list) -> dict:
-    """{zone_id: [(metric, value, recorded_at), ...]}: the newest reading per probe and metric.
-    Soil moisture is taken only from the zone's deciding probe, when it has one."""
+    """{zone_id: [(metric, value, recorded_at), ...]}: the newest reading of each metric of each zone.
+    What the soil probe measures (moisture, pH, EC, temperature, N, P, K) is taken only from the zone's
+    deciding probe, when it has one; air, rain and supply readings belong to the node.
+
+    One index lookup per (zone, metric), newest first, stops at the first row: the cost does not grow with
+    the history. (A DISTINCT ON over the whole table took 5 s with a week of simulator data.)"""
     if not zone_ids:
         return {}
     deciding = await deciding_sensors(session, zone_ids)
+    zones = values(column("zone_id", PGUUID(as_uuid=True)), column("deciding_id", PGUUID(as_uuid=True)), name="zs").data(
+        [(z, deciding[z][0] if z in deciding else None) for z in zone_ids])
+    kinds = values(column("metric", SAEnum(Metric, name="metric_type", create_type=False)),
+                   column("is_probe", Boolean), name="mt").data([(m, m in SOIL_PROBE_METRICS) for m in Metric])
+    newest = (select(SensorReading.value.label("value"), SensorReading.recorded_at.label("recorded_at"))
+              .where(SensorReading.zone_id == zones.c.zone_id, SensorReading.metric == kinds.c.metric,
+                     or_(kinds.c.is_probe.is_(False), zones.c.deciding_id.is_(None),
+                         SensorReading.sensor_id == zones.c.deciding_id))
+              .order_by(SensorReading.recorded_at.desc()).limit(1).lateral("newest"))
     rows = (await session.execute(
-        select(SensorReading.zone_id, SensorReading.sensor_id, SensorReading.metric,
-               SensorReading.value, SensorReading.recorded_at)
-        .where(SensorReading.zone_id.in_(zone_ids))
-        .distinct(SensorReading.zone_id, SensorReading.sensor_id, SensorReading.metric)   # Postgres DISTINCT ON
-        .order_by(SensorReading.zone_id, SensorReading.sensor_id, SensorReading.metric,
-                  SensorReading.recorded_at.desc())
-    )).all()
+        select(zones.c.zone_id, kinds.c.metric, newest.c.value, newest.c.recorded_at)
+        .select_from(zones).join(kinds, true()).join(newest, true()))).all()
     out: dict = {}
-    for zone_id, sensor_id, metric, value, at in rows:
-        if metric.value == "soil_moisture" and zone_id in deciding and sensor_id != deciding[zone_id][0]:
-            continue
+    for zone_id, metric, value, at in rows:
         out.setdefault(zone_id, []).append((metric.value, float(value), at))
     return out
 
@@ -158,14 +167,7 @@ async def decisions_for_farm(session: AsyncSession, farm_name: str,
     by_zone = await newest_readings(session, zone_ids)
     sensors = await deciding_sensors(session, zone_ids)
 
-    plantings: dict = {}
-    if zone_ids:
-        for planting, crop in (await session.execute(
-                select(Planting, CropProfile.common_name)
-                .join(CropProfile, Planting.crop_id == CropProfile.id)
-                .where(Planting.zone_id.in_(zone_ids), Planting.ended_on.is_(None))
-                .order_by(Planting.planted_on))).all():
-            plantings[planting.zone_id] = (planting, crop)        # the newest active planting wins
+    plantings = await active_plantings(session, zone_ids)
 
     out: list[ZoneDecision] = []
     for z in zones:
@@ -179,7 +181,7 @@ async def decisions_for_farm(session: AsyncSession, farm_name: str,
         day = crop_day(planting.planted_on, today) if planting else None      # planting day = day 1
         inputs = {"moisture_pct": moisture, "sensor": sensors[z.id][1] if z.id in sensors else None,
                   "rain": rain, "threshold_pct": cfg.moisture_threshold_pct,
-                  "planting_day": day, "crop": crop}
+                  "planting_day": day, "crop": crop.common_name if crop else None}
         out.append(decide(z.name, cfg, moisture=moisture, rain=rain, now=at, last_event_ended_at=last_end,
                           label=z.label, planting_day=day, arm=z.trial_arm.value if z.trial_arm else None,
                           zone_id=z.id, day=today, inputs=inputs))

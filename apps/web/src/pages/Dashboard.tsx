@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { ArrowRight, Cloud, CloudRain, Droplets, Gauge, Plus, Sprout, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
+import EnvRibbon from "../components/EnvRibbon";
 import { Empty, Field, Led, Notice, PageHead, Panel, Tag } from "../components/ui";
-import { api, type Cycle, type ZoneDecision, type ZoneNow } from "../lib/api";
+import { api, type BedConditions, type Cycle, type ZoneDecision, type ZoneNow } from "../lib/api";
+import { trim } from "../lib/conditions";
 import { dayMonthYear, litres, longToday, suggestedArea } from "../lib/format";
 import { useData } from "../lib/useData";
 import { ago, usePoll } from "../lib/usePoll";
@@ -18,8 +20,8 @@ function badge(d: ZoneDecision): [string, string] {
 
 const isStale = (z: ZoneNow) => z.recordedAt !== null && Date.now() - new Date(z.recordedAt).getTime() > STALE_AFTER_S * 1000;
 
-function CropCard({ c, areaPerPlant, zone, decision, onChanged }:
-  { c: Cycle; areaPerPlant: number; zone?: ZoneNow; decision?: ZoneDecision; onChanged: () => void }) {
+function CropCard({ c, areaPerPlant, cond, decision, onChanged }:
+  { c: Cycle; areaPerPlant: number; cond?: BedConditions; decision?: ZoneDecision; onChanged: () => void }) {
   // a crop with no plant count has no plan: ask for the number right here
   const { data: plan, error, loading } = useData(
     () => (c.plantCount ? api.cyclePlan(c.id) : Promise.resolve(null)), [c.id, c.plantCount, c.areaM2]);
@@ -66,12 +68,19 @@ function CropCard({ c, areaPerPlant, zone, decision, onChanged }:
         </div>
       )}
 
-      {zone && zone.moisturePct !== null && (
+      {cond && <EnvRibbon bed={cond} />}
+
+      {c.trialArm === "guided" && decision && (
         <div className="rowflex small" style={{ gap: 8 }}>
           <Gauge size={16} aria-hidden style={{ color: "var(--brand)" }} />
-          <span>Soil sensor: <b>{zone.moisturePct.toFixed(0)}%</b> moisture
-            <span className="muted"> · {isStale(zone) ? "old reading, " : ""}{ago(zone.recordedAt)}</span></span>
-          {c.trialArm === "guided" && decision && <Tag kind={badge(decision)[0]}>{badge(decision)[1]}</Tag>}
+          <span>Watering rule</span>
+          <Tag kind={badge(decision)[0]}>{badge(decision)[1]}</Tag>
+          {decision.thresholdPct !== null && (
+            <span className="muted">
+              waters below {decision.thresholdPct.toFixed(0)}% moisture
+              {cond?.stage ? `; the target for this stage is ${trim(cond.stage.moisture[0])}–${trim(cond.stage.moisture[1])}%` : ""}
+            </span>
+          )}
         </div>
       )}
 
@@ -139,31 +148,33 @@ export default function Dashboard() {
   const crops = useData(api.crops);
   const decisions = usePoll(api.decisionsToday);
   const zones = usePoll(api.zones);
-  const error = cycles.error ?? decisions.error ?? zones.error;
+  const conditions = usePoll(api.conditions);
+  const error = cycles.error ?? decisions.error ?? zones.error ?? conditions.error;
   const active = (cycles.data ?? []).filter((c) => c.status === "active");
   const decisionOf = new Map((decisions.data ?? []).map((d) => [d.zone, d]));
+  const condOf = new Map((conditions.data ?? []).map((b) => [b.zone, b]));
 
   return (
     <>
       <PageHead icon={Sun} title="Today" sub={longToday()}
-                actions={<Link className="btn" to="/plan"><Plus size={18} aria-hidden />Plan a crop</Link>} />
+                actions={<Link className="btn" to="/cycles?add=true"><Plus size={18} aria-hidden />Add crop</Link>} />
       <main className="main stack">
         {error && <Notice kind="alert">Cannot reach the farm server ({error}). Showing the last data received, if any.</Notice>}
 
         {cycles.data !== null && active.length === 0 && (
           <Panel><Empty icon={Sprout}>
-            No crop is growing yet. Tell us how many plants you have and we plan the water, the feeding and the harvest.
-            <Link className="btn" to="/plan" style={{ marginTop: 6 }}><Plus size={18} aria-hidden />Plan your first crop</Link>
+            No crop is growing yet.
+            <Link className="btn" to="/cycles?add=true" style={{ marginTop: 6 }}><Plus size={18} aria-hidden />Add your first crop</Link>
           </Empty></Panel>
         )}
 
         {active.length > 0 && <div className="grid g2">{active.map((c) => (
-          <CropCard key={c.id} c={c} onChanged={cycles.reload} zone={zones.data?.find((z) => z.zone === c.zone)}
+          <CropCard key={c.id} c={c} onChanged={cycles.reload} cond={condOf.get(c.zone)}
                     decision={decisionOf.get(c.zone)}
                     areaPerPlant={crops.data?.find((x) => x.slug === c.crop)?.defaultAreaPerPlantM2 ?? 0.5} />
         ))}</div>}
 
-        <Panel title="Soil sensors" icon={Gauge} pad={false}
+        <Panel title="Watering rule" icon={Gauge} pad={false}
                right={<span className="small muted">Rule engine · decided at 06:00</span>}>
           {(zones.data ?? []).length === 0 && <Empty icon={Gauge}>No beds set up yet.</Empty>}
           {(zones.data ?? []).map((z) => {
@@ -178,16 +189,17 @@ export default function Dashboard() {
                   </div>
                   <Tag kind={kind}>{label}</Tag>
                 </div>
-                <div className="rowflex">
-                  <span className="big" style={{ fontSize: 30 }}>{z.moisturePct === null ? "—" : `${z.moisturePct.toFixed(0)}%`}</span>
-                  <span className="small muted">soil moisture<br />
-                    <span style={{ color: isStale(z) ? "var(--alert)" : "var(--ok)", fontWeight: 600 }}>
-                      {z.recordedAt === null ? "No reading yet" : `${isStale(z) ? "Old reading · " : ""}${ago(z.recordedAt)}`}
-                    </span>
+                <div className="rowflex small">
+                  <span>
+                    Moisture <b>{z.moisturePct === null ? "—" : `${z.moisturePct.toFixed(0)}%`}</b>
+                    {d?.thresholdPct != null && <span className="muted"> · waters below {d.thresholdPct.toFixed(0)}%</span>}
+                  </span>
+                  <span style={{ color: isStale(z) ? "var(--alert)" : "var(--ink-muted)", fontWeight: 600 }}>
+                    {z.recordedAt === null ? "No reading yet" : `${isStale(z) ? "Old reading · " : ""}${ago(z.recordedAt)}`}
                   </span>
                   <Led kind={z.rain === null ? "idle" : z.rain ? "alert" : "ok"}>{z.rain === null ? "Rain unknown" : z.rain ? "Raining" : "No rain"}</Led>
-                  <span className="small muted">Supply {z.supplyVoltage === null ? "—" : `${z.supplyVoltage.toFixed(2)} V`}</span>
-                  <span className="small muted">pH {z.waterPh === null ? "—" : z.waterPh.toFixed(1)}</span>
+                  <span className="muted">Supply {z.supplyVoltage === null ? "—" : `${z.supplyVoltage.toFixed(2)} V`}</span>
+                  <span className="muted">Water pH {z.waterPh === null ? "—" : z.waterPh.toFixed(1)}</span>
                 </div>
               </div>
             );

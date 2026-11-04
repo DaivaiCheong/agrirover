@@ -82,6 +82,16 @@ def test_no_drift_between_models_and_migration(pg):
     assert asyncio.run(run()) == []
 
 
+def test_readings_have_one_time_index_and_it_leads_with_the_bed_and_the_metric(pg):
+    """A plain recorded_at index next to (zone, metric, recorded_at) makes Postgres scan the whole table for
+    "newest reading of this metric in a bed with none": 4.7 s per lookup at 1.4 million rows. Keep only one."""
+    command.upgrade(_cfg(), "head")
+    names = _inspect("SELECT indexname FROM pg_indexes WHERE tablename = 'sensor_reading'")
+    assert sorted(names) == ["ix_sensor_reading_zone_metric_time", "sensor_reading_pkey"]
+    command.downgrade(_cfg(), "0004")
+    assert "ix_sensor_reading_recorded_at" in _inspect("SELECT indexname FROM pg_indexes WHERE tablename = 'sensor_reading'")
+
+
 def test_downgrade_one_step_restores_the_0001_tables_and_goes_forward_again(pg):
     command.upgrade(_cfg(), "head")
     command.downgrade(_cfg(), "0001")

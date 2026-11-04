@@ -57,13 +57,15 @@ services:
     volumes: [ "./edge/rover-agent/reports:/srv/reports" ]
 
   field-sim:
-    # Simulated ESP8266 field node: publishes soil/rain telemetry, no hardware.
-    # Change SIM_SCENARIO (dry | wet | rain) and `docker compose up -d field-sim`.
+    # Simulated ESP8266 field node: publishes soil/rain telemetry, no hardware. SIM_PROBE=7in1 adds the
+    # 7-in-1 soil probe and the air sensor (pH, EC, soil temperature, N, P, K, air temperature, humidity).
+    # Change SIM_SCENARIO (dry | wet | rain | heat | humid | salty) and `docker compose up -d field-sim`.
     build: ./edge/field-node-sim
     profiles: [ "sim" ]
     environment:
       MQTT_HOST: broker
       SIM_SCENARIO: ${SIM_SCENARIO:-dry}
+      SIM_PROBE: ${SIM_PROBE:-7in1}
       SIM_INTERVAL: "10"
     depends_on: [ broker ]
 
@@ -75,5 +77,6 @@ services:
       MQTT_HOST: broker
       SIM_ZONE: zone-b
       SIM_SCENARIO: wet
+      SIM_PROBE: ${SIM_PROBE:-7in1}
       SIM_INTERVAL: "10"
     depends_on: [ broker ]

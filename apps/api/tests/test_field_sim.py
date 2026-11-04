@@ -10,7 +10,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "edge" / "field-node-sim"))
 import sim_field_node as sim  # noqa: E402
 
+from datetime import datetime  # noqa: E402
+from zoneinfo import ZoneInfo  # noqa: E402
+
+from app.services import agronomy  # noqa: E402
+from app.services.metrics import clean  # noqa: E402
 from app.workers.mqtt_ingest import readings  # noqa: E402
+
+EIGHT = {"soil_ph", "soil_ec", "soil_temperature", "nitrogen", "phosphorus", "potassium",
+         "air_temperature", "air_humidity"}
+NOON = datetime(2026, 11, 4, 12, 0, tzinfo=ZoneInfo("Asia/Phnom_Penh"))
 
 
 def metrics(payload):
@@ -53,3 +62,74 @@ def test_scenarios_drive_the_deciding_probe_and_the_rain_flag():
 def test_unknown_scenario_is_refused():
     with pytest.raises(ValueError):
         sim.build_payload("flood", random.Random(0))
+
+
+def test_unknown_probe_is_refused():
+    with pytest.raises(ValueError):
+        sim.build_payload("dry", random.Random(0), probe="9in1")
+
+
+# ------------------------------------------------- the 7-in-1 probe and the air sensor
+
+def test_the_basic_profile_is_still_exactly_what_the_firmware_sends_today():
+    p = sim.build_payload("dry", random.Random(1))
+    assert len(p["measurements"]) == 5 and "zone" not in p and p["fw"] == "sim-1.0"
+
+
+@pytest.mark.parametrize("scenario", sorted(sim.SCENARIOS))
+def test_the_7in1_profile_adds_the_eight_readings_and_ingest_accepts_every_one(scenario):
+    p = sim.build_payload(scenario, random.Random(3), probe="7in1")
+    assert set(metrics(p)) == {"water_ph", "rain", "supply_voltage"} | EIGHT
+    assert p["zone"] == "zone-a"                                 # like the spec's payload, which names its zone
+    assert len(readings(p)) == len(p["measurements"]) == 13
+    for m in p["measurements"]:
+        clean(m)                                                 # raises Refused if the sim says something ingest would drop
+
+
+def test_the_7in1_profile_uses_the_units_of_the_spec():
+    got = {m["metric"]: m["unit"] for m in sim.build_payload("wet", random.Random(3), probe="7in1")["measurements"]
+           if m["metric"] != "soil_moisture"}
+    assert got["soil_ec"] == "mS/cm" and got["nitrogen"] == "mg/kg" and got["air_humidity"] == "%"
+    assert got["soil_ph"] == "pH" and got["soil_temperature"] == got["air_temperature"] == "C"
+
+
+def test_the_7in1_payload_follows_the_zone():
+    p = sim.build_payload("wet", random.Random(3), zone="zone-b", probe="7in1")
+    assert p["zone"] == "zone-b" and set(soil(p)) == {"S-B-10", "S-B-25"}
+
+
+# What each scenario must make the stage engine say for a tomato bed in flowering (day 50, noon).
+ALERTS = {"dry": {"calcium_lockup", "flowering_moisture_floor"}, "wet": set(), "rain": {"fungal_window"},
+          "heat": {"pollen_sterility", "root_heat"}, "humid": {"fungal_window"}, "salty": {"salinity", "calcium_lockup"}}
+
+
+def assess(payload, day=50):
+    seen = {}
+    for m in payload["measurements"]:
+        if m["metric"] == "soil_moisture" and m.get("sensor") != "S-A-25":
+            continue                                             # the deep probe decides
+        seen[m["metric"]] = agronomy.Reading(clean(m).value, NOON)
+    return agronomy.assess(seen, crop="tomato", day=day, now=NOON)
+
+
+def test_every_scenario_is_covered_here():
+    assert set(ALERTS) == set(sim.SCENARIOS)
+
+
+@pytest.mark.parametrize("scenario", sorted(sim.SCENARIOS))
+def test_each_scenario_raises_exactly_the_alerts_it_is_named_for(scenario):
+    for seed in range(60):                                       # the ranges, not one lucky draw
+        a = assess(sim.build_payload(scenario, random.Random(seed), probe="7in1"))
+        assert {x.id for x in a.alerts} == ALERTS[scenario], (scenario, seed)
+
+
+def test_the_wet_bed_is_healthy_all_over_in_flowering():
+    for seed in range(60):
+        a = assess(sim.build_payload("wet", random.Random(seed), probe="7in1"))
+        assert a.status in ("normal", "warning") and not a.alerts
+
+
+def test_pollen_alert_waits_for_flowering_and_root_heat_does_not():
+    p = sim.build_payload("heat", random.Random(5), probe="7in1")
+    young = assess(p, day=21)
+    assert {x.id for x in young.alerts} == {"root_heat"} and young.status == "critical"   # 35 C air is critical, not an alert yet

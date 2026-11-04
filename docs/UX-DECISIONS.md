@@ -17,6 +17,31 @@ what do I do today, what should I plant and how much water does it need, where d
 5. **Automate last.** Water by month from the weather, feeding amounts from the spacing, jobs from the crop day. Next candidates:
    Telegram entry of costs, and soil-sensor readings correcting the plan.
 
+## Soil and air readings (the ribbon)
+
+Question: what must a farmer see per bed? Seven readings (moisture, pH, EC, soil temperature, N-P-K, air temperature, humidity),
+whether each is where this crop wants it today, and whether anything needs action. Nothing else.
+
+* **Delete.** The big moisture number on Today (the ribbon has it), the "Soil moisture" and "Last reading" columns of the land table
+  (the telemetry table has them), a separate alerts page (alerts sit on the bed they belong to), an alert table (see `SCHEMA.md`).
+* **Simplify.** One component, two rows of cells, the same on a phone and on a desktop card. The value is the biggest thing in a cell;
+  the unit and the target range sit beneath it in muted text, like a reference range on a lab result. Only readings out of range
+  take a colour, so a healthy bed is quiet and an unhealthy one is obvious.
+* **Status is never colour alone.** A bar, a glyph (triangle = warning, circle = critical, clock = old reading), an arrow for
+  low or high, and the words in the badge and in the tooltip and screen-reader text. The badge says "Normal", "Warning" or "Critical".
+* **Both thresholds stay visible.** Each bed's watering rule waters below 30 %; the stage wants 65-80 %. They are different numbers,
+  and the card says both rather than hiding one. The app does not override the rule engine (above), so aligning them is the owner's call.
+* **History.** Nine small charts, one per reading, one shared time window chosen once above them. Each has the same numbers as a table,
+  the target band shaded, and a gap (not a straight line) wherever a sensor was silent for a while.
+* **Accelerate.** Picking a growing setup fills the spacing and, for a bed of known size, the plant count, and shows the harvest and
+  revenue before the crop is saved. A symptom can be checked against the sensors without a photo, because the disease model is not installed yet.
+
+Checked in a real browser against a throwaway database (headless Chrome over the DevTools protocol): the ribbon at card width and on a
+phone, the alert rows, hover and the table twin of the charts, the setup form with a density outside the range, the symptom cross-check,
+the cost report's forecast, and no sideways scrolling at 390 px on 14 pages. That check found three bugs a type check cannot:
+screen-reader text positioned outside a scrolling table widened the whole page on a phone; one empty bucket made every chart line look
+dashed; and the Status column was scrolled out of sight.
+
 ## Review round
 
 A written review of the first version was checked against the code before anything changed.

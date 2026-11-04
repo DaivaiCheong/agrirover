@@ -53,6 +53,68 @@ numbers are on screen.
   window is the Cambodian trial's; the quarter threshold is ours.
 * Fertiliser products: urea 46% N, triple superphosphate 46% P2O5, potash 60% K2O are standard grades.
 
+## Stage targets, alerts and yield benchmarks (the farm's own table)
+
+Added 2026-11-04. These numbers are **the owner's agronomy table**, not figures checked against a study here, and the screen says so ("basis: spec").
+Code: `services/agronomy.py` (targets, alerts), `setups.py` (yield), `diagnosis.py` (symptom cross-check).
+
+| Stage (days) | Target moisture | Target EC (mS/cm) | Focus |
+|---|---|---|---|
+| Seedling and transplant (1-25) | 65-75 % | 1.2-1.8 | Root establishment. Moderate N, high P |
+| Vegetative growth (26-45) | 60-75 % | 1.8-2.4 | Canopy growth. High N |
+| Flowering and fruit set (46-70) | 65-80 % (never below 55) | 2.2-3.0 | Heat sterilizes pollen |
+| Fruit bulking and ripening (71-110) | 50-65 % | 2.5-3.5 | Drier soil prevents cracking and raises Brix. High K |
+
+Past day 110 the last stage carries on (the screen says "past the table"); tomatoes are picked until about day 135.
+Not stage-dependent: soil pH 6.0-6.8, soil temperature 18-26 C, air 21-29 C, humidity 60-75 %, N 100-150, P 60-100, K 150-250 mg/kg.
+With no crop planted, moisture 50-80 % and EC 1.5-3.5 apply.
+
+A reading is **warning** outside its range and **critical** past a hard limit (strictly beyond, as written: exactly 32.0 C is not past 32):
+soil temperature above 30 C, air above 32 C, humidity above 85 %, EC above 4.0, pH below 5.8, moisture below 45 %.
+Alerts (all critical; only while a crop is in the ground and the reading is under 30 minutes old):
+
+| Alert | When |
+|---|---|
+| Pollen sterility | From day 46: air above 32 C by day (06:00-18:00 farm time) or above 26 C at night |
+| Calcium lockup, blossom end rot risk | Soil moisture below 45 % or soil pH below 5.8 |
+| Fungal and blight window | Humidity above 85 % and air above 22 C |
+| Salinity and fertilizer burn | Soil EC above 4.0 |
+| Root heat stress | Soil temperature above 30 C |
+| Flowering moisture floor | Days 46-70: soil moisture below 55 % ("never let moisture drop below 55 %" in the table) |
+
+Growing setups, each for a 50 m2 bed (the arithmetic is a test: 100 x 2.5 = 250 and 125 x 4.0 = 500, and so on for all three):
+
+| Setup | Plants per m2 | Plants | kg per plant | Harvest |
+|---|---|---|---|---|
+| Standard open field | 2.0-2.5 | 100-125 | 2.5-4.0 | 250-500 kg |
+| Intensive raised bed | 2.5-3.0 | 125-150 | 4.0-5.0 | 500-750 kg |
+| Net-house or greenhouse | 3.0-3.5 | 150-175 | 6.0-8.0 | 900-1,400 kg |
+
+The net-house yield sits inside the 5.4-8.8 kg per plant of the Aomori greenhouse growers above. Nothing read so far gives an open-field
+yield for Cambodia, so the other two rows rest on the table alone.
+
+Symptom cross-check, in the table's words: blossom end rot with moisture below 50 % or pH below 5.8 (calcium locked by a dry or acidic root zone);
+early blight with humidity above 80 %; leaf curling with air above 32 C or a dry root zone; interveinal chlorosis with pH above 7.2 or high EC.
+
+### Where I went beyond the table (marked "practice" on screen)
+
+* The row and plant spacing that picking a setup fills in (100 x 45, 90 x 40, 80 x 40 cm): the nearest round spacing inside each density range.
+* Day and night for pollen: 06:00 to 18:00 farm time is day.
+* "High EC" and "moisture deficit" had no number: they are the stage's own EC ceiling and moisture floor (3.5 and 50 with no stage).
+* Leaf curling counts soil above 30 C (the Root heat stress line) as heat, not only 32 C, so the photo check and the alert agree.
+* When only the second cause is met (a dry root zone behind leaf curl, salt behind chlorosis), the sentence says that instead of repeating the first.
+* The flowering moisture floor is an alert of its own; the table states the rule but lists no alert for it.
+* A leaf-curl label from a model that mentions a virus (Tomato Yellow Leaf Curl Virus, whitefly-borne) is never matched to the heat rule, and leaf curling always carries a note that a virus looks the same.
+
+### Open questions (found while building it, not settled)
+
+1. **The watering rule and the stage targets are different numbers.** Each bed's irrigation rule waters below 30 % moisture (a placeholder, see `seed.py`); the stage table wants 65-75 % in the seedling stage. Today's card shows both ("waters below 30 %; the target for this stage is 65-80 %"). This app does not override the rule engine (see `UX-DECISIONS.md`), so nothing was wired together. Decide after the probe is calibrated.
+2. **Moisture of 65-80 % is above the volumetric water content most mineral soils can hold** (they are saturated at roughly 40-55 % by volume; general soil physics, not a source read for this project). The table fits the relative "moisture %" that cheap RS485 probes report, or a peat or coco substrate. Calibrate the probe (`sensor.calibration_dry` / `calibration_wet`) before trusting any moisture alert.
+3. **EC** from these probes is the bulk soil EC, which changes with moisture, not the saturated-paste EC that targets such as 2.5-3.5 usually mean. Probes usually report uS/cm; the ingest converts, the firmware must send the unit.
+4. **The stage windows are not the FAO-56 water stages** (1-30, 31-70, 71-110, 111-135) that the water plan uses. Both are on screen, with different names, because they answer different questions.
+5. **Blossom end rot is checked at 45 % by the alert and 50 % by the photo check**, as written in the table.
+6. **The 7-in-1 probe firmware is not written.** Register maps differ between vendors; send the datasheet. `edge/field-node-sim` publishes the exact payload meanwhile (`SIM_PROBE=7in1`).
+
 ## What it cannot say
 
 * Japanese yields (5.4-8.8 kg per plant) are greenhouse yields in a cool climate. An open field in Cambodia will give
