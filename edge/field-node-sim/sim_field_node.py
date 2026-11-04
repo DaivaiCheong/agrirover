@@ -31,13 +31,27 @@ def telemetry_topic(farm: str, zone: str) -> str:
     return f"farm/{farm}/zone/{zone}/telemetry"
 
 
-def build_payload(scenario: str, rng: random.Random, device: str = "ESP-FIELD-01") -> dict:
+def probe_codes(zone: str) -> tuple[str, str]:
+    """(shallow, deep) probe codes for a zone: zone-a -> S-A-10, S-A-25."""
+    letter = zone.rsplit("-", 1)[-1].upper()
+    return f"S-{letter}-10", f"S-{letter}-25"
+
+
+def build_payload(scenario: str, rng: random.Random, device: str = "ESP-FIELD-01",
+                  zone: str = "zone-a") -> dict:
     if scenario not in SCENARIOS:
         raise ValueError(f"unknown scenario {scenario!r}; choose from {sorted(SCENARIOS)}")
     (lo, hi), rain = SCENARIOS[scenario]
+    shallow_code, deep_code = probe_codes(zone)
+    deep = rng.uniform(lo, hi)
+    # the surface moves faster than the root zone, so the shallow probe differs from the deep one
+    shallow = min(100.0, max(0.0, deep + rng.uniform(-8, 8)))
 
-    def m(metric: str, value: float, unit: str, quality: str = "valid") -> dict:
-        return {"metric": metric, "value": value, "unit": unit, "quality": quality}
+    def m(metric: str, value: float, unit: str, quality: str = "valid", sensor: str | None = None) -> dict:
+        item = {"metric": metric, "value": value, "unit": unit, "quality": quality}
+        if sensor:
+            item["sensor"] = sensor
+        return item
 
     return {
         "device": device,
@@ -45,7 +59,8 @@ def build_payload(scenario: str, rng: random.Random, device: str = "ESP-FIELD-01
         "sampleCount": 16,
         "rssi": rng.randint(-72, -55),
         "measurements": [
-            m("soil_moisture", round(rng.uniform(lo, hi), 1), "pct"),
+            m("soil_moisture", round(shallow, 1), "pct", sensor=shallow_code),
+            m("soil_moisture", round(deep, 1), "pct", sensor=deep_code),
             m("water_ph", round(rng.uniform(6.2, 7.0), 2), "pH", "uncalibrated"),
             m("rain", rain, "bool"),
             m("supply_voltage", round(rng.uniform(4.9, 5.1), 2), "V"),
@@ -63,11 +78,11 @@ async def run(args: argparse.Namespace) -> None:
     ) as client:
         n = 0
         while True:
-            payload = build_payload(args.scenario, rng)
+            payload = build_payload(args.scenario, rng, zone=args.zone)
             await client.publish(topic, json.dumps(payload), qos=1)
             n += 1
-            print(f"published {topic} {args.scenario} "
-                  f"moisture={payload['measurements'][0]['value']}", flush=True)
+            deep = payload["measurements"][1]["value"]
+            print(f"published {topic} {args.scenario} deep-probe moisture={deep}", flush=True)
             if args.once or (args.count and n >= args.count):
                 return
             await asyncio.sleep(args.interval)

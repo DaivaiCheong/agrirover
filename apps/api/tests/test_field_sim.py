@@ -1,5 +1,6 @@
-"""The simulated field node must speak exactly what the firmware speaks, and
-the API's ingest must accept it (contract: esp8266_field_node.ino publishTelemetry)."""
+"""The simulated field node must speak exactly what the firmware speaks (plus the
+optional probe code), and the API's ingest must accept it
+(contract: esp8266_field_node.ino publishTelemetry)."""
 import random
 import sys
 from pathlib import Path
@@ -13,7 +14,13 @@ from app.workers.mqtt_ingest import readings  # noqa: E402
 
 
 def metrics(payload):
-    return {m["metric"]: m for m in payload["measurements"]}
+    """Non-soil metrics are unique per payload."""
+    return {m["metric"]: m for m in payload["measurements"] if m["metric"] != "soil_moisture"}
+
+
+def soil(payload):
+    """{probe code: moisture %}"""
+    return {m["sensor"]: m["value"] for m in payload["measurements"] if m["metric"] == "soil_moisture"}
 
 
 def test_topic_matches_firmware_layout():
@@ -25,19 +32,22 @@ def test_payload_is_accepted_by_the_api_ingest(scenario):
     p = sim.build_payload(scenario, random.Random(1))
     assert {"device", "fw", "sampleCount", "rssi", "measurements"} <= p.keys()
     good = readings(p)
-    assert len(good) == 4 == len(p["measurements"])          # nothing dropped
-    assert set(metrics(p)) == {"soil_moisture", "water_ph", "rain", "supply_voltage"}
+    assert len(good) == 5 == len(p["measurements"])          # nothing dropped
+    assert set(metrics(p)) == {"water_ph", "rain", "supply_voltage"}
+    assert set(soil(p)) == {"S-A-10", "S-A-25"}              # two depths
 
 
-def test_scenarios_drive_the_values_the_rule_engine_cares_about():
+def test_probe_codes_follow_the_zone_letter():
+    assert set(soil(sim.build_payload("dry", random.Random(1), zone="zone-b"))) == {"S-B-10", "S-B-25"}
+
+
+def test_scenarios_drive_the_deciding_probe_and_the_rain_flag():
     rng = random.Random(7)
-    dry = metrics(sim.build_payload("dry", rng))
-    wet = metrics(sim.build_payload("wet", rng))
-    rain = metrics(sim.build_payload("rain", rng))
-    assert dry["soil_moisture"]["value"] < 30 <= wet["soil_moisture"]["value"]   # default threshold 30
-    assert dry["rain"]["value"] == 0 and wet["rain"]["value"] == 0
-    assert rain["rain"]["value"] == 1
-    assert all(0 <= m["soil_moisture"]["value"] <= 100 for m in (dry, wet, rain))
+    dry, wet, rain = (sim.build_payload(s, rng) for s in ("dry", "wet", "rain"))
+    assert soil(dry)["S-A-25"] < 30 <= soil(wet)["S-A-25"]   # default threshold 30
+    assert metrics(dry)["rain"]["value"] == 0 and metrics(wet)["rain"]["value"] == 0
+    assert metrics(rain)["rain"]["value"] == 1
+    assert all(0 <= v <= 100 for p in (dry, wet, rain) for v in soil(p).values())
 
 
 def test_unknown_scenario_is_refused():

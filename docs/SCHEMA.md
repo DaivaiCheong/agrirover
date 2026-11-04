@@ -1,6 +1,17 @@
 # AgriRover: what the system must remember (schema design)
 
-Draft for review. Nothing here is built yet. Example crop: **tomato**. Example numbers are illustrations, not agronomy advice.
+Built as migration `0002` (20 tables). Example crop: **tomato**. Example numbers are illustrations, not agronomy advice.
+
+## Status: what uses each new table today
+
+| Table | Used by code now? |
+|---|---|
+| `planting`, `sensor`, `daily_decision`, `zone.label`, `zone.trial_arm`, `sensor_reading.sensor_id` | Yes: seed, ingest, decisions, daily message |
+| `contact` | No. The Telegram chat id is still read from `.env`. Next to wire. |
+| `disease_class` | No. Filled from the model's labels file when the model arrives. |
+| `survey_finding` | No. Filled when rover results are stored (step S7). |
+| `field_observation` | No. Needs a small entry form. |
+| `daily_decision.done_at` / `done_seconds` | No. Needs a way for the farmer to say "I watered". |
 
 ## The idea in one line
 Every morning, for each zone: read the soil, decide (water / skip), ask the farmer, record what they did. A phone photo can check a leaf. All of it is kept, so we can show the system works.

@@ -26,6 +26,7 @@ export type ZoneDecision = {
 
 export type ZoneNow = {
   zone: string;
+  label: string | null;
   moisturePct: number | null;
   rain: boolean | null;
   supplyVoltage: number | null;

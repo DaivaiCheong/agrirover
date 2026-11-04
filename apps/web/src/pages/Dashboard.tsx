@@ -36,7 +36,7 @@ export default function Dashboard() {
 
         <div className="grid g3">
           {(zones.data ?? []).map((z) => (
-            <Metric key={z.zone} label={`SOIL MOISTURE · ${z.zone.toUpperCase()}`}
+            <Metric key={z.zone} label={`SOIL MOISTURE · ${(z.label ?? z.zone).toUpperCase()}`}
                     value={z.moisturePct === null ? "—" : z.moisturePct.toFixed(1)} unit="%"
                     note={z.recordedAt === null
                       ? "NO READING YET"
@@ -74,7 +74,7 @@ export default function Dashboard() {
               <div key={z.zone} style={{
                 padding: "9px 0", borderBottom: i === all.length - 1 ? "none" : "1px solid var(--line)",
               }}>
-                <div className="lbl lbl-ink">{z.zone.toUpperCase()}</div>
+                <div className="lbl lbl-ink">{(z.label ?? z.zone).toUpperCase()}</div>
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 6 }}>
                   <Led kind={z.rain === null ? "idle" : z.rain ? "alert" : "ok"}>
                     {z.rain === null ? "rain —" : z.rain ? "raining" : "dry"}

@@ -34,3 +34,31 @@ def require(db: str) -> str:
     except (OSError, asyncpg.PostgresError, asyncio.TimeoutError) as exc:
         pytest.skip(f"no Postgres reachable ({exc.__class__.__name__})")
     return async_url(db)
+
+
+def with_db(db_name: str):
+    """Decorator: run an async test body `fn(Session)` against a fresh, empty database
+    that already has every table (created from the models)."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.core.db import Base
+
+    def wrap(fn):
+        def test():
+            url = require(db_name)
+
+            async def go():
+                engine = create_async_engine(url)
+                async with engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.create_all)
+                try:
+                    await fn(async_sessionmaker(engine, expire_on_commit=False))
+                finally:
+                    await engine.dispose()
+
+            asyncio.run(go())
+
+        test.__name__ = fn.__name__
+        return test
+
+    return wrap

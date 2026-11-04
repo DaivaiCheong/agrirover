@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.entities import (ActionProposal, AuditLog, Device, DeviceKind, Farm,
                                  ProposalStatus, Zone)
-from app.services.decisions import ZoneDecision, decisions_for_farm
+from app.services.decisions import ZoneDecision, record_decisions
 from app.services.rule_engine import Decision, utcnow
 from app.services.telegram import Buttons
 
@@ -41,7 +41,8 @@ def compose(decisions: list[ZoneDecision], proposal_ids: dict[str, str],
     for d in decisions:
         if d.zone in proposal_ids:
             pid = proposal_ids[d.zone]
-            buttons.append([(f"Approve {d.zone}", f"approve:{pid}"), (f"Skip {d.zone}", f"skip:{pid}")])
+            who = d.label or d.zone
+            buttons.append([(f"Approve {who}", f"approve:{pid}"), (f"Skip {who}", f"skip:{pid}")])
     lines.append("")
     lines.append("Approve logs your OK; the valve is not opened automatically." if buttons
                  else "Nothing to water today.")
@@ -73,26 +74,27 @@ def next_run_at(now: datetime, hhmm: str, farm_tz: str) -> datetime:
 
 async def send_daily_message(session: AsyncSession, tg, *, farm_name: str, chat_id,
                              now: datetime | None = None) -> list[str]:
-    """Take today's decisions, create a pending proposal per zone to be watered,
-    send one message. Returns the new proposal ids. If sending fails nothing is
-    committed, so no proposal exists that the farmer was never shown."""
-    decisions = await decisions_for_farm(session, farm_name, now)
-    farm = (await session.execute(select(Farm).where(Farm.name == farm_name))).scalar_one_or_none()
-    if farm is None:
+    """Record today's decision for every zone, then message the farmer about the guided beds.
+    A zone to be watered gets a pending proposal (Approve / Skip). Beds in the usual arm of the
+    trial are recorded but never messaged. Returns the new proposal ids. If sending fails no
+    proposal is committed, so none exists that the farmer was never shown; the recorded
+    decisions stay. Asking again the same day sends nothing."""
+    pairs = await record_decisions(session, farm_name, now)
+    guided = [(d, row) for d, row in pairs if d.arm != "usual"]
+    if not guided or all(row.message_sent_at is not None for _, row in guided):
         return []
-    tz = ZoneInfo(farm.timezone)
-    zones = {z.name: z for z in (await session.execute(
-        select(Zone).where(Zone.farm_id == farm.id))).scalars()}
+    farm = (await session.execute(select(Farm).where(Farm.name == farm_name))).scalar_one()
     device = (await session.execute(select(Device).where(
         Device.farm_id == farm.id, Device.kind == DeviceKind.field_node))).scalars().first()
+    tz = ZoneInfo(farm.timezone)
 
     proposal_ids: dict[str, str] = {}
-    for d in decisions:
+    for d, row in guided:
         if d.decision is not Decision.IRRIGATE:
             continue
         expires = datetime.combine(d.decision_at.astimezone(tz).date(), time(EXPIRY_HOUR_LOCAL), tzinfo=tz)
         p = ActionProposal(
-            zone_id=zones[d.zone].id, device_id=device.id if device else None,
+            zone_id=d.zone_id, device_id=device.id if device else None,
             action="set_relay", channel=1, target_state="ON", duration_ms=d.duration_ms,
             rationale=d.text,
             evidence=f"soil_moisture={d.moisture_pct}% (newest reading) for decision at {d.decision_at.isoformat()}",
@@ -101,10 +103,14 @@ async def send_daily_message(session: AsyncSession, tg, *, farm_name: str, chat_
             model_version=MODEL_VERSION, expires_at=expires)
         session.add(p)
         await session.flush()                       # assigns the id used in the buttons
+        row.proposal_id = p.id
         proposal_ids[d.zone] = str(p.id)
 
-    text, buttons = compose(decisions, proposal_ids, farm.timezone)
+    text, buttons = compose([d for d, _ in guided], proposal_ids, farm.timezone)
     await tg.send_message(chat_id, text, buttons)   # raises -> nothing committed
+    sent_at = datetime.now(timezone.utc)
+    for _, row in guided:
+        row.message_sent_at = sent_at
     await session.commit()
     return list(proposal_ids.values())
 
@@ -156,10 +162,10 @@ async def handle_update(session: AsyncSession, tg, update: dict, *, allowed_chat
     if verb == "approve":
         proposal.status = ProposalStatus.approved
         proposal.approved_by = farm.owner_id          # the farm's responsible person; the chat is the proof
-        outcome, note = "approved", f"Approved by {who}: {zone.name}, {round((proposal.duration_ms or 0) / 1000)} s"
+        outcome, note = "approved", f"Approved by {who}: {zone.label or zone.name}, {round((proposal.duration_ms or 0) / 1000)} s"
     else:
         proposal.status = ProposalStatus.rejected
-        outcome, note = "rejected", f"Skipped by {who}: {zone.name}"
+        outcome, note = "rejected", f"Skipped by {who}: {zone.label or zone.name}"
     proposal.decided_at = now
     session.add(AuditLog(user_id=farm.owner_id, action=f"proposal.{outcome}.tg:{user.get('id', '?')}",
                          entity_type="action_proposal", entity_id=proposal.id))

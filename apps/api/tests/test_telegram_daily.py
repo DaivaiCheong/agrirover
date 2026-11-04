@@ -5,17 +5,15 @@ client against httpx.MockTransport. Database tests use a throwaway Postgres and
 skip when none is reachable. No test (and no code path) opens a valve."""
 import asyncio
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import httpx
 import pgdb
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import Settings
-from app.core.db import Base
 from app.models.entities import ActionProposal, AuditLog, ProposalStatus
 from app.services import daily_message as dm
 from app.services.decisions import ZoneDecision
@@ -28,6 +26,7 @@ from app.workers.telegram_worker import telegram_enabled
 LOCAL = ZoneInfo("Asia/Phnom_Penh")
 AT_6 = datetime(2026, 11, 4, 6, 0, tzinfo=LOCAL).astimezone(timezone.utc)
 CHAT = "1001"
+PLANTED = date(2026, 10, 14)                      # day 21 on 4 Nov
 
 
 class FakeTelegram:
@@ -58,7 +57,7 @@ def test_message_lists_every_zone_and_buttons_only_for_runs():
     decisions = [run_d(), run_d("zone-b", Decision.HOLD_IN_RANGE, 0, "within_range", 35.0)]
     text, buttons = dm.compose(decisions, {"zone-a": "pid-1"})
     assert "04 Nov" in text
-    assert "zone-a: water 40 s" in text and "zone-b: skip (within_range)" in text
+    assert "zone-a: water 40 s" in text and "zone-b: skip, soil is wet enough" in text
     assert buttons == [[("Approve zone-a", "approve:pid-1"), ("Skip zone-a", "skip:pid-1")]]
     assert "not opened automatically" in text         # honest about what Approve does
 
@@ -147,27 +146,16 @@ def _dry(moisture=20.0):
 
 
 def scenario(db_name):
-    """Decorator: run an async test body against a seeded throwaway database."""
+    """Decorator: seeded tomato farm plus one dry reading for bed A, then the test body."""
     def wrap(fn):
-        def test():
-            url = pgdb.require(db_name)
-
-            async def go():
-                engine = create_async_engine(url)
-                async with engine.begin() as c:
-                    await c.run_sync(Base.metadata.create_all)
-                Session = async_sessionmaker(engine, expire_on_commit=False)
-                try:
-                    async with Session() as s:
-                        await seed_stage1(s)
-                    async with Session() as s:
-                        await store_telemetry(s, "farm/farm-01/zone/zone-a/telemetry", _dry(), now=AT_6)
-                    await fn(Session)
-                finally:
-                    await engine.dispose()
-            asyncio.run(go())
-        test.__name__ = fn.__name__
-        return test
+        async def body(Session):
+            async with Session() as s:
+                await seed_stage1(s, planted_on=PLANTED)
+            async with Session() as s:
+                await store_telemetry(s, "farm/farm-01/zone/zone-a/telemetry", _dry(), now=AT_6)
+            await fn(Session)
+        body.__name__ = fn.__name__
+        return pgdb.with_db(db_name)(body)
     return wrap
 
 
@@ -182,7 +170,8 @@ async def test_daily_message_creates_a_pending_proposal_and_sends_buttons(Sessio
     ids = await _send(Session, tg)
     assert len(ids) == 1                                   # only zone-a needs water
     chat, text, buttons = tg.sent[0]
-    assert chat == CHAT and "zone-a: water 40 s" in text and "zone-b: skip (no_reading)" in text
+    assert chat == CHAT and "Tomato bed A (day 21): water 40 s" in text
+    assert "Tomato bed B" not in text                      # the usual bed is never messaged
     assert buttons[0][0][1] == f"approve:{ids[0]}"
     async with Session() as s:
         p = (await s.execute(select(ActionProposal))).scalar_one()

@@ -82,6 +82,17 @@ def test_no_drift_between_models_and_migration(pg):
     assert asyncio.run(run()) == []
 
 
+def test_downgrade_one_step_restores_the_0001_tables_and_goes_forward_again(pg):
+    command.upgrade(_cfg(), "head")
+    command.downgrade(_cfg(), "0001")
+    have = set(_inspect(TABLES)) - {"alembic_version"}
+    assert {"alert", "growth_record"} <= have
+    assert not ({"daily_decision", "planting", "sensor", "contact"} & have)
+    assert "trial_arm" not in _inspect(ENUMS)
+    command.upgrade(_cfg(), "head")
+    assert set(_inspect(TABLES)) - {"alembic_version"} == set(Base.metadata.tables)
+
+
 def test_downgrade_removes_tables_and_enum_types(pg):
     command.upgrade(_cfg(), "head")
     command.downgrade(_cfg(), "base")

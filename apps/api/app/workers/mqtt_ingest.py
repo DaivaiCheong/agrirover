@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import SessionLocal
-from app.models.entities import Device, Farm, Metric, Quality, SensorReading, Zone
+from app.models.entities import Device, Farm, Metric, Quality, Sensor, SensorReading, Zone
 
 log = logging.getLogger("ingest")      # not "mqtt": aiomqtt owns that logger and pins it to WARNING
 
@@ -91,15 +91,29 @@ async def store_telemetry(session: AsyncSession, topic: str, payload: object,
         return 0
 
     at = now or datetime.now(timezone.utc)
+    probes = {p.code: p for p in (await session.execute(
+        select(Sensor).where(Sensor.zone_id == zone.id, Sensor.device_id == device.id))).scalars()}
+    deciding = next((p for p in probes.values() if p.used_for_decision), None)
+
     rows = []
     for m in readings(payload):
         try:
             metric = Metric(m["metric"])
         except ValueError:
             continue
+        sensor = None
+        if metric is Metric.soil_moisture:
+            if m.get("sensor") is not None:                # the node named the probe
+                sensor = probes.get(str(m["sensor"]))
+                if sensor is None:
+                    log.warning("reading from unknown probe %r dropped", m["sensor"])
+                    continue
+            else:                                          # older firmware: one probe, the deciding one
+                sensor = deciding
         quality = m.get("quality", "valid")
         rows.append(SensorReading(
-            device_id=device.id, zone_id=zone.id, metric=metric, value=float(m["value"]),
+            device_id=device.id, zone_id=zone.id, sensor_id=sensor.id if sensor else None,
+            metric=metric, value=float(m["value"]),
             unit=str(m.get("unit", "")), quality=_quality(quality),
             sample_count=payload.get("sampleCount"), recorded_at=at))
     session.add_all(rows)

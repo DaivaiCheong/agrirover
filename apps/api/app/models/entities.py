@@ -1,9 +1,9 @@
 """
 Domain model for AI Auto Farm.
 
-Twelve relations. The rover-related relations (survey_mission, crop_image,
-vision_analysis) are created now even though the rover is not commissioned, so
-that commissioning is a hardware task and never a schema migration.
+See docs/SCHEMA.md for what each relation is for. The rover-related relations
+(survey_mission, survey_finding, crop_image) exist before the rover is
+commissioned, so that commissioning is a hardware task and never a schema migration.
 """
 from __future__ import annotations
 
@@ -23,6 +23,11 @@ from app.core.db import Base
 
 def _pk() -> Mapped[uuid.UUID]:
     return mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+
+class TrialArm(str, enum.Enum):
+    guided = "guided"      # the farmer gets the daily message
+    usual = "usual"        # watered the usual way; we only record what we WOULD have said
 
 
 class Role(str, enum.Enum):
@@ -95,7 +100,9 @@ class Zone(Base):
     id: Mapped[uuid.UUID] = _pk()
     farm_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("farm.id", ondelete="CASCADE"), nullable=False)
     crop_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crop_profile.id", ondelete="SET NULL"))
-    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)          # short id, used in MQTT topics
+    label: Mapped[str | None] = mapped_column(String(80))                  # what the farmer reads: "Tomato bed A"
+    trial_arm: Mapped[TrialArm | None] = mapped_column(Enum(TrialArm, name="trial_arm"))
     area_m2: Mapped[float | None] = mapped_column(Numeric(8, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     farm: Mapped[Farm] = relationship(back_populates="zones")
@@ -117,11 +124,49 @@ class Device(Base):
     commissioned: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
+class Contact(Base):
+    """How to reach a person. One farmer today; the table lets more farmers be served later."""
+    __tablename__ = "contact"
+    __table_args__ = (UniqueConstraint("channel", "address", name="uq_contact_channel_address"),)
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    channel: Mapped[str] = mapped_column(String(16), default="telegram", nullable=False)
+    address: Mapped[str] = mapped_column(String(128), nullable=False)          # Telegram chat id
+    language: Mapped[str] = mapped_column(String(2), default="en", nullable=False)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class Planting(Base):
+    """What is growing in a zone, and since when. Day 21 of tomato comes from planted_on."""
+    __tablename__ = "planting"
+    id: Mapped[uuid.UUID] = _pk()
+    zone_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"), nullable=False)
+    crop_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crop_profile.id", ondelete="RESTRICT"), nullable=False)
+    variety: Mapped[str | None] = mapped_column(String(80))
+    planted_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ended_on: Mapped[date | None] = mapped_column(Date)
+
+
+class Sensor(Base):
+    """One probe on a field node. Two depths per zone: a reading says which probe it came from."""
+    __tablename__ = "sensor"
+    id: Mapped[uuid.UUID] = _pk()
+    device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), nullable=False)
+    zone_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"), nullable=False)
+    code: Mapped[str] = mapped_column(String(48), unique=True, nullable=False)  # S-A-25
+    kind: Mapped[str] = mapped_column(String(24), default="soil_moisture", nullable=False)
+    depth_cm: Mapped[int | None] = mapped_column(SmallInteger)
+    calibration_dry: Mapped[float | None] = mapped_column(Numeric(8, 3))        # raw value in dry soil
+    calibration_wet: Mapped[float | None] = mapped_column(Numeric(8, 3))        # raw value in wet soil
+    used_for_decision: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
 class SensorReading(Base):
     __tablename__ = "sensor_reading"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), nullable=False)
     zone_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"))
+    sensor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sensor.id", ondelete="SET NULL"))
     metric: Mapped[Metric] = mapped_column(Enum(Metric, name="metric_type"), nullable=False)
     value: Mapped[float] = mapped_column(Numeric(10, 3), nullable=False)
     unit: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -175,19 +220,6 @@ class IrrigationEvent(Base):
     status: Mapped[str] = mapped_column(String(16), default="running", nullable=False)
 
 
-class Alert(Base):
-    __tablename__ = "alert"
-    id: Mapped[uuid.UUID] = _pk()
-    farm_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("farm.id", ondelete="CASCADE"), nullable=False)
-    zone_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"))
-    alert_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    severity: Mapped[str] = mapped_column(String(16), default="warning", nullable=False)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
 class AuditLog(Base):
     __tablename__ = "audit_log"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -238,16 +270,6 @@ class DiseaseDetection(Base):
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class GrowthRecord(Base):
-    __tablename__ = "growth_record"
-    __table_args__ = (UniqueConstraint("zone_id", "recorded_on", name="uq_growth_zone_day"),)
-    id: Mapped[uuid.UUID] = _pk()
-    zone_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"), nullable=False)
-    recorded_on: Mapped[date] = mapped_column(Date, nullable=False)
-    canopy_coverage_pct: Mapped[float | None] = mapped_column(Numeric(5, 2))
-    plant_count: Mapped[int | None] = mapped_column(SmallInteger)
-
-
 # --------------------------------------------------------------------------
 # AI assistant — human-in-the-loop actuation.
 #
@@ -294,3 +316,67 @@ class ActionProposal(Base):
         ForeignKey("irrigation_event.id", ondelete="SET NULL"))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DailyDecision(Base):
+    """What the rule engine said for one zone on one day, and why. One row per zone per
+    day, whatever the outcome, so why-did-it-say-that can always be answered."""
+    __tablename__ = "daily_decision"
+    __table_args__ = (
+        UniqueConstraint("zone_id", "decision_date", name="uq_decision_zone_day"),
+        CheckConstraint("done_seconds IS NULL OR done_seconds >= 0", name="ck_done_seconds"),
+    )
+    id: Mapped[uuid.UUID] = _pk()
+    zone_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"), nullable=False)
+    decision_date: Mapped[date] = mapped_column(Date, nullable=False)           # farm-local day
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    decision: Mapped[str] = mapped_column(String(24), nullable=False)           # rule engine outcome
+    reason: Mapped[str] = mapped_column(String(48), nullable=False)
+    duration_s: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    inputs: Mapped[str] = mapped_column(Text, nullable=False)                   # JSON: what it looked at
+    message_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    proposal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("action_proposal.id", ondelete="SET NULL"))
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # farmer reports having watered
+    done_seconds: Mapped[int | None] = mapped_column(Integer)
+
+
+class DiseaseClass(Base):
+    """Diseases the model can name. Rows come from the model's labels file; the advice text
+    must come from an agronomist."""
+    __tablename__ = "disease_class"
+    __table_args__ = (UniqueConstraint("crop_id", "code", name="uq_disease_crop_code"),)
+    id: Mapped[uuid.UUID] = _pk()
+    crop_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crop_profile.id", ondelete="CASCADE"), nullable=False)
+    code: Mapped[str] = mapped_column(String(48), nullable=False)
+    name_en: Mapped[str] = mapped_column(String(80), nullable=False)
+    name_km: Mapped[str | None] = mapped_column(String(80))
+    advice: Mapped[str | None] = mapped_column(Text)
+
+
+class SurveyFinding(Base):
+    """One rover cell. Before this, the rover report was logged and then lost."""
+    __tablename__ = "survey_finding"
+    __table_args__ = (UniqueConstraint("mission_id", "cell_row", "cell_col", name="uq_finding_cell"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    mission_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("survey_mission.id", ondelete="CASCADE"), nullable=False)
+    cell_row: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    cell_col: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    plant_present: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    needs_water: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    yellowing: Mapped[float | None] = mapped_column(Numeric(4, 3))
+    disease_code: Mapped[str | None] = mapped_column(String(48))
+    confidence: Mapped[float | None] = mapped_column(Numeric(4, 3))
+    image_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crop_image.id", ondelete="SET NULL"))
+
+
+class FieldObservation(Base):
+    """A number a person writes down: minutes spent checking, plants lost, waterlogging, a note.
+    The evidence for the guided-versus-usual comparison."""
+    __tablename__ = "field_observation"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    zone_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"), nullable=False)
+    observed_on: Mapped[date] = mapped_column(Date, nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)               # labour_minutes | loss_count | waterlogging | note
+    value: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    note: Mapped[str | None] = mapped_column(Text)
+    recorded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))

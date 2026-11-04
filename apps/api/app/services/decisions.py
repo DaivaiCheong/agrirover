@@ -1,26 +1,41 @@
 """Per-zone decisions for the day.
 
 Glue between stored data and the rule engine. The engine stays the only thing
-that decides; this module only gathers its inputs and words its output.
+that decides; this module only gathers its inputs, words its output, and keeps a
+record of what it said.
 
 The decision is taken at the farm's 06:00 (local), so the daily message is
-about the coming day. Moisture is the newest reading for the zone.
+about the coming day. Moisture comes from the zone's deciding probe (the deeper
+one); other depths are recorded but never trigger watering.
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
-from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from dataclasses import dataclass, field
+from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.entities import Farm, IrrigationEvent, IrrigationRule, SensorReading, Zone
+from app.models.entities import (CropProfile, DailyDecision, Farm, IrrigationEvent, IrrigationRule,
+                                 Planting, Sensor, SensorReading, Zone)
 from app.services.rule_engine import Decision, RuleConfig, RuleInput, evaluate
 
 DECISION_HOUR_LOCAL = 6
+
+# What a farmer reads instead of an engine code.
+REASON_TEXT = {
+    "within_range": "soil is wet enough",
+    "rain_lockout": "it is raining",
+    "outside_daylight_window": "too dark to run the pump",
+    "cooldown_active": "watered recently",
+    "rain_forecast": "rain is forecast",
+    "no_reading": "no sensor reading",
+    "rule_disabled": "rule is switched off",
+}
 
 
 @dataclass(frozen=True)
@@ -31,13 +46,24 @@ class ZoneDecision:
     reason: str
     moisture_pct: float | None
     decision_at: datetime
+    label: str | None = None          # "Tomato bed A"
+    planting_day: int | None = None   # day 21 of the crop
+    arm: str | None = None            # trial arm: guided | usual | None
+    zone_id: object = None
+    day: date | None = None           # farm-local date of the decision
+    inputs: dict = field(default_factory=dict)
+
+    @property
+    def name(self) -> str:
+        base = self.label or self.zone
+        return f"{base} (day {self.planting_day})" if self.planting_day is not None else base
 
     @property
     def text(self) -> str:
-        """The line the farmer reads: 'zone-b: water 40 s' or 'zone-c: skip (reason)'."""
+        """The line the farmer reads: 'Tomato bed A (day 21): water 40 s' or '...: skip, it is raining'."""
         if self.decision is Decision.IRRIGATE:
-            return f"{self.zone}: water {round(self.duration_ms / 1000)} s"
-        return f"{self.zone}: skip ({self.reason})"
+            return f"{self.name}: water {round(self.duration_ms / 1000)} s"
+        return f"{self.name}: skip, {REASON_TEXT.get(self.reason, self.reason.replace('_', ' '))}"
 
 
 def decision_instant(farm_tz: str, now: datetime) -> datetime:
@@ -74,25 +100,41 @@ def latest_signal(rows: Iterable[tuple[str, float, datetime]]) -> tuple[float | 
 
 
 def decide(zone: str, cfg: RuleConfig, *, moisture: float | None, rain: bool,
-           now: datetime, last_event_ended_at: datetime | None) -> ZoneDecision:
+           now: datetime, last_event_ended_at: datetime | None, **extra) -> ZoneDecision:
     out = evaluate(cfg, RuleInput(moisture_pct=moisture, rain_detected=rain, now=now,
                                   last_event_ended_at=last_event_ended_at))
     return ZoneDecision(zone=zone, decision=out.decision, duration_ms=out.duration_ms,
-                        reason=out.reason, moisture_pct=moisture, decision_at=now)
+                        reason=out.reason, moisture_pct=moisture, decision_at=now, **extra)
 
 
-async def newest_readings(session: AsyncSession, zone_ids: list) -> dict:
-    """{zone_id: [(metric, value, recorded_at), ...]} with the newest reading per metric."""
+async def deciding_sensors(session: AsyncSession, zone_ids: list) -> dict:
+    """{zone_id: (sensor_id, code)} for each zone's deciding probe."""
     if not zone_ids:
         return {}
     rows = (await session.execute(
-        select(SensorReading.zone_id, SensorReading.metric, SensorReading.value, SensorReading.recorded_at)
+        select(Sensor.zone_id, Sensor.id, Sensor.code)
+        .where(Sensor.zone_id.in_(zone_ids), Sensor.used_for_decision.is_(True)))).all()
+    return {zone_id: (sid, code) for zone_id, sid, code in rows}
+
+
+async def newest_readings(session: AsyncSession, zone_ids: list) -> dict:
+    """{zone_id: [(metric, value, recorded_at), ...]}: the newest reading per probe and metric.
+    Soil moisture is taken only from the zone's deciding probe, when it has one."""
+    if not zone_ids:
+        return {}
+    deciding = await deciding_sensors(session, zone_ids)
+    rows = (await session.execute(
+        select(SensorReading.zone_id, SensorReading.sensor_id, SensorReading.metric,
+               SensorReading.value, SensorReading.recorded_at)
         .where(SensorReading.zone_id.in_(zone_ids))
-        .distinct(SensorReading.zone_id, SensorReading.metric)          # Postgres DISTINCT ON
-        .order_by(SensorReading.zone_id, SensorReading.metric, SensorReading.recorded_at.desc())
+        .distinct(SensorReading.zone_id, SensorReading.sensor_id, SensorReading.metric)   # Postgres DISTINCT ON
+        .order_by(SensorReading.zone_id, SensorReading.sensor_id, SensorReading.metric,
+                  SensorReading.recorded_at.desc())
     )).all()
     out: dict = {}
-    for zone_id, metric, value, at in rows:
+    for zone_id, sensor_id, metric, value, at in rows:
+        if metric.value == "soil_moisture" and zone_id in deciding and sensor_id != deciding[zone_id][0]:
+            continue
         out.setdefault(zone_id, []).append((metric.value, float(value), at))
     return out
 
@@ -104,13 +146,23 @@ async def decisions_for_farm(session: AsyncSession, farm_name: str,
     if farm is None:
         return []
     at = decision_instant(farm.timezone, now)
+    today = at.astimezone(ZoneInfo(farm.timezone)).date()
 
     zones = (await session.execute(
         select(Zone).where(Zone.farm_id == farm.id).options(selectinload(Zone.rule))
         .order_by(Zone.name))).scalars().all()
     zone_ids = [z.id for z in zones]
-
     by_zone = await newest_readings(session, zone_ids)
+    sensors = await deciding_sensors(session, zone_ids)
+
+    plantings: dict = {}
+    if zone_ids:
+        for planting, crop in (await session.execute(
+                select(Planting, CropProfile.common_name)
+                .join(CropProfile, Planting.crop_id == CropProfile.id)
+                .where(Planting.zone_id.in_(zone_ids), Planting.ended_on.is_(None))
+                .order_by(Planting.planted_on))).all():
+            plantings[planting.zone_id] = (planting, crop)        # the newest active planting wins
 
     out: list[ZoneDecision] = []
     for z in zones:
@@ -120,6 +172,34 @@ async def decisions_for_farm(session: AsyncSession, farm_name: str,
             .order_by(IrrigationEvent.ended_at.desc()).limit(1))).scalar_one_or_none()
         cfg = config_from_rule(z.rule, farm.timezone) if z.rule else RuleConfig(farm_tz=farm.timezone)
         moisture, rain = latest_signal(by_zone.get(z.id, []))
-        out.append(decide(z.name, cfg, moisture=moisture, rain=rain, now=at,
-                          last_event_ended_at=last_end))
+        planting, crop = plantings.get(z.id, (None, None))
+        day = (today - planting.planted_on).days if planting else None
+        inputs = {"moisture_pct": moisture, "sensor": sensors[z.id][1] if z.id in sensors else None,
+                  "rain": rain, "threshold_pct": cfg.moisture_threshold_pct,
+                  "planting_day": day, "crop": crop}
+        out.append(decide(z.name, cfg, moisture=moisture, rain=rain, now=at, last_event_ended_at=last_end,
+                          label=z.label, planting_day=day, arm=z.trial_arm.value if z.trial_arm else None,
+                          zone_id=z.id, day=today, inputs=inputs))
+    return out
+
+
+async def record_decisions(session: AsyncSession, farm_name: str,
+                           now: datetime | None = None) -> list[tuple[ZoneDecision, DailyDecision]]:
+    """Decide for every zone and keep one DailyDecision row per zone per day (committed).
+    Running again the same day refreshes the row, unless a proposal was already sent for it:
+    what the farmer saw is not rewritten."""
+    out = []
+    for d in await decisions_for_farm(session, farm_name, now):
+        row = (await session.execute(select(DailyDecision).where(
+            DailyDecision.zone_id == d.zone_id, DailyDecision.decision_date == d.day))).scalar_one_or_none()
+        if row is None:
+            row = DailyDecision(zone_id=d.zone_id, decision_date=d.day, decided_at=d.decision_at,
+                                decision=d.decision.value, reason=d.reason,
+                                duration_s=round(d.duration_ms / 1000), inputs=json.dumps(d.inputs, default=str))
+            session.add(row)
+        elif row.proposal_id is None:
+            row.decided_at, row.decision, row.reason = d.decision_at, d.decision.value, d.reason
+            row.duration_s, row.inputs = round(d.duration_ms / 1000), json.dumps(d.inputs, default=str)
+        out.append((d, row))
+    await session.commit()
     return out

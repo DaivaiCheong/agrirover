@@ -66,3 +66,14 @@ services:
       SIM_SCENARIO: ${SIM_SCENARIO:-dry}
       SIM_INTERVAL: "10"
     depends_on: [ broker ]
+
+  field-sim-b:
+    # Second bed (the usual-watering bed), reporting wet soil.
+    build: ./edge/field-node-sim
+    profiles: [ "sim" ]
+    environment:
+      MQTT_HOST: broker
+      SIM_ZONE: zone-b
+      SIM_SCENARIO: wet
+      SIM_INTERVAL: "10"
+    depends_on: [ broker ]
