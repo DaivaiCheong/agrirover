@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { BRAND } from "../lib/brand";
 import {
   Calculator, Camera, ChartColumn, Cpu, Leaf, Package, Receipt, Scale, Settings, Sprout, Sun, Tractor, Wallet, Wheat,
   Wrench, type LucideIcon,
@@ -47,7 +48,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       <aside className="side">
         <div className="brandmark">
           <div className="brand-tile"><Leaf size={21} aria-hidden /></div>
-          <div className="brand">AI Auto Farm<small>Plan, water, and know your cost</small></div>
+          <div className="brand">{BRAND.name}<small>{BRAND.tagline}</small></div>
         </div>
         <nav className="side-nav" aria-label="Main">
           {items.map(([key, s]) => (

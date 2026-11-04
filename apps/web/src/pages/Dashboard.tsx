@@ -3,7 +3,7 @@ import { ArrowRight, Cloud, CloudRain, Droplets, Gauge, Plus, Sprout, Sun } from
 import { Link } from "react-router-dom";
 import { Empty, Field, Led, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api, type Cycle, type ZoneDecision, type ZoneNow } from "../lib/api";
-import { dayMonthYear, litres, longToday } from "../lib/format";
+import { dayMonthYear, litres, longToday, suggestedArea } from "../lib/format";
 import { useData } from "../lib/useData";
 import { ago, usePoll } from "../lib/usePoll";
 
@@ -18,17 +18,27 @@ function badge(d: ZoneDecision): [string, string] {
 
 const isStale = (z: ZoneNow) => z.recordedAt !== null && Date.now() - new Date(z.recordedAt).getTime() > STALE_AFTER_S * 1000;
 
-function CropCard({ c, onChanged }: { c: Cycle; onChanged: () => void }) {
+function CropCard({ c, areaPerPlant, zone, decision, onChanged }:
+  { c: Cycle; areaPerPlant: number; zone?: ZoneNow; decision?: ZoneDecision; onChanged: () => void }) {
   // a crop with no plant count has no plan: ask for the number right here
   const { data: plan, error, loading } = useData(
     () => (c.plantCount ? api.cyclePlan(c.id) : Promise.resolve(null)), [c.id, c.plantCount, c.areaM2]);
   const [plants, setPlants] = useState("");
+  const [area, setArea] = useState("");
+  const [areaTouched, setAreaTouched] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // the area follows the plant count until the farmer types one of their own
+  function plantsChanged(v: string) {
+    setPlants(v);
+    const n = Number(v);
+    if (!areaTouched && Number.isInteger(n) && n > 0) setArea(String(suggestedArea(n, areaPerPlant)));
+  }
 
   async function savePlants(e: React.FormEvent) {
     e.preventDefault();
     setSaveError(null);
-    try { await api.updateCycle(c.id, { plantCount: Number(plants) }); onChanged(); }
+    try { await api.updateCycle(c.id, { plantCount: Number(plants), areaM2: area ? Number(area) : undefined }); onChanged(); }
     catch (err) { setSaveError((err as Error).message); }
   }
 
@@ -53,6 +63,15 @@ function CropCard({ c, onChanged }: { c: Cycle; onChanged: () => void }) {
         <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={plan.cycleDays} aria-valuenow={Math.max(0, c.day ?? 0)}
              aria-label="How far through the crop">
           <i style={{ width: `${Math.min(100, (Math.max(0, c.day ?? 0) / plan.cycleDays) * 100)}%` }} />
+        </div>
+      )}
+
+      {zone && zone.moisturePct !== null && (
+        <div className="rowflex small" style={{ gap: 8 }}>
+          <Gauge size={16} aria-hidden style={{ color: "var(--brand)" }} />
+          <span>Soil sensor: <b>{zone.moisturePct.toFixed(0)}%</b> moisture
+            <span className="muted"> · {isStale(zone) ? "old reading, " : ""}{ago(zone.recordedAt)}</span></span>
+          {c.trialArm === "guided" && decision && <Tag kind={badge(decision)[0]}>{badge(decision)[1]}</Tag>}
         </div>
       )}
 
@@ -96,7 +115,12 @@ function CropCard({ c, onChanged }: { c: Cycle; onChanged: () => void }) {
         <form className="form" onSubmit={savePlants}>
           <Field label="How many plants are on this bed?" hint="Then we work out today's water and the jobs for this week.">
             <input type="number" inputMode="numeric" min={1} step={1} required value={plants}
-                   onChange={(e) => setPlants(e.target.value)} />
+                   onChange={(e) => plantsChanged(e.target.value)} />
+          </Field>
+          <Field label="How big is the bed (m²)?"
+                 hint={`Water follows the ground each plant gets. We suggest ${areaPerPlant} m² a plant; change it if your bed is different.`}>
+            <input type="number" inputMode="decimal" min={0.1} step="any" value={area}
+                   onChange={(e) => { setArea(e.target.value); setAreaTouched(true); }} />
           </Field>
           <div><button className="btn" disabled={!plants}><Droplets size={18} aria-hidden />Show today's water</button></div>
           {saveError && <Notice kind="alert">{saveError}</Notice>}
@@ -112,6 +136,7 @@ function CropCard({ c, onChanged }: { c: Cycle; onChanged: () => void }) {
 
 export default function Dashboard() {
   const cycles = useData(api.cycles);
+  const crops = useData(api.crops);
   const decisions = usePoll(api.decisionsToday);
   const zones = usePoll(api.zones);
   const error = cycles.error ?? decisions.error ?? zones.error;
@@ -132,7 +157,11 @@ export default function Dashboard() {
           </Empty></Panel>
         )}
 
-        {active.length > 0 && <div className="grid g2">{active.map((c) => <CropCard key={c.id} c={c} onChanged={cycles.reload} />)}</div>}
+        {active.length > 0 && <div className="grid g2">{active.map((c) => (
+          <CropCard key={c.id} c={c} onChanged={cycles.reload} zone={zones.data?.find((z) => z.zone === c.zone)}
+                    decision={decisionOf.get(c.zone)}
+                    areaPerPlant={crops.data?.find((x) => x.slug === c.crop)?.defaultAreaPerPlantM2 ?? 0.5} />
+        ))}</div>}
 
         <Panel title="Soil sensors" icon={Gauge} pad={false}
                right={<span className="small muted">Rule engine · decided at 06:00</span>}>

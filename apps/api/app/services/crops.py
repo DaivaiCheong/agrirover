@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.entities import CropProfile
 from app.services import water_plan as wp
+from app.services.crop_guide import default_area_per_plant_m2
 from app.services.errors import Conflict, Invalid, NotFound
 
 
@@ -34,6 +35,7 @@ def water_data(row: CropProfile) -> wp.CropWater | None:
 def crop_dict(row: CropProfile) -> dict:
     w = water_data(row)
     return {"slug": row.slug, "name": row.common_name, "hasWaterData": w is not None,
+            "defaultAreaPerPlantM2": default_area_per_plant_m2(row.slug),
             "kc": {"ini": w.kc_ini, "mid": w.kc_mid, "end": w.kc_end} if w else None,
             "stageDays": list(w.stage_days) if w else None, "source": row.kc_source}
 

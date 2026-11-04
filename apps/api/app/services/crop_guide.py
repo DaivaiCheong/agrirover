@@ -153,6 +153,26 @@ RAIN_MONTHS = (5, 6, 7, 8, 9, 10)
 CLOUDY_SHARE, RAINY_SHARE = 2 / 3, 1 / 3                   # Hiroshima
 
 
+NO_GUIDE_SPACING_CM = (50, 100)                              # a crop with water data but no guide
+
+
+def default_area_per_plant_m2(slug: str) -> float:
+    """Ground one plant is assumed to get when the farmer gives no area: the guide's spacing, else 50 x 100 cm."""
+    guide = GUIDES.get(slug)
+    row_cm, plant_cm = guide.spacing_cm if guide else NO_GUIDE_SPACING_CM
+    return row_cm * plant_cm / 10_000
+
+
+def stage_of(crop: wp.CropWater, day: int | None) -> tuple[str, str] | None:
+    """(FAO stage name, the farmer's name for it) for a crop day, or None outside the crop's life."""
+    if day is None or not 1 <= day <= sum(crop.stage_days):
+        return None
+    name = wp.stage_for_day(crop, day)
+    guide = GUIDES.get(crop.id)
+    title = next((s.title for s in guide.stages if s.stage == name), None) if guide else None
+    return name, title or name.capitalize()
+
+
 def _r(v: float, n: int = 1) -> float:
     return round(v, n)
 
@@ -239,7 +259,7 @@ def build_plan(*, crop: wp.CropWater, guide: CropGuide | None, plants: int, plan
                area_per_plant_m2: float | None = None) -> dict:
     """The whole plan for `plants` plants of `crop` planted on `planted_on`."""
     if area_per_plant_m2 is None:
-        row_cm, plant_cm = spacing_cm or (guide.spacing_cm if guide else (50, 100))
+        row_cm, plant_cm = spacing_cm or (guide.spacing_cm if guide else NO_GUIDE_SPACING_CM)
         area_per_plant_m2 = row_cm * plant_cm / 10_000
     n = sum(crop.stage_days)
     p = wp.plan(crop, plants, area_per_plant_m2, None, efficiency, et0_series=climate.et0_series(planted_on, n))
@@ -309,9 +329,9 @@ def build_plan(*, crop: wp.CropWater, guide: CropGuide | None, plants: int, plan
                      "unless the soil is very dry.", "basis": "study:kumamoto"},
             {"text": "Cloudy day: about two-thirds of the sunny-day amount. Rainy day: one-third, or none.",
              "basis": "study:hiroshima"},
-            {"text": "Japanese growers keep the soil moist but never wet: 1.8-2.4 on a pF tensiometer, depending on the "
-                     "growth stage and prefecture. This plan is the starting amount; on the day, the soil "
-                     "sensor advice on Today decides.", "basis": "study:aomori"},
+            {"text": "Japanese growers keep the soil moist but never wet: 1.8-2.4 on a pF tensiometer (about 6-25 kPa of "
+                     "suction), depending on the growth stage and prefecture. This plan is the starting amount; on the "
+                     "day, the soil sensor advice on Today decides.", "basis": "study:aomori"},
         ]
         out["feed"] = _feed(guide, plants, area_per_plant_m2)
         first, last = guide.first_pick_day, n

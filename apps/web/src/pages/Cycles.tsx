@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Sprout } from "lucide-react";
-import { Empty, Field, Notice, PageHead, Panel, Tag } from "../components/ui";
+import { Empty, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api, type Cycle } from "../lib/api";
-import { dayLabel, dayMonthYear } from "../lib/format";
+import { dayLabel, dayMonthYear, suggestedArea } from "../lib/format";
 import { useData } from "../lib/useData";
+
+/** Links in a row, with a dot between each. */
+const Dotted = ({ items }: { items: ReactNode[] }) => (
+  <>{items.map((x, i) => <Fragment key={i}>{i > 0 && " · "}{x}</Fragment>)}</>
+);
 
 export default function Cycles() {
   const cycles = useData(api.cycles);
@@ -16,14 +21,24 @@ export default function Cycles() {
   const [editing, setEditing] = useState<string | null>(null);
   const [ePlants, setEPlants] = useState("");
   const [eArea, setEArea] = useState("");
+  const [areaTouched, setAreaTouched] = useState(false);
 
-  const [cName, setCName] = useState("");
-  const [kc, setKc] = useState({ ini: "", mid: "", end: "" });
-  const [stages, setStages] = useState(["", "", "", ""]);
-  const [cMsg, setCMsg] = useState<{ kind: "ok" | "alert"; text: string } | null>(null);
+  const perPlant = (c: Cycle) => (crops.data ?? []).find((x) => x.slug === c.crop)?.defaultAreaPerPlantM2 ?? 0.5;
 
-  async function close(id: string, label: string) {
-    if (!window.confirm(`Close the crop on ${label} today? Costs and harvest stay; you can still read the report.`)) return;
+  function startEdit(c: Cycle) {
+    setEditing(c.id); setAreaTouched(c.areaM2 !== null);
+    setEPlants(c.plantCount?.toString() ?? ""); setEArea(c.areaM2?.toString() ?? "");
+  }
+
+  // typing the plant count suggests the bed area until the farmer types an area of their own
+  function plantsChanged(c: Cycle, v: string) {
+    setEPlants(v);
+    const n = Number(v);
+    if (!areaTouched && Number.isInteger(n) && n > 0) setEArea(String(suggestedArea(n, perPlant(c))));
+  }
+
+  async function end(id: string, label: string) {
+    if (!window.confirm(`End the crop on ${label} today? Its costs and harvest stay, and you can still read its cost report.`)) return;
     try { await api.closeCycle(id); cycles.reload(); } catch (err) { setMsg({ kind: "alert", text: (err as Error).message }); }
   }
 
@@ -35,19 +50,6 @@ export default function Cycles() {
       cycles.reload();
     } catch (err) {
       setMsg({ kind: "alert", text: (err as Error).message });
-    }
-  }
-
-  async function addCrop(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const made = await api.addCrop({ name: cName, kc: { ini: Number(kc.ini), mid: Number(kc.mid), end: Number(kc.end) },
-                                       stageDays: stages.map(Number) });
-      setCMsg({ kind: "ok", text: `${made.name} added. It now shows in Plan a crop.` });
-      setCName(""); setKc({ ini: "", mid: "", end: "" }); setStages(["", "", "", ""]);
-      crops.reload();
-    } catch (err) {
-      setCMsg({ kind: "alert", text: (err as Error).message });
     }
   }
 
@@ -82,20 +84,29 @@ export default function Cycles() {
                       <td>{dayMonthYear(c.plantedOn)}</td>
                       <td>{c.status === "active" ? <Tag kind="ok">{dayLabel(c)}</Tag> : <Tag>Closed {c.endedOn}</Tag>}</td>
                       <td className="r">{editing === c.id
-                        ? <input className="cell-input" type="number" min={1} value={ePlants} onChange={(e) => setEPlants(e.target.value)} aria-label="Plants" />
+                        ? <input className="cell-input" type="number" min={1} value={ePlants} autoFocus
+                                 onChange={(e) => plantsChanged(c, e.target.value)} aria-label="Plants" />
                         : c.plantCount ?? <span className="muted">not set</span>}</td>
                       <td className="r">{editing === c.id
-                        ? <input className="cell-input" type="number" min={0} step="any" value={eArea} onChange={(e) => setEArea(e.target.value)} aria-label="Area" />
+                        ? <input className="cell-input" type="number" min={0} step="any" value={eArea}
+                                 onChange={(e) => { setEArea(e.target.value); setAreaTouched(true); }} aria-label="Area" />
                         : c.areaM2 ?? <span className="muted">not set</span>}</td>
                       <td className="act">
+                        {/* while editing, only Save and Cancel: nothing else can be pressed by mistake */}
                         {editing === c.id ? (
-                          <><button className="linkbtn" onClick={() => saveEdit(c.id)}>Save</button> · <button className="linkbtn" onClick={() => setEditing(null)}>Cancel</button></>
+                          <Dotted items={[
+                            <button className="linkbtn" onClick={() => saveEdit(c.id)}>Save</button>,
+                            <button className="linkbtn" onClick={() => setEditing(null)}>Cancel</button>,
+                          ]} />
                         ) : (
-                          <><button className="linkbtn" onClick={() => { setEditing(c.id); setEPlants(c.plantCount?.toString() ?? ""); setEArea(c.areaM2?.toString() ?? ""); }}>Set plants</button> · </>
+                          <Dotted items={[
+                            <button className="linkbtn" onClick={() => startEdit(c)}>Set plants and area</button>,
+                            ...(c.plantCount ? [<Link to={planLink(c)} className="linkbtn">Water plan</Link>] : []),
+                            <Link to={`/cycles/${c.id}`} className="linkbtn">Cost report</Link>,
+                            ...(c.status === "active"
+                              ? [<button className="linkbtn linkbtn-alert" onClick={() => end(c.id, c.bedLabel)}>End crop</button>] : []),
+                          ]} />
                         )}
-                        {c.plantCount && <><Link to={planLink(c)} className="linkbtn">Water plan</Link> · </>}
-                        <Link to={`/cycles/${c.id}`} className="linkbtn">Cost report</Link>
-                        {c.status === "active" && <> · <button className="linkbtn" onClick={() => close(c.id, c.bedLabel)}>Close</button></>}
                       </td>
                     </tr>
                   ))}
@@ -106,40 +117,13 @@ export default function Cycles() {
         </Panel>
         {rows.some((c) => c.status === "active" && !c.plantCount) && (
           <Notice kind="warn">
-            A crop without a plant count has no water plan, and its report cannot show cost per plant. Press "Set plants".
+            A crop without a plant count has no water plan, and its report cannot show cost per plant. Press "Set plants and
+            area". The area fills in from the plant count; change it if your bed is a different size.
           </Notice>
         )}
-
-        <Panel>
-          <details className="more">
-            <summary><Plus size={17} aria-hidden /> Grow something that is not in the list</summary>
-            <p className="small muted" style={{ margin: "10px 0 12px" }}>
-              Tomato comes with a researched growing guide. Any other crop needs its water numbers (crop factor and stage
-              lengths), which an agronomist or the FAO-56 tables can give you. What you enter is marked "entered by the farmer, not checked".
-            </p>
-            <form className="form" onSubmit={addCrop} style={{ maxWidth: 560 }}>
-              <Field label="Crop name"><input required value={cName} onChange={(e) => setCName(e.target.value)} /></Field>
-              <div className="row3">
-                {(["ini", "mid", "end"] as const).map((k) => (
-                  <Field key={k} label={`Kc ${k}`}>
-                    <input type="number" step="any" min={0.01} max={2} required value={kc[k]}
-                           onChange={(e) => setKc({ ...kc, [k]: e.target.value })} />
-                  </Field>
-                ))}
-              </div>
-              <div className="row2">
-                {["Initial", "Development", "Mid-season", "Late"].map((name, i) => (
-                  <Field key={name} label={`${name} stage (days)`}>
-                    <input type="number" min={1} max={400} required value={stages[i]}
-                           onChange={(e) => setStages(stages.map((s, j) => (j === i ? e.target.value : s)))} />
-                  </Field>
-                ))}
-              </div>
-              <div><button className="btn btn-ghost">Add crop</button></div>
-            </form>
-            {cMsg && <div style={{ marginTop: 12 }}><Notice kind={cMsg.kind}>{cMsg.text}</Notice></div>}
-          </details>
-        </Panel>
+        <p className="small muted">
+          To grow something that is not on the list, choose "A crop that is not in the list" in Plan a crop.
+        </p>
       </main>
     </>
   );

@@ -10,8 +10,13 @@ export const dayMonthYear = (iso: string) =>
 export const longToday = () =>
   new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 
-/** "Day 22", or "Starts 15 Nov" for a crop planned but not planted yet. */
-export const dayLabel = (c: Cycle) => (c.day !== null && c.day > 0 ? `Day ${c.day}` : `Starts ${dayMonth(c.plantedOn)}`);
+/** "Day 22 · Settling in", or "Starts 15 Nov" for a crop planned but not planted yet. */
+export const dayLabel = (c: Cycle) =>
+  c.day !== null && c.day > 0 ? `Day ${c.day}${c.stageTitle ? ` · ${c.stageTitle}` : ""}` : `Starts ${dayMonth(c.plantedOn)}`;
+
+/** The bed area to suggest for a plant count: one decimal, never below 0.1. */
+export const suggestedArea = (plants: number, areaPerPlantM2: number) =>
+  Math.max(0.1, Math.round(plants * areaPerPlantM2 * 10) / 10);
 
 /** Litres, switching to cubic metres when it is a lot of water. */
 export function litres(v: number): string {

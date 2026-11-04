@@ -131,14 +131,14 @@ export type Settings = {
 };
 
 export type Crop = {
-  slug: string; name: string; hasWaterData: boolean; kc: { ini: number; mid: number; end: number } | null;
+  slug: string; name: string; hasWaterData: boolean; defaultAreaPerPlantM2: number; kc: { ini: number; mid: number; end: number } | null;
   stageDays: number[] | null; source: string | null;
 };
 
 export type Cycle = {
   id: string; zone: string; bedLabel: string; trialArm: string | null; crop: string; cropName: string;
   variety: string | null; plantedOn: string; endedOn: string | null; status: "active" | "closed";
-  day: number | null; plantCount: number | null; areaM2: number | null;
+  day: number | null; stage: string | null; stageTitle: string | null; plantCount: number | null; areaM2: number | null;
 };
 
 export type CostEntry = {

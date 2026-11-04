@@ -125,6 +125,24 @@ def test_stage_cards_cover_the_whole_cycle():
     assert len(p["water"]["days"]) == 135 and len(p["water"]["weeks"]) == 20
 
 
+def test_default_area_and_the_stage_name_of_a_day():
+    assert cg.default_area_per_plant_m2("tomato") == 0.35                  # 50 x 70 cm, the Cambodian trial
+    assert cg.default_area_per_plant_m2("chilli-pepper") == 0.5            # no guide: 50 x 100 cm
+    # day 22 is still "Settling in" by the FAO stages (1-30). First flowers come about day 28-42, so the app does
+    # not call day 22 "early flowering".
+    assert cg.stage_of(wp.TOMATO, 22) == ("initial", "Settling in")
+    assert cg.stage_of(wp.TOMATO, 75) == ("mid-season", "Heavy picking")
+    assert cg.stage_of(wp.TOMATO, 0) is None and cg.stage_of(wp.TOMATO, 136) is None and cg.stage_of(wp.TOMATO, None) is None
+    chilli = wp.CropWater("chilli-pepper", "Chilli", 0.6, 1.05, 0.9, (20, 30, 40, 20), "")
+    assert cg.stage_of(chilli, 25) == ("development", "Development")      # no guide: the plain stage name
+
+
+def test_the_pf_target_is_also_given_in_kpa():
+    text = plan()["water"]["howTo"][2]["text"]
+    assert "6-25 kPa" in text
+    assert 10 ** 1.8 * 0.0980665 == pytest.approx(6.2, abs=0.05) and 10 ** 2.4 * 0.0980665 == pytest.approx(24.6, abs=0.05)
+
+
 # ------------------------------------------------------------------ through the API
 
 async def seeded(Session):
@@ -167,3 +185,26 @@ async def test_plan_for_a_running_cycle_uses_its_own_numbers(Session):
         assert b["now"]["litersToday"] == pytest.approx(80 * 0.6 * 3.83 * 0.5 / 0.9, abs=0.1)  # November ET0 3.83
         assert b["plantedOn"] == cycle["plantedOn"]
         assert (await c.get(f"{V1}/cycles/00000000-0000-0000-0000-000000000000/plan")).status_code == 404
+
+
+@pgdb.with_db("aaf_plan_stage")
+async def test_cycles_and_crops_carry_the_stage_and_the_default_area(Session):
+    await seeded(Session)
+    async with pgdb.api(Session) as c:
+        tomato = next(x for x in (await c.get(f"{V1}/crops")).json() if x["slug"] == "tomato")
+        assert tomato["defaultAreaPerPlantM2"] == 0.35
+
+        rows = (await c.get(f"{V1}/cycles", params={"today": "2026-11-04"})).json()
+        a = next(x for x in rows if x["zone"] == "zone-a")
+        assert a["day"] == 22 and a["stage"] == "initial" and a["stageTitle"] == "Settling in"
+
+        bed = (await c.post(f"{V1}/zones", json={"label": "Later bed"})).json()
+        later = (await c.post(f"{V1}/cycles", json={"zone": bed["name"], "crop": "tomato", "plantedOn": "2026-12-01"})).json()
+        rows = (await c.get(f"{V1}/cycles", params={"today": "2026-11-04"})).json()
+        row = next(x for x in rows if x["id"] == later["id"])
+        assert row["day"] < 1 and row["stage"] is None and row["stageTitle"] is None   # not planted yet: no stage
+
+        await c.post(f"{V1}/cycles/{a['id']}/close", json={"endedOn": "2026-11-04"})
+        rows = (await c.get(f"{V1}/cycles", params={"today": "2026-11-05"})).json()
+        done = next(x for x in rows if x["id"] == a["id"])
+        assert done["status"] == "closed" and done["stage"] is None

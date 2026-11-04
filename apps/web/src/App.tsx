@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Section from "./components/Section";
 import Shell from "./components/Shell";
+import { BRAND } from "./lib/brand";
 import Compare from "./pages/Compare";
 import CopSummary from "./pages/CopSummary";
 import Costs from "./pages/Costs";
@@ -21,6 +22,7 @@ const results = (page: ReactNode) => <Section id="results">{page}</Section>;
 const farm = (page: ReactNode) => <Section id="farm">{page}</Section>;
 
 export default function App() {
+  useEffect(() => { document.title = BRAND.name; }, []);
   return (
     <Shell>
       <Routes>

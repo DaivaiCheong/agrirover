@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.entities import CropProfile, Farm, FarmSetting, Planting, Zone
+from app.services.crop_guide import stage_of
+from app.services.crops import water_data
 from app.services.errors import NotFound
 from app.services.water_plan import crop_day
 
@@ -40,12 +42,15 @@ async def load_cycle(session: AsyncSession, farm: Farm, cycle_id: str):
 
 
 def cycle_dict(p: Planting, zone: Zone, crop: CropProfile, today: date) -> dict:
+    day = crop_day(p.planted_on, today) if p.ended_on is None else None
+    cw = water_data(crop)
+    stage = stage_of(cw, day) if cw else None
     return {
         "id": str(p.id), "zone": zone.name, "bedLabel": zone.label or zone.name,
         "trialArm": zone.trial_arm.value if zone.trial_arm else None,
         "crop": crop.slug, "cropName": crop.common_name, "variety": p.variety,
         "plantedOn": p.planted_on.isoformat(), "endedOn": p.ended_on.isoformat() if p.ended_on else None,
         "status": "active" if p.ended_on is None else "closed",
-        "day": crop_day(p.planted_on, today) if p.ended_on is None else None,
+        "day": day, "stage": stage[0] if stage else None, "stageTitle": stage[1] if stage else None,
         "plantCount": p.plant_count, "areaM2": float(p.area_m2) if p.area_m2 is not None else None,
     }

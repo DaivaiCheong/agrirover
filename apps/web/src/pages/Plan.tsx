@@ -5,6 +5,7 @@ import {
   BookOpen, CalendarDays, CircleCheck, Droplets, Flag, FlaskConical, Scale, Sprout, Sun, SquareDashed, Sparkles,
   Wheat,
 } from "lucide-react";
+import NewCropForm from "../components/NewCropForm";
 import { Empty, Field, Notice, PageHead, Panel } from "../components/ui";
 import { api, type CropPlan, type PlanTask } from "../lib/api";
 import { dayMonth, dayMonthYear, litres, num, todayIso } from "../lib/format";
@@ -17,6 +18,7 @@ const METHODS = [
 ] as const;
 
 const NEW_BED = "__new__";
+const CUSTOM_CROP = "__custom__";
 
 const WHO: Record<string, string> = {
   aomori: "Aomori, Japan", fukushima: "Fukushima, Japan", hiroshima: "Hiroshima, Japan", kumamoto: "Kumamoto, Japan",
@@ -67,7 +69,7 @@ export default function Plan() {
   // the plan follows the form: change a number and it is worked out again
   useEffect(() => {
     const n = Number(plants);
-    if (!Number.isInteger(n) || n < 1 || !plantedOn) { setPlan(null); setError(null); return; }
+    if (!Number.isInteger(n) || n < 1 || !plantedOn || crop === CUSTOM_CROP) { setPlan(null); setError(null); return; }
     const id = ++latest.current;
     const t = setTimeout(() => {
       api.cropPlan({
@@ -126,6 +128,7 @@ export default function Plan() {
                   <select value={crop} onChange={(e) => setCrop(e.target.value)}>
                     {waterCrops.length === 0 && <option value="tomato">Tomato</option>}
                     {waterCrops.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                    <option value={CUSTOM_CROP}>+ A crop that is not in the list</option>
                   </select>
                 </Field>
                 <Field label="Planting date" hint="The day you plant is day 1.">
@@ -162,9 +165,12 @@ export default function Plan() {
             </details>
           </div>
           {error && <div style={{ marginTop: 12 }}><Notice kind="alert">{error}</Notice></div>}
+          {crop === CUSTOM_CROP && (
+            <div style={{ marginTop: 16 }}><NewCropForm onAdded={(slug) => { crops.reload(); setCrop(slug); }} /></div>
+          )}
         </Panel>
 
-        {!plan && !error && <Empty icon={Sparkles}>Enter the number of plants and the plan appears here.</Empty>}
+        {!plan && !error && crop !== CUSTOM_CROP && <Empty icon={Sparkles}>Enter the number of plants and the plan appears here.</Empty>}
 
         {plan && (
           <>
