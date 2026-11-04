@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Metric, Panel } from "../components/ui";
+import { Field, Metric, Panel } from "../components/ui";
 import { api, type WaterPlanResult } from "../lib/api";
 
 const METHODS = [
@@ -11,16 +11,6 @@ const METHODS = [
 
 const today = () => new Date().toISOString().slice(0, 10);
 const m3 = (v: number) => (v < 10 ? v.toFixed(2) : v.toFixed(1));
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="field">
-      <span className="lbl lbl-ink">{label}</span>
-      {children}
-      {hint && <span className="mono-sm" style={{ color: "var(--ink-muted)" }}>{hint}</span>}
-    </label>
-  );
-}
 
 export default function WaterPlanner() {
   const [plants, setPlants] = useState(100);

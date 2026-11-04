@@ -21,7 +21,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <div className="crumb"><span className="lbl">HOME &gt; DASHBOARD</span></div>
+      <div className="crumb"><span className="lbl">HOME &gt; TODAY</span></div>
       <div className="head">
         <div className="lbl">TODAY'S PLAN · DECIDED AT 06:00 FARM TIME · LIVE READINGS</div>
         <h1 className="display d-xl" style={{ marginTop: 8 }}>FARM OVERVIEW</h1>

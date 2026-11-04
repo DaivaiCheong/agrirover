@@ -228,3 +228,59 @@ button:disabled{opacity:.45;cursor:not-allowed}
   font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line-strong,#bdbab3);
   background:#fff;color:var(--ink);border-radius:0;width:100%;box-sizing:border-box}
 .field input:focus,.field select:focus{outline:2px solid var(--bp);outline-offset:-1px}
+
+/* ---------- ERP shell: sidebar + content ---------- */
+.shell{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+.side{background:var(--surface);border-right:var(--hair) solid var(--line);padding:18px 0;
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.side-brand{padding:0 20px 18px;border-bottom:var(--hair) solid var(--line)}
+.side-nav{padding:8px 0;flex:1}
+.side-group{padding:12px 0 4px}
+.side-title{padding:0 20px 6px;color:var(--ink-faint)}
+.side-link{display:block;padding:9px 20px;font-size:14px;color:var(--ink);text-decoration:none;
+  border-left:3px solid transparent}
+.side-link:hover{background:var(--surface-alt)}
+.side-on{border-left-color:var(--bp);background:var(--info-soft);color:var(--bp);font-weight:600}
+.side-foot{padding:14px 20px 0;color:var(--ink-muted);border-top:var(--hair) solid var(--line);line-height:1.5}
+.content{min-width:0}
+.head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.head-actions{display:flex;gap:10px;flex-wrap:wrap}
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .side{position:static;height:auto;border-right:0;border-bottom:var(--hair) solid var(--line);padding:10px 0 0}
+  .side-brand{padding:0 16px 10px;border-bottom:0}
+  .side-nav{display:flex;overflow-x:auto;padding:0}
+  .side-group{display:flex;padding:0;flex:0 0 auto}
+  .side-title,.side-foot{display:none}
+  .side-link{white-space:nowrap;border-left:0;border-bottom:3px solid transparent;padding:10px 14px}
+  .side-on{border-bottom-color:var(--bp);background:transparent}
+  .main,.head,.crumb{padding-left:16px;padding-right:16px}
+}
+
+/* ---------- notices, empty states, helpers ---------- */
+.notice{padding:10px 14px;border:var(--hair) solid var(--line-strong);background:var(--surface-alt);
+  font-family:var(--font-mono);font-size:11.5px;line-height:1.55}
+.notice-ok{background:var(--ok-soft);border-color:var(--ok)}
+.notice-warn{background:var(--warn-soft);border-color:var(--warn)}
+.notice-alert{background:var(--alert-soft);border-color:var(--alert)}
+.notice-info{background:var(--info-soft);border-color:var(--info)}
+.empty{padding:22px 16px;color:var(--ink-muted);font-size:14px;text-align:center}
+.stack{display:grid;gap:14px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:600px){.row2,.row3{grid-template-columns:1fr}}
+.field textarea{font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line-strong);width:100%}
+.tbl .act{text-align:right;white-space:nowrap}
+.linkbtn{background:none;border:0;color:var(--bp);cursor:pointer;font:inherit;font-size:12px;text-decoration:underline;padding:0}
+.linkbtn-alert{color:var(--alert)}
+a.btn{text-decoration:none}
+.share{display:flex;align-items:center;gap:10px}
+.share .bar{flex:1;min-width:60px}
+.big{font-family:var(--font-display);font-weight:700;font-size:44px;letter-spacing:-.02em;line-height:1}
+.pickable{cursor:pointer}
+.pickable:hover td{background:var(--surface-alt)}
+.picked td{background:var(--info-soft)}
+
+/* consistent control heights, and selects placed in panel headers */
+.field input,.field select{min-height:46px}
+.panel-head select{font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line-strong);background:#fff;max-width:60%}

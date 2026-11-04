@@ -33,3 +33,31 @@ export const Metric = ({ label, value, unit, note }:
     {note && <div className="d">{note}</div>}
   </div>
 );
+
+export const Field = ({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) => (
+  <label className="field">
+    <span className="lbl lbl-ink">{label}</span>
+    {children}
+    {hint && <span className="mono-sm" style={{ color: "var(--ink-muted)" }}>{hint}</span>}
+  </label>
+);
+
+export const PageHead = ({ crumb, kicker, title, actions }:
+  { crumb: string; kicker: string; title: string; actions?: ReactNode }) => (
+  <>
+    <div className="crumb"><span className="lbl">HOME &gt; {crumb}</span></div>
+    <div className="head head-row">
+      <div>
+        <div className="lbl">{kicker}</div>
+        <h1 className="display d-xl" style={{ marginTop: 8 }}>{title}</h1>
+      </div>
+      {actions && <div className="head-actions">{actions}</div>}
+    </div>
+  </>
+);
+
+export const Notice = ({ kind = "info", children }: { kind?: "info" | "ok" | "warn" | "alert"; children: ReactNode }) => (
+  <p className={`notice notice-${kind}`}>{children}</p>
+);
+
+export const Empty = ({ children }: { children: ReactNode }) => <p className="empty">{children}</p>;
