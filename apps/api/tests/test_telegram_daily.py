@@ -26,7 +26,7 @@ from app.workers.telegram_worker import telegram_enabled
 LOCAL = ZoneInfo("Asia/Phnom_Penh")
 AT_6 = datetime(2026, 11, 4, 6, 0, tzinfo=LOCAL).astimezone(timezone.utc)
 CHAT = "1001"
-PLANTED = date(2026, 10, 14)                      # day 21 on 4 Nov
+PLANTED = date(2026, 10, 15)                      # day 21 on 4 Nov
 
 
 class FakeTelegram:

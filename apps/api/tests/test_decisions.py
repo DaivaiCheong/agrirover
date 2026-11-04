@@ -146,7 +146,7 @@ def test_telemetry_is_stored_and_drives_todays_decision():
         Session = async_sessionmaker(engine, expire_on_commit=False)
         try:
             async with Session() as s:
-                await seed_stage1(s, planted_on=date(2026, 10, 14))
+                await seed_stage1(s, planted_on=date(2026, 10, 15))
 
             topic = "farm/farm-01/zone/zone-a/telemetry"
             async with Session() as s:
@@ -179,7 +179,7 @@ def test_telemetry_from_an_unknown_device_is_dropped_not_stored():
         Session = async_sessionmaker(engine, expire_on_commit=False)
         try:
             async with Session() as s:
-                await seed_stage1(s, planted_on=date(2026, 10, 14))
+                await seed_stage1(s, planted_on=date(2026, 10, 15))
             rogue = {**_payload(10.0), "device": "NOT-A-DEVICE"}
             async with Session() as s:
                 n = await store_telemetry(s, "farm/farm-01/zone/zone-a/telemetry", rogue, now=AT_6)

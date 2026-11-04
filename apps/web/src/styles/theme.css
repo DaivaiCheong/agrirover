@@ -220,3 +220,11 @@ body{
 .g32{grid-template-columns:1.35fr 1fr}
 @media (max-width:900px){.g4,.g3,.g2,.g32{grid-template-columns:1fr}.nav{display:none}}
 button:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- forms ---------- */
+.form{display:grid;gap:16px}
+.field{display:grid;gap:6px}
+.field input,.field select{
+  font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line-strong,#bdbab3);
+  background:#fff;color:var(--ink);border-radius:0;width:100%;box-sizing:border-box}
+.field input:focus,.field select:focus{outline:2px solid var(--bp);outline-offset:-1px}

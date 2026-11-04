@@ -5,7 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import assistant, auth, decisions, devices, irrigation, missions, photos, telemetry, zones
+from app.routers import (assistant, auth, decisions, devices, irrigation, missions, photos, telemetry,
+                         water_plan, zones)
 from app.workers.mqtt_ingest import ingest_lifespan
 from app.workers.telegram_worker import telegram_lifespan
 
@@ -46,6 +47,7 @@ app.include_router(assistant.router,  prefix=V1)
 app.include_router(missions.router,   prefix=V1)
 app.include_router(decisions.router,  prefix=V1)
 app.include_router(photos.router,     prefix=V1)
+app.include_router(water_plan.router, prefix=V1)
 
 
 @app.get("/health", tags=["system"])

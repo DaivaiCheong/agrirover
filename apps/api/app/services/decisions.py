@@ -23,6 +23,7 @@ from sqlalchemy.orm import selectinload
 from app.models.entities import (CropProfile, DailyDecision, Farm, IrrigationEvent, IrrigationRule,
                                  Planting, Sensor, SensorReading, Zone)
 from app.services.rule_engine import Decision, RuleConfig, RuleInput, evaluate
+from app.services.water_plan import crop_day
 
 DECISION_HOUR_LOCAL = 6
 
@@ -173,7 +174,7 @@ async def decisions_for_farm(session: AsyncSession, farm_name: str,
         cfg = config_from_rule(z.rule, farm.timezone) if z.rule else RuleConfig(farm_tz=farm.timezone)
         moisture, rain = latest_signal(by_zone.get(z.id, []))
         planting, crop = plantings.get(z.id, (None, None))
-        day = (today - planting.planted_on).days if planting else None
+        day = crop_day(planting.planted_on, today) if planting else None      # planting day = day 1
         inputs = {"moisture_pct": moisture, "sensor": sensors[z.id][1] if z.id in sensors else None,
                   "rain": rain, "threshold_pct": cfg.moisture_threshold_pct,
                   "planting_day": day, "crop": crop}

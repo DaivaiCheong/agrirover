@@ -18,7 +18,7 @@ from app.services.seed import seed_stage1
 from app.workers.mqtt_ingest import store_telemetry
 
 AT_6 = datetime(2026, 11, 4, 6, 0, tzinfo=ZoneInfo("Asia/Phnom_Penh")).astimezone(timezone.utc)
-PLANTED = date(2026, 10, 14)                      # 21 days before 4 Nov: "day 21"
+PLANTED = date(2026, 10, 15)                      # 21 days before 4 Nov: "day 21"
 TOPIC_A = "farm/farm-01/zone/zone-a/telemetry"
 TOPIC_B = "farm/farm-01/zone/zone-b/telemetry"
 

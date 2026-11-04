@@ -44,6 +44,38 @@ export type DeviceRow = {
   firmwareVersion: string | null;
 };
 
+export type WaterDay = {
+  day: number;
+  stage: string;
+  kc: number;
+  etcMm: number;
+  litersPerPlantNet: number;
+  litersPerPlantGross: number;
+  litersTotalGross: number;
+};
+
+export type WaterPlanResult = {
+  crop: string;
+  source: string;
+  cycleDays: number;
+  netM3: number;
+  grossM3: number;
+  peakLitersPerDay: number;
+  today: WaterDay | null;
+  stages: { stage: string; days: number; grossM3: number }[];
+  assumptions: { plants: number; areaPerPlantM2: number; et0MmDay: number; efficiency: number; stageDays: number[]; rainIgnored: boolean };
+  days: WaterDay[];
+};
+
+export type WaterPlanRequest = {
+  crop: string;
+  plants: number;
+  areaPerPlantM2: number;
+  et0MmDay: number;
+  efficiency: number;
+  plantedOn?: string;
+};
+
 export type PhotoResult = {
   status: "ok" | "uncertain";
   label: string | null;
@@ -71,6 +103,8 @@ export const api = {
   devices: () => request<DeviceRow[]>("/devices"),
   decisionsToday: () => request<ZoneDecision[]>("/decisions/today"),
   checkPhoto,
+  waterPlan: (body: WaterPlanRequest) =>
+    request<WaterPlanResult>("/water-plan", { method: "POST", body: JSON.stringify(body) }),
   series: (zone: string, metric = "soil_moisture", hours = 24) =>
     request<{ points: { t: string; v: number }[] }>(
       `/telemetry/${zone}?metric=${metric}&hours=${hours}`),

@@ -30,7 +30,7 @@ BEDS = (
 )
 PROBE_DEPTHS_CM = (10, 25)
 DECIDING_DEPTH_CM = 25                                    # the deeper probe decides; the grower should confirm
-DEFAULT_DAYS_SINCE_PLANTING = 21
+DEFAULT_DAYS_SINCE_PLANTING = 20                      # so the crop is on day 21 today
 
 
 async def seed_stage1(session: AsyncSession, farm_name: str | None = None,

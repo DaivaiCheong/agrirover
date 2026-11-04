@@ -98,7 +98,7 @@ Total after the change: 15 − 2 + 7 = **20 tables**.
 |---|---|
 | `crop_profile` | tomato, preferred soil moisture 30-45 % (placeholder until calibrated on site) |
 | `zone` | `zone-a`, label "Tomato bed A", arm `guided` · `zone-b`, "Tomato bed B", arm `usual` |
-| `planting` | zone-a, tomato, planted 14 Oct 2026, so 4 Nov is **day 21** |
+| `planting` | zone-a, tomato, planted 15 Oct 2026, so 4 Nov is **day 21** (the planting day is day 1) |
 | `sensor` | `ESP-FIELD-01` carries a 10 cm probe and a 25 cm probe; the 25 cm probe is used for the decision |
 | `sensor_reading` | 4 Nov 06:00, 25 cm probe, 25.8 % |
 | `daily_decision` | 4 Nov, zone-a: **water 17 s**, reason `auto_threshold` (25.8 % is below 30 %) |
