@@ -4,10 +4,8 @@ import Dashboard from "./pages/Dashboard";
 import Devices from "./pages/Devices";
 import Irrigation from "./pages/Irrigation";
 import Placeholder from "./pages/Placeholder";
-import Plan from "./pages/Plan";
 
 const NAV = [
-  ["/plan", "PLAN"],
   ["/", "DASHBOARD"],
   ["/irrigation", "IRRIGATION"],
   ["/water", "WATER"],
@@ -39,7 +37,6 @@ export default function App() {
 
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/plan" element={<Plan />} />
         <Route path="/irrigation" element={<Irrigation />} />
         <Route path="/water" element={<Placeholder title="WATER TREATMENT" sprint="Sprint 3" />} />
         <Route path="/crop" element={<Crop />} />
