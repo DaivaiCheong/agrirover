@@ -142,3 +142,12 @@ async def test_the_usual_bed_is_recorded_but_never_messaged(Session):
     assert rows["zone-a"].proposal_id == proposal.id and rows["zone-a"].message_sent_at is not None
     assert rows["zone-b"].decision == "irrigate"                     # what the system WOULD have said
     assert rows["zone-b"].proposal_id is None and rows["zone-b"].message_sent_at is None
+
+
+def test_a_bed_not_planted_yet_is_never_called_day_minus_something():
+    base = dict(zone="zone-c", decision=Decision.HOLD_IN_RANGE, reason="no_reading", duration_ms=0, moisture_pct=None,
+                decision_at=AT_6, label="Tomato bed C")
+    assert svc.ZoneDecision(**base, planting_day=-9).text == "Tomato bed C (not planted yet): skip, no sensor reading"
+    assert svc.ZoneDecision(**base, planting_day=0).name == "Tomato bed C (not planted yet)"
+    assert svc.ZoneDecision(**base, planting_day=1).name == "Tomato bed C (day 1)"
+    assert svc.ZoneDecision(**base).name == "Tomato bed C"

@@ -1,3 +1,4 @@
+import { Calculator, ChevronLeft } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { Empty, Metric, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
@@ -11,9 +12,10 @@ export default function CycleCop() {
 
   return (
     <>
-      <PageHead crumb="COST OF PRODUCTION" kicker={c ? `${c.cropName.toUpperCase()} · ${c.plantedOn}${c.status === "closed" ? ` TO ${c.endedOn}` : ` · DAY ${c.day}`}` : "COST REPORT"}
-                title={c ? c.bedLabel.toUpperCase() : "COST REPORT"}
+      <PageHead icon={Calculator} title={c ? c.bedLabel : "Cost report"}
+                sub={c ? `${c.cropName} · planted ${c.plantedOn}${c.status === "closed" ? `, closed ${c.endedOn}` : `, day ${c.day}`}` : undefined}
                 actions={<>
+                  <Link className="btn btn-ghost btn-sm" to="/cop"><ChevronLeft size={16} aria-hidden />All crops</Link>
                   <Link className="btn btn-ghost btn-sm" to="/costs">Add a cost</Link>
                   <Link className="btn btn-ghost btn-sm" to="/harvest">Add harvest or sale</Link>
                 </>} />
@@ -22,29 +24,29 @@ export default function CycleCop() {
         {cop && (
           <>
             <div className="grid g4">
-              <div className="panel panel-pad reg">
-                <div className="lbl">COST OF PRODUCTION PER KG</div>
+              <div className="panel panel-pad">
+                <div className="lbl">Cost of production per kg</div>
                 <div className="big" style={{ marginTop: 10 }}>{cop.copPerKg === null ? "—" : usd(cop.copPerKg)}</div>
                 <div className="mono-sm" style={{ marginTop: 8, color: "var(--ink-muted)" }}>
                   {cop.copPerKg === null ? "No harvest yet" : `${riel(cop.copPerKg, cop.khrPerUsd)} · also the break-even price`}
                 </div>
               </div>
-              <Metric label="TOTAL COST" value={usd(cop.totalCostUsd)} note={`${cop.days} days${cop.open ? " so far" : ""}`} />
-              <Metric label="MARKETABLE" value={num(cop.kgMarketable, 1)} unit="kg"
+              <Metric label="Total cost" value={usd(cop.totalCostUsd)} note={`${cop.days} days${cop.open ? " so far" : ""}`} />
+              <Metric label="Marketable" value={num(cop.kgMarketable, 1)} unit="kg"
                       note={`${num(cop.kgLost, 1)} kg lost · ${num(cop.kgHome, 1)} kg at home`} />
-              <Metric label="PROFIT" value={cop.marginUsd === null ? "—" : usd(cop.marginUsd)}
+              <Metric label="Profit" value={cop.marginUsd === null ? "—" : usd(cop.marginUsd)}
                       note={cop.marginUsd === null ? "No sales yet" : `${usd(cop.revenueUsd)} sold`} />
             </div>
 
             <div className="grid g32">
-              <Panel title="WHERE THE MONEY WENT" pad={false}>
+              <Panel title="Where the money went" pad={false}>
                 {cop.lines.length === 0 ? <Empty>No costs recorded for this cycle yet.</Empty> : (
                   <table className="tbl">
-                    <thead><tr><th>COST</th><th className="r">USD</th><th>SHARE</th></tr></thead>
+                    <thead><tr><th>Cost</th><th className="r">USD</th><th>Share</th></tr></thead>
                     <tbody>
                       {cop.lines.map((l) => (
                         <tr key={l.category}>
-                          <td>{l.label}{l.estimate && <> <Tag kind="warn">ESTIMATE</Tag></>}</td>
+                          <td>{l.label}{l.estimate && <> <Tag kind="warn">Estimate</Tag></>}</td>
                           <td className="r"><b>{usd(l.amountUsd)}</b></td>
                           <td><div className="share"><div className="bar"><i style={{ width: `${Math.min(100, l.sharePct)}%` }} /></div>
                             <span className="mono-sm">{num(l.sharePct, 0)}%</span></div></td>
@@ -57,7 +59,7 @@ export default function CycleCop() {
               </Panel>
 
               <div className="stack">
-                <Panel title="PER UNIT">
+                <Panel title="Per unit">
                   <table className="tbl"><tbody>
                     <tr><td>Cost per plant</td><td className="r"><b>{cop.costPerPlant === null ? "—" : usd(cop.costPerPlant, 3)}</b></td></tr>
                     <tr><td>Cost per m²</td><td className="r"><b>{cop.costPerM2 === null ? "—" : usd(cop.costPerM2, 3)}</b></td></tr>
@@ -66,7 +68,7 @@ export default function CycleCop() {
                   </tbody></table>
                 </Panel>
                 {cop.flags.length > 0 && (
-                  <Panel title="READ THIS BEFORE USING THE NUMBER">
+                  <Panel title="Read this before using the number">
                     <ul style={{ paddingLeft: 18, lineHeight: 1.7 }}>
                       {cop.flags.map((f) => <li key={f}>{f.charAt(0).toUpperCase() + f.slice(1)}.</li>)}
                     </ul>

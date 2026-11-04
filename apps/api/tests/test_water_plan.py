@@ -60,6 +60,21 @@ def test_whole_cycle_in_cubic_metres_matches_a_hand_calculation():
     assert p.peak_liters_per_day == pytest.approx(100 * 5.175 * 0.5 / 0.9)   # at mid season
 
 
+def test_a_daily_et0_series_follows_the_seasons():
+    # the same constant as before gives the same answer as the single number
+    flat = wp.plan(T, 100, 0.5, None, 0.9, et0_series=[4.5] * 135)
+    assert flat.net_m3 == pytest.approx(27.781875) and flat.et0_mm_day == pytest.approx(4.5)
+    # ET0 4 for the 30 initial days (sum of Kc 18) and 5 for the other 105 (sum of Kc 105.475), worked by hand:
+    #   18 x 4 + 105.475 x 5 = 599.375 mm  x 0.5 m2 x 100 plants / 1000 = 29.96875 m3
+    seasonal = wp.plan(T, 100, 0.5, None, 0.9, et0_series=[4.0] * 30 + [5.0] * 105)
+    assert seasonal.net_m3 == pytest.approx(29.96875)
+    assert seasonal.days[0].et0_mm == 4.0 and seasonal.days[-1].et0_mm == 5.0
+    assert seasonal.et0_mm_day == pytest.approx((30 * 4 + 105 * 5) / 135)
+    for bad in ([4.5] * 134, [4.5] * 134 + [0.0]):                  # too short, or a day without evaporation
+        with pytest.raises(ValueError):
+            wp.plan(T, 100, 0.5, None, 0.9, et0_series=bad)
+
+
 def test_water_scales_with_the_number_of_plants():
     one = wp.plan(T, 100, 0.5, 4.5, 0.9).gross_m3
     assert wp.plan(T, 200, 0.5, 4.5, 0.9).gross_m3 == pytest.approx(2 * one)

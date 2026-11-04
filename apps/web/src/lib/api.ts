@@ -48,20 +48,63 @@ export type DeviceRow = {
   lastSeenAt: string | null; firmwareVersion: string | null;
 };
 
-export type WaterDay = {
-  day: number; stage: string; kc: number; etcMm: number;
-  litersPerPlantNet: number; litersPerPlantGross: number; litersTotalGross: number;
+export type PlanTask = {
+  text: string; firstDay: number; lastDay: number; startsOn: string; endsOn: string; basis: string;
 };
 
-export type WaterPlanResult = {
-  crop: string; source: string; cycleDays: number; netM3: number; grossM3: number; peakLitersPerDay: number;
-  today: WaterDay | null; stages: { stage: string; days: number; grossM3: number }[];
-  assumptions: { plants: number; areaPerPlantM2: number; et0MmDay: number; efficiency: number; stageDays: number[]; rainIgnored: boolean };
-  days: WaterDay[];
+export type PlanNow =
+  | { state: "not_planted"; startsInDays: number }
+  | { state: "finished"; daysAgo: number }
+  | {
+      state: "growing"; day: number; daysLeft: number; stage: string; stageTitle?: string; stagePlain?: string;
+      litersToday: number; litersPerPlant: number; ifCloudy: number; ifRainy: number;
+      tasks: PlanTask[]; next: (PlanTask & { inDays: number }) | null;
+    };
+
+export type PlanStage = {
+  stage: string; title: string; plain: string | null; watch: string | null; watchBasis: string | null;
+  firstDay: number; lastDay: number; startsOn: string; endsOn: string; days: number; grossM3: number;
+  avgLitersPerPlantPerDay: number; tasks: PlanTask[];
 };
 
-export type WaterPlanRequest = {
-  crop: string; plants: number; areaPerPlantM2: number; et0MmDay: number; efficiency: number; plantedOn?: string;
+export type PlanSource = { key: string; label: string; url: string; read: string; supports: string };
+
+export type CropPlan = {
+  crop: string; slug: string; hasGuide: boolean; plants: number; plantedOn: string; endsOn: string; cycleDays: number;
+  areaPerPlantM2: number; areaM2: number; now: PlanNow;
+  water: {
+    grossM3: number; netM3: number; efficiency: number; perPlantWholeCycleL: number; peakLitersPerDay: number;
+    avgEt0MmDay: number; et0Source: string; rainIgnored: boolean;
+    days: { day: number; stage: string; et0Mm: number; litersTotalGross: number; litersPerPlantGross: number }[];
+    weeks: { week: number; startsOn: string; firstDay: number; stage: string; litersPerDay: number;
+             litersPerPlantPerDay: number; et0MmDay: number }[];
+    check: { ourPeakMmDay: number; japanMmDayRange: [number, number]; verdict: "inside" | "close" | "outside";
+             japanLitersPerPlantPeak: [number, number] };
+    howTo?: { text: string; basis: string }[];
+  };
+  stages: PlanStage[];
+  season: {
+    hotDays: number; rainyDays: number; notes: { kind: "warn" | "note"; text: string; basis: string }[];
+    months: { month: number; days: number; et0MmDay: number; avgHighC: number; rainMmDay: number }[];
+  };
+  kcSource: string;
+  feed?: {
+    rows: { when: string; what: string; nitrogenG: number; urea46G: number; compostKg?: number; phosphateG?: number;
+            tspG?: number; potashG?: number; mopG?: number }[];
+    totalsForAllPlants: { compostKg: number; mulchKg: number; ureaKg: number; tspKg: number; mopKg: number };
+    note: string; basis: string;
+  };
+  harvest?: {
+    firstPickDay: number; firstPickOn: string; lastDay: number; lastOn: string; basis: string;
+    benchmark: { label: string; caution: string;
+                 rows: { label: string; tPer10a: number; kgPerPlant: number; kgForYourPlants: number }[] };
+  };
+  tasks?: PlanTask[];
+  sources: PlanSource[];
+};
+
+export type CropPlanQuery = {
+  crop: string; plants: number; plantedOn: string; efficiency?: number; rowCm?: number; plantCm?: number;
 };
 
 export type PhotoResult = {
@@ -84,7 +127,7 @@ async function checkPhoto(file: File): Promise<PhotoResult> {
 
 export type Settings = {
   khrPerUsd: number; rateConfirmed: boolean; familyWageUsdPerDay: number | null; waterCostPerM3Usd: number | null;
-  landRentUsdPerHaYear: number | null; et0MmDay: number; irrigationEfficiency: number;
+  landRentUsdPerHaYear: number | null; irrigationEfficiency: number;
 };
 
 export type Crop = {
@@ -139,7 +182,13 @@ export const api = {
   devices: () => request<DeviceRow[]>("/devices"),
   decisionsToday: () => request<ZoneDecision[]>("/decisions/today"),
   checkPhoto,
-  waterPlan: (body: WaterPlanRequest) => send<WaterPlanResult>("POST", "/water-plan", body),
+  cropPlan: (q: CropPlanQuery) => {
+    const qs = new URLSearchParams({ crop: q.crop, plants: String(q.plants), plantedOn: q.plantedOn });
+    if (q.efficiency !== undefined) qs.set("efficiency", String(q.efficiency));
+    if (q.rowCm && q.plantCm) { qs.set("rowCm", String(q.rowCm)); qs.set("plantCm", String(q.plantCm)); }
+    return request<CropPlan>(`/crop-plan?${qs}`);
+  },
+  cyclePlan: (id: string) => request<CropPlan>(`/cycles/${id}/plan`),
 
   // farm
   settings: () => request<Settings>("/farm/settings"),

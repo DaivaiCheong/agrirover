@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Empty, Field, Notice, PageHead, Panel, Tag } from "../components/ui";
+import { Empty, Field, Notice, PageIntro, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
 import { CATEGORY_LABELS, STOCK_CATEGORIES, cycleLabel, num, todayIso, usd } from "../lib/format";
 import { useData } from "../lib/useData";
@@ -32,7 +32,7 @@ export default function Stock() {
 
   return (
     <>
-      <PageHead crumb="STOCK" kicker="SEED, FERTILIZER, PESTICIDE AND MATERIALS IN THE SHED" title="STOCK" />
+      <PageIntro>Seeds, fertiliser, pesticide and materials in the shed.</PageIntro>
       <main className="main stack">
         <Notice>
           Buying stock is not a cost yet. The cost is counted when you <b>use</b> it on a cycle, at the average price you paid.
@@ -40,10 +40,10 @@ export default function Stock() {
         {items.error && <Notice kind="alert">{items.error}</Notice>}
 
         <div className="grid g32">
-          <Panel title="IN THE SHED" pad={false}>
+          <Panel title="In the shed" pad={false}>
             {(items.data ?? []).length === 0 ? <Empty>Nothing in stock yet. Add an item.</Empty> : (
               <table className="tbl">
-                <thead><tr><th>ITEM</th><th>KIND</th><th className="r">ON HAND</th><th className="r">AVG PRICE</th><th className="r">VALUE</th></tr></thead>
+                <thead><tr><th>Item</th><th>Kind</th><th className="r">On hand</th><th className="r">Avg price</th><th className="r">Value</th></tr></thead>
                 <tbody>
                   {(items.data ?? []).map((i) => (
                     <tr key={i.id} className={`pickable${i.id === selected ? " picked" : ""}`} onClick={() => setSelected(i.id)}>
@@ -57,13 +57,13 @@ export default function Stock() {
             )}
           </Panel>
 
-          <Panel title="ADD AN ITEM">
+          <Panel title="Add an item">
             <form className="form" onSubmit={(e) => { e.preventDefault(); run(() => api.addStockItem({ name, category, unit }), `${name} added.`).then(() => setName("")); }}>
-              <Field label="NAME"><input required value={name} onChange={(e) => setName(e.target.value)} /></Field>
+              <Field label="Name"><input required value={name} onChange={(e) => setName(e.target.value)} /></Field>
               <div className="row2">
-                <Field label="KIND"><select value={category} onChange={(e) => setCategory(e.target.value)}>
+                <Field label="Kind"><select value={category} onChange={(e) => setCategory(e.target.value)}>
                   {STOCK_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}</select></Field>
-                <Field label="UNIT"><input required value={unit} maxLength={16} onChange={(e) => setUnit(e.target.value)} /></Field>
+                <Field label="Unit"><input required value={unit} maxLength={16} onChange={(e) => setUnit(e.target.value)} /></Field>
               </div>
               <div><button className="btn btn-ghost">Add item</button></div>
             </form>
@@ -79,12 +79,12 @@ export default function Stock() {
                 run(() => api.stockIn(item.id, { date, qty: Number(inQty), unitPrice: Number(inPrice), currency: inCur }),
                     `Added ${inQty} ${item.unit} to stock.`).then(() => { setInQty(""); setInPrice(""); }); }}>
                 <div className="row3">
-                  <Field label={`QUANTITY (${item.unit})`}><input required inputMode="decimal" value={inQty} onChange={(e) => setInQty(e.target.value)} /></Field>
-                  <Field label={`PRICE PER ${item.unit.toUpperCase()}`}><input required inputMode="decimal" value={inPrice} onChange={(e) => setInPrice(e.target.value)} /></Field>
-                  <Field label="CURRENCY"><select value={inCur} onChange={(e) => setInCur(e.target.value as "USD" | "KHR")}>
+                  <Field label={`Quantity (${item.unit})`}><input required inputMode="decimal" value={inQty} onChange={(e) => setInQty(e.target.value)} /></Field>
+                  <Field label={`Price per ${item.unit}`}><input required inputMode="decimal" value={inPrice} onChange={(e) => setInPrice(e.target.value)} /></Field>
+                  <Field label="Currency"><select value={inCur} onChange={(e) => setInCur(e.target.value as "USD" | "KHR")}>
                     <option value="USD">US dollar</option><option value="KHR">Riel</option></select></Field>
                 </div>
-                <Field label="DATE"><input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+                <Field label="Date"><input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></Field>
                 <div><button className="btn">Add to stock</button></div>
               </form>
             </Panel>
@@ -94,7 +94,7 @@ export default function Stock() {
                 <form className="form" onSubmit={(e) => { e.preventDefault();
                   run(() => api.stockUse(item.id, { date, qty: Number(useQty), plantingId: cycleId }),
                       `Used ${useQty} ${item.unit}. The cost is now on the cycle.`).then(() => setUseQty("")); }}>
-                  <Field label="ON WHICH CYCLE">
+                  <Field label="On which cycle">
                     <select value={cycleId} onChange={(e) => setUseCycle(e.target.value)}>
                       {open.map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}</option>)}
                     </select>
@@ -113,12 +113,12 @@ export default function Stock() {
           <Panel title={`HISTORY · ${item.name.toUpperCase()}`} pad={false}>
             {(moves.data ?? []).length === 0 ? <Empty>No movements yet.</Empty> : (
               <table className="tbl">
-                <thead><tr><th>DATE</th><th>WHAT</th><th className="r">QUANTITY</th><th className="r">PRICE</th><th /></tr></thead>
+                <thead><tr><th>Date</th><th>What</th><th className="r">Quantity</th><th className="r">Price</th><th /></tr></thead>
                 <tbody>
                   {(moves.data ?? []).map((m) => (
                     <tr key={m.id}>
                       <td>{m.date}</td>
-                      <td>{m.kind === "in" ? <Tag kind="ok">BOUGHT</Tag> : <Tag kind="warn">USED</Tag>}</td>
+                      <td>{m.kind === "in" ? <Tag kind="ok">Bought</Tag> : <Tag kind="warn">Used</Tag>}</td>
                       <td className="r">{num(m.qty, 3)} {item.unit}</td><td className="r">{usd(m.unitCostUsd, 4)}</td>
                       <td className="act">{m.kind === "out" && <button className="linkbtn linkbtn-alert" onClick={() => {
                         if (window.confirm("Undo this use? The stock goes back and the cost is removed.")) run(() => api.undoStockUse(m.id), "Use undone.");

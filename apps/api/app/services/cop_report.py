@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.entities import Asset, CostEntry, Farm, Harvest, Planting, Sale, Zone
-from app.services import cost
+from app.services import climate, cost
 from app.services import water_plan as wp
 from app.services.crops import water_data
 from app.services.farm_data import cycle_dict, farm_settings, load_cycle
@@ -48,8 +48,8 @@ async def build_cop(session: AsyncSession, farm: Farm, cycle_id: str, today: dat
     water_m3 = None
     cw = water_data(crop)
     if cw and p.plant_count and p.area_m2:
-        plan = wp.plan(cw, p.plant_count, float(p.area_m2) / p.plant_count, float(st.et0_mm_day),
-                       float(st.irrigation_efficiency))
+        plan = wp.plan(cw, p.plant_count, float(p.area_m2) / p.plant_count, None, float(st.irrigation_efficiency),
+                       et0_series=climate.et0_series(p.planted_on, sum(cw.stage_days)))
         water_m3 = wp.m3_through(plan, min(cost.cycle_days(this, today), plan.cycle_days))
 
     report = cost.compute_cop(

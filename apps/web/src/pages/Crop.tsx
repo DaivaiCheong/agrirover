@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Panel, Tag } from "../components/ui";
+import { Camera, ScanSearch } from "lucide-react";
+import { Notice, PageIntro, Panel, Tag } from "../components/ui";
 import { api, type PhotoResult } from "../lib/api";
 
 export default function Crop() {
@@ -32,15 +33,11 @@ export default function Crop() {
 
   return (
     <>
-      <div className="crumb"><span className="lbl">HOME &gt; CROP</span></div>
-      <div className="head">
-        <div className="lbl">PHONE PHOTO · ONE LEAF · TRIAGE, NOT DIAGNOSIS</div>
-        <h1 className="display d-xl" style={{ marginTop: 8 }}>DISEASE CHECK</h1>
-      </div>
+      <PageIntro>Take a photo of one leaf. This is a first look, not a diagnosis: when it is unsure, it says so.</PageIntro>
 
       <main className="main">
         <div className="grid g2">
-          <Panel title="PHOTO">
+          <Panel title="Photo" icon={Camera}>
             <input type="file" accept="image/jpeg,image/png" capture="environment"
                    onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setError(null); }} />
             {preview && (
@@ -58,14 +55,14 @@ export default function Crop() {
             </p>
           </Panel>
 
-          <Panel title="RESULT">
+          <Panel title="Result" icon={ScanSearch}>
             {!result && !error && <p className="mono-sm">Choose a photo and press Check.</p>}
             {error && (
-              <p className="mono-sm" style={{ color: "var(--alert)" }}>
+              <Notice kind="warn">
                 {error === "disease model not installed"
                   ? "The disease model is not installed on this farm server yet, so no result can be given."
                   : `Could not check the photo: ${error}`}
-              </p>
+              </Notice>
             )}
             {result && (
               <>
@@ -75,7 +72,7 @@ export default function Crop() {
                     <span className="mono-sm">confidence <b>{Math.round((result.confidence ?? 0) * 100)}%</b></span>
                   </div>
                 ) : (
-                  <Tag kind="warn">NOT SURE</Tag>
+                  <Tag kind="warn">Not sure</Tag>
                 )}
                 <p className="mono-sm" style={{ marginTop: 14 }}>{result.note}</p>
               </>

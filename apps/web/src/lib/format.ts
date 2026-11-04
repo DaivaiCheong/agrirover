@@ -1,6 +1,22 @@
 import type { Cycle } from "./api";
 
-export const todayIso = () => new Date().toISOString().slice(0, 10);
+/** Today's date where the browser is (not UTC: before 7 am in Cambodia UTC is still yesterday). */
+export const todayIso = () => new Date().toLocaleDateString("sv-SE");
+
+const parse = (iso: string) => new Date(`${iso}T00:00:00`);
+export const dayMonth = (iso: string) => parse(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+export const dayMonthYear = (iso: string) =>
+  parse(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+export const longToday = () =>
+  new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+
+/** "Day 22", or "Starts 15 Nov" for a crop planned but not planted yet. */
+export const dayLabel = (c: Cycle) => (c.day !== null && c.day > 0 ? `Day ${c.day}` : `Starts ${dayMonth(c.plantedOn)}`);
+
+/** Litres, switching to cubic metres when it is a lot of water. */
+export function litres(v: number): string {
+  return v >= 2000 ? `${(v / 1000).toFixed(1)} m³` : `${Math.round(v).toLocaleString()} L`;
+}
 
 /** $12.34, or $0.0738 for small unit prices. */
 export function usd(v: number | null | undefined, digits = 2): string {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Empty, Field, Notice, PageHead, Panel } from "../components/ui";
+import { Empty, Field, Notice, PageIntro, Panel } from "../components/ui";
 import { api, type Cop } from "../lib/api";
 import { cycleLabel, num, usd } from "../lib/format";
 import { useData } from "../lib/useData";
@@ -38,22 +38,22 @@ export default function Compare() {
 
   return (
     <>
-      <PageHead crumb="COMPARE BEDS" kicker="TWO CYCLES SIDE BY SIDE" title="COMPARE BEDS" />
+      <PageIntro>Put two crops side by side: what each cost, what it gave, and how much water it used.</PageIntro>
       <main className="main stack">
         {(cycles.data ?? []).length < 2 ? <Empty>Compare needs at least two crop cycles.</Empty> : (
           <>
             <div className="row2">
-              <Field label="FIRST"><select value={a} onChange={(e) => setA(e.target.value)}>
+              <Field label="First"><select value={a} onChange={(e) => setA(e.target.value)}>
                 {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}{c.trialArm ? ` · ${c.trialArm}` : ""}</option>)}</select></Field>
-              <Field label="SECOND"><select value={b} onChange={(e) => setB(e.target.value)}>
+              <Field label="Second"><select value={b} onChange={(e) => setB(e.target.value)}>
                 {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}{c.trialArm ? ` · ${c.trialArm}` : ""}</option>)}</select></Field>
             </div>
             {!both && <Notice kind="warn">Choose two different cycles.</Notice>}
             {cmp.error && <Notice kind="alert">{cmp.error}</Notice>}
             {r && (
-              <Panel title="RESULT" pad={false}>
+              <Panel title="Result" pad={false}>
                 <table className="tbl">
-                  <thead><tr><th /><th className="r">{r.a.cycle.bedLabel}</th><th className="r">{r.b.cycle.bedLabel}</th><th className="r">FIRST − SECOND</th></tr></thead>
+                  <thead><tr><th /><th className="r">{r.a.cycle.bedLabel}</th><th className="r">{r.b.cycle.bedLabel}</th><th className="r">First − second</th></tr></thead>
                   <tbody>
                     {ROWS.map((row) => {
                       const x = row.get(r.a), y = row.get(r.b);
@@ -73,7 +73,7 @@ export default function Compare() {
               how carefully costs were entered can differ too.
             </Notice>
             {r && [r.a, r.b].some((c) => c.flags.length > 0) && (
-              <Panel title="WHAT EACH NUMBER LEAVES OUT">
+              <Panel title="What each number leaves out">
                 {[r.a, r.b].map((c) => (
                   <div key={c.cycle.id} style={{ marginBottom: 10 }}>
                     <b>{c.cycle.bedLabel}</b>

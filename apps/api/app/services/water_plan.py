@@ -44,6 +44,7 @@ class DayRow:
     day: int                            # 1 = the planting day
     stage: str
     kc: float
+    et0_mm: float
     etc_mm: float
     liters_per_plant_net: float
     liters_per_plant_gross: float
@@ -101,29 +102,35 @@ def stage_for_day(crop: CropWater, day: int, stage_days=None) -> str:
     raise AssertionError("unreachable")
 
 
-def plan(crop: CropWater, plants: int, area_per_plant_m2: float, et0_mm_day: float,
-         efficiency: float, stage_days=None) -> WaterPlan:
+def plan(crop: CropWater, plants: int, area_per_plant_m2: float, et0_mm_day: float | None,
+         efficiency: float, stage_days=None, et0_series: list[float] | None = None) -> WaterPlan:
+    """et0_mm_day is one number for every day; et0_series (one value per crop day) replaces it when given,
+    so a plan can follow the seasons."""
     if plants < 1:
         raise ValueError("plants must be at least 1")
     if area_per_plant_m2 <= 0:
         raise ValueError("area per plant must be above 0")
-    if et0_mm_day <= 0:
+    if et0_series is None and (et0_mm_day is None or et0_mm_day <= 0):
         raise ValueError("ET0 must be above 0")
     if not 0 < efficiency <= 1:
         raise ValueError("efficiency must be above 0 and at most 1")
     sd = _stage_days(crop, stage_days)
+    if et0_series is not None and (len(et0_series) < sum(sd) or any(v <= 0 for v in et0_series)):
+        raise ValueError("ET0 must be above 0 on every day of the cycle")
 
     days: list[DayRow] = []
     for d in range(1, sum(sd) + 1):
         kc = kc_for_day(crop, d, sd)
-        etc = kc * et0_mm_day
+        et0 = et0_series[d - 1] if et0_series is not None else et0_mm_day
+        etc = kc * et0
         net = etc * area_per_plant_m2                  # litres per plant
         gross = net / efficiency
-        days.append(DayRow(day=d, stage=stage_for_day(crop, d, sd), kc=kc, etc_mm=etc,
+        days.append(DayRow(day=d, stage=stage_for_day(crop, d, sd), kc=kc, et0_mm=et0, etc_mm=etc,
                            liters_per_plant_net=net, liters_per_plant_gross=gross,
                            liters_total_gross=gross * plants))
     net_m3 = sum(r.liters_per_plant_net for r in days) * plants / 1000
-    return WaterPlan(crop=crop, plants=plants, area_per_plant_m2=area_per_plant_m2, et0_mm_day=et0_mm_day,
+    return WaterPlan(crop=crop, plants=plants, area_per_plant_m2=area_per_plant_m2,
+                     et0_mm_day=sum(r.et0_mm for r in days) / len(days),      # the average over the cycle
                      efficiency=efficiency, stage_days=sd, days=days, net_m3=net_m3,
                      gross_m3=net_m3 / efficiency,
                      peak_liters_per_day=max(r.liters_total_gross for r in days))

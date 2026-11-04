@@ -403,7 +403,6 @@ class FarmSetting(Base):
     __tablename__ = "farm_setting"
     __table_args__ = (
         CheckConstraint("khr_per_usd > 0", name="ck_setting_rate"),
-        CheckConstraint("et0_mm_day > 0", name="ck_setting_et0"),
         CheckConstraint("irrigation_efficiency > 0 AND irrigation_efficiency <= 1", name="ck_setting_eff"),
     )
     farm_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("farm.id", ondelete="CASCADE"), primary_key=True)
@@ -412,7 +411,6 @@ class FarmSetting(Base):
     family_wage_usd_per_day: Mapped[float | None] = mapped_column(Numeric(8, 2))
     water_cost_per_m3_usd: Mapped[float | None] = mapped_column(Numeric(8, 4))
     land_rent_usd_per_ha_year: Mapped[float | None] = mapped_column(Numeric(10, 2))
-    et0_mm_day: Mapped[float] = mapped_column(Numeric(4, 1), default=4.5, nullable=False)   # an assumption
     irrigation_efficiency: Mapped[float] = mapped_column(Numeric(3, 2), default=0.90, nullable=False)
 
 

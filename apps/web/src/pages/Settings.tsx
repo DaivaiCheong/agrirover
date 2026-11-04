@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
-import { Field, Notice, PageHead, Panel } from "../components/ui";
+import { Field, Notice, PageIntro, Panel } from "../components/ui";
 import { api, type Settings as SettingsT } from "../lib/api";
 import { useData } from "../lib/useData";
 
 const FIELDS: { key: keyof SettingsT; label: string; hint: string }[] = [
-  { key: "khrPerUsd", label: "RIEL PER US DOLLAR", hint: "Used to turn riel into dollars. Each entry keeps the rate of the day it was made." },
-  { key: "familyWageUsdPerDay", label: "FAMILY LABOUR WAGE (USD PER DAY)", hint: "What one day of your own or family work is worth. Counted in the cost, like hired labour." },
-  { key: "waterCostPerM3Usd", label: "WATER COST (USD PER m³)", hint: "Pump fuel or electricity, or bought water, per cubic metre. Leave empty if you will enter water costs yourself." },
-  { key: "landRentUsdPerHaYear", label: "LAND RENT (USD PER HECTARE PER YEAR)", hint: "Rent paid, or what the land could be rented for if you own it. Leave empty to leave land out." },
-  { key: "et0MmDay", label: "ET₀ (mm PER DAY)", hint: "How fast water evaporates where you farm. An assumption until you replace it with a local value." },
-  { key: "irrigationEfficiency", label: "IRRIGATION EFFICIENCY (0 to 1)", hint: "Share of the water that reaches the roots. Drip about 0.9, sprinkler 0.75, hand watering 0.6 (typical)." },
+  { key: "khrPerUsd", label: "Riel per US dollar", hint: "Used to turn riel into dollars. Each entry keeps the rate of the day it was made." },
+  { key: "familyWageUsdPerDay", label: "Family labour wage (USD per day)", hint: "What one day of your own or family work is worth. Counted in the cost, like hired labour." },
+  { key: "waterCostPerM3Usd", label: "Water cost (USD per m³)", hint: "Pump fuel or electricity, or bought water, per cubic metre. Leave empty if you will enter water costs yourself." },
+  { key: "landRentUsdPerHaYear", label: "Land rent (USD per hectare per year)", hint: "Rent paid, or what the land could be rented for if you own it. Leave empty to leave land out." },
+  { key: "irrigationEfficiency", label: "Irrigation efficiency (0 to 1)", hint: "Share of the water that reaches the roots. Drip about 0.9, sprinkler 0.75, hand watering 0.6 (typical)." },
 ];
 
 export default function Settings() {
@@ -37,7 +36,7 @@ export default function Settings() {
 
   return (
     <>
-      <PageHead crumb="SETTINGS" kicker="NUMBERS THE WHOLE FARM USES" title="FARM SETTINGS" />
+      <PageIntro>Numbers the whole farm uses. Leave a number empty if you do not know it; the app will say what is missing.</PageIntro>
       <main className="main stack">
         {error && <Notice kind="alert">Cannot reach the farm server ({error}).</Notice>}
         {data && !data.rateConfirmed && (
@@ -46,7 +45,7 @@ export default function Settings() {
             and press Save so riel amounts are converted correctly.
           </Notice>
         )}
-        <Panel title="SETTINGS">
+        <Panel title="Settings">
           <form className="form" onSubmit={save} style={{ maxWidth: 560 }}>
             {FIELDS.map((f) => (
               <Field key={f.key} label={f.label} hint={f.hint}>

@@ -57,7 +57,9 @@ class ZoneDecision:
     @property
     def name(self) -> str:
         base = self.label or self.zone
-        return f"{base} (day {self.planting_day})" if self.planting_day is not None else base
+        if self.planting_day is None:
+            return base
+        return f"{base} (day {self.planting_day})" if self.planting_day >= 1 else f"{base} (not planted yet)"
 
     @property
     def text(self) -> str:

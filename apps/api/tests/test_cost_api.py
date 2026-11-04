@@ -1,9 +1,10 @@
 """M2 through the real API: costs, stock, equipment, harvest, sales, and the COP report.
 
 The worked example matches tests/test_cop.py, except water: here the planner supplies it.
-Tomato, 100 plants on 50 m2 (0.5 m2 each), ET0 4.5, efficiency 0.9, Kc 0.6 in the first 10 days:
-  litres/day = 0.6 x 4.5 x 0.5 / 0.9 x 100 = 150  ->  10 days = 1.5 m3  x 0.10 USD = 0.15
-  total = 286 + depreciation 10 + land 0.05 + water 0.15 = 296.20      COP = 2.962 per kg."""
+Tomato, 100 plants on 50 m2 (0.5 m2 each), planted 1 January (ET0 4.47, Siem Reap's January), efficiency 0.9,
+Kc 0.6 in the first 10 days:
+  litres/day = 0.6 x 4.47 x 0.5 / 0.9 x 100 = 149  ->  10 days = 1.49 m3  x 0.10 USD = 0.149
+  total = 286 + depreciation 10 + land 0.05 + water 0.149 = 296.20      COP = 2.962 per kg."""
 import csv
 import io
 
@@ -24,7 +25,7 @@ async def seeded(Session):
 async def farm_with_cycle(c, label="Test bed", planted="2026-01-01", closed="2026-01-10", area=50, plants=100):
     assert (await c.put(f"{V1}/farm/settings", json={
         "khrPerUsd": 4000, "familyWageUsdPerDay": 6, "waterCostPerM3Usd": 0.1, "landRentUsdPerHaYear": 365,
-        "et0MmDay": 4.5, "irrigationEfficiency": 0.9})).status_code == 200
+        "irrigationEfficiency": 0.9})).status_code == 200
     bed = (await c.post(f"{V1}/zones", json={"label": label, "areaM2": area})).json()
     cyc = (await c.post(f"{V1}/cycles", json={"zone": bed["name"], "crop": "tomato", "plantedOn": planted,
                                               "plantCount": plants, "areaM2": area})).json()

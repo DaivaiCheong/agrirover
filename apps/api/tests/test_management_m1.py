@@ -19,7 +19,7 @@ async def test_settings_start_unconfirmed_and_are_saved(Session):
     async with pgdb.api(Session) as c:
         body = (await c.get(f"{V1}/farm/settings")).json()
         assert body["khrPerUsd"] == 4000 and body["rateConfirmed"] is False       # a placeholder until saved
-        assert body["et0MmDay"] == 4.5 and body["irrigationEfficiency"] == 0.9
+        assert body["irrigationEfficiency"] == 0.9 and "et0MmDay" not in body    # ET0 now comes from Siem Reap's climate
         assert body["familyWageUsdPerDay"] is None and body["waterCostPerM3Usd"] is None
         assert body["landRentUsdPerHaYear"] is None                                # unset means unset, never a guess
 
@@ -28,9 +28,9 @@ async def test_settings_start_unconfirmed_and_are_saved(Session):
         assert r.status_code == 200 and r.json()["rateConfirmed"] is True
         again = (await c.get(f"{V1}/farm/settings")).json()
         assert again["khrPerUsd"] == 4100 and again["familyWageUsdPerDay"] == 6
-        assert again["et0MmDay"] == 4.5                                            # not sent, so unchanged
+        assert again["irrigationEfficiency"] == 0.9                                # not sent, so unchanged
 
-        for bad in ({"khrPerUsd": 0}, {"irrigationEfficiency": 1.5}, {"et0MmDay": -1}):
+        for bad in ({"khrPerUsd": 0}, {"irrigationEfficiency": 1.5}):
             assert (await c.put(f"{V1}/farm/settings", json=bad)).status_code == 422
 
 
@@ -50,12 +50,13 @@ async def test_crops_live_in_the_database_and_any_crop_can_be_added(Session):
         assert (await c.post(f"{V1}/crops", json={**chilli, "kc": {"ini": 0, "mid": 1, "end": 1}})).status_code == 422
         assert (await c.post(f"{V1}/crops", json={**chilli, "name": "Short", "stageDays": [0, 1, 1, 1]})).status_code == 422
 
-        # the water planner uses the new crop's own numbers
-        p = (await c.post(f"{V1}/water-plan", json={"crop": "chilli-pepper", "plants": 100,
-                                                     "areaPerPlantM2": 0.5, "et0MmDay": 4.5})).json()
-        assert p["cycleDays"] == 110 and p["assumptions"]["stageDays"] == [20, 30, 40, 20]
-        assert (await c.post(f"{V1}/water-plan", json={"crop": "unobtainium", "plants": 1,
-                                                        "et0MmDay": 4.5})).status_code == 422
+        # the crop plan uses the new crop's own numbers (and has no growing guide, which is said plainly)
+        p = (await c.get(f"{V1}/crop-plan", params={"crop": "chilli-pepper", "plants": 100,
+                                                      "plantedOn": "2026-11-15", "today": "2026-11-15"})).json()
+        assert p["cycleDays"] == 110 and p["hasGuide"] is False and "feed" not in p
+        assert [s["days"] for s in p["stages"]] == [20, 30, 40, 20]
+        assert (await c.get(f"{V1}/crop-plan", params={"crop": "unobtainium", "plants": 1,
+                                                         "plantedOn": "2026-11-15"})).status_code == 422
 
 
 @pgdb.with_db("aaf_m1_cycles")
@@ -94,20 +95,3 @@ async def test_beds_and_cycles(Session):
         assert (await c.post(f"{V1}/cycles/{cycle['id']}/close", json={"endedOn": "2026-12-01"})).status_code == 409
         # a closed bed can start a new cycle
         assert (await c.post(f"{V1}/cycles", json={**body, "plantedOn": "2026-12-05"})).status_code == 201
-
-
-@pgdb.with_db("aaf_m1_planner")
-async def test_water_planner_over_the_api(Session):
-    await seeded(Session)
-    body = {"crop": "tomato", "plants": 100, "areaPerPlantM2": 0.5, "et0MmDay": 4.5, "efficiency": 0.9}
-    async with pgdb.api(Session) as c:
-        b = (await c.post(f"{V1}/water-plan", json={**body, "plantedOn": "2026-10-14", "today": "2026-11-04"})).json()
-        assert b["cycleDays"] == 135 and len(b["days"]) == 135
-        assert abs(b["netM3"] - 27.781875) < 1e-3 and abs(b["grossM3"] - 30.8687) < 1e-3
-        assert b["today"]["day"] == 22 and b["today"]["stage"] == "initial"
-        assert "FAO" in b["source"] and b["assumptions"]["et0MmDay"] == 4.5
-        assert (await c.post(f"{V1}/water-plan", json=body)).json()["today"] is None
-        for patch in ({"plants": 0}, {"efficiency": 0}, {"et0MmDay": -1}, {"crop": "unobtainium"}):
-            assert (await c.post(f"{V1}/water-plan", json={**body, **patch})).status_code == 422
-        crops = (await c.get(f"{V1}/water-plan/crops")).json()
-        assert any(x["id"] == "tomato" and x["stageDays"] == [30, 40, 40, 25] for x in crops)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Empty, Field, Notice, PageHead, Panel, Tag } from "../components/ui";
+import { Empty, Field, Notice, PageIntro, Panel, Tag } from "../components/ui";
 import { api, type CostInput } from "../lib/api";
 import { CATEGORY_LABELS, ENTRY_CATEGORIES, cycleLabel, remember, todayIso, usd } from "../lib/format";
 import { useData } from "../lib/useData";
@@ -60,40 +60,39 @@ export default function Costs() {
 
   return (
     <>
-      <PageHead crumb="COSTS" kicker="EVERY DOLLAR OR RIEL SPENT, IN ONE LIST" title="COSTS"
-                actions={<a className="btn btn-ghost btn-sm" href={api.costsCsvUrl}>Download CSV</a>} />
+      <PageIntro actions={<a className="btn btn-ghost btn-sm" href={api.costsCsvUrl}>Download CSV</a>}>Every dollar or riel you spend, in one list. Add it as soon as you spend it.</PageIntro>
       <main className="main stack">
-        <Panel title="ADD A COST">
+        <Panel title="Add a cost">
           <form className="form" onSubmit={save}>
             <div className="row2">
-              <Field label="FOR">
+              <Field label="For">
                 <select value={cycle ?? FARM_LEVEL} onChange={(e) => setCycle(e.target.value)}>
                   {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}</option>)}
                   <option value={FARM_LEVEL}>Whole farm (shared overhead)</option>
                 </select>
               </Field>
-              <Field label="WHAT KIND">
+              <Field label="What kind">
                 <select value={category} onChange={(e) => setCategory(e.target.value)}>
                   {ENTRY_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
                 </select>
               </Field>
             </div>
-            <Field label="DESCRIPTION (OPTIONAL)"><input value={description} maxLength={160} onChange={(e) => setDescription(e.target.value)} /></Field>
+            <Field label="Description (optional)"><input value={description} maxLength={160} onChange={(e) => setDescription(e.target.value)} /></Field>
             <div className="row3">
-              <Field label="QUANTITY"><input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
-              <Field label="UNIT (kg, day, L…)"><input value={unit} maxLength={16} onChange={(e) => setUnit(e.target.value)} /></Field>
-              <Field label="PRICE PER UNIT"><input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></Field>
+              <Field label="Quantity"><input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
+              <Field label="Unit (kg, day, L…)"><input value={unit} maxLength={16} onChange={(e) => setUnit(e.target.value)} /></Field>
+              <Field label="Price per unit"><input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></Field>
             </div>
             <div className="row3">
-              <Field label="OR THE WHOLE AMOUNT" hint="Fill the amount, or quantity and price.">
+              <Field label="Or the whole amount" hint="Fill the amount, or quantity and price.">
                 <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
               </Field>
-              <Field label="CURRENCY">
+              <Field label="Currency">
                 <select value={currency} onChange={(e) => setCurrency(e.target.value as "USD" | "KHR")}>
                   <option value="USD">US dollar</option><option value="KHR">Riel</option>
                 </select>
               </Field>
-              <Field label="DATE"><input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+              <Field label="Date"><input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></Field>
             </div>
             {category === "labour_family" && (
               <Notice>Family labour: enter the days. The price per day comes from the family wage in Settings.</Notice>
@@ -103,7 +102,7 @@ export default function Costs() {
           {msg && <div style={{ marginTop: 12 }}><Notice kind={msg.kind}>{msg.text}</Notice></div>}
         </Panel>
 
-        <Panel title={`COST LIST · ${usd(total)} IN THIS LIST`} pad={false}
+        <Panel title={`Cost list · ${usd(total)} in this list`} pad={false}
                right={
                  <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Show costs for">
                    <option value="">All cycles</option>
@@ -112,13 +111,13 @@ export default function Costs() {
           {costs.error && <Notice kind="alert">{costs.error}</Notice>}
           {rows.length === 0 ? <Empty>No costs yet. Add the first one above.</Empty> : (
             <table className="tbl">
-              <thead><tr><th>DATE</th><th>FOR</th><th>KIND</th><th>DESCRIPTION</th><th className="r">AMOUNT</th><th className="r">USD</th><th /></tr></thead>
+              <thead><tr><th>Date</th><th>For</th><th>Kind</th><th>Description</th><th className="r">Amount</th><th className="r">USD</th><th /></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
                     <td>{r.date}</td>
                     <td>{r.plantingId ? byId.get(r.plantingId)?.bedLabel ?? "—" : "Whole farm"}</td>
-                    <td>{CATEGORY_LABELS[r.category] ?? r.category}{r.source === "stock_use" && <> <Tag>STOCK</Tag></>}</td>
+                    <td>{CATEGORY_LABELS[r.category] ?? r.category}{r.source === "stock_use" && <> <Tag>Stock</Tag></>}</td>
                     <td>{r.description ?? ""}</td>
                     <td className="r">{r.currency === "KHR" ? `${r.amount.toLocaleString()} ៛` : usd(r.amount)}</td>
                     <td className="r"><b>{usd(r.amountUsd)}</b></td>

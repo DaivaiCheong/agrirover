@@ -1,4 +1,4 @@
-import { Led, Panel } from "../components/ui";
+import { Notice, PageIntro, Panel, Led } from "../components/ui";
 import { api, type DeviceRow } from "../lib/api";
 import { ago, usePoll } from "../lib/usePoll";
 
@@ -14,22 +14,14 @@ export default function Devices() {
 
   return (
     <>
-      <div className="crumb"><span className="lbl">HOME &gt; DEVICES</span></div>
-      <div className="head">
-        <div className="lbl">REGISTERED HARDWARE · LAST HEARD FROM</div>
-        <h1 className="display d-xl" style={{ marginTop: 8 }}>DEVICE REGISTRY</h1>
-      </div>
+      <PageIntro>The sensors and the rover on your farm, and when each last reported.</PageIntro>
 
       <main className="main">
-        {error && (
-          <p className="mono-sm" style={{ color: "var(--alert)", marginBottom: 14 }}>
-            Cannot reach the farm server ({error}).
-          </p>
-        )}
-        <Panel title="DEVICES" pad={false}>
+        {error && <Notice kind="alert">Cannot reach the farm server ({error}).</Notice>}
+        <Panel title="Devices" pad={false}>
           <table className="tbl">
             <thead>
-              <tr><th>CODE</th><th>KIND</th><th>ZONE</th><th>STATUS</th><th>LAST SEEN</th><th>FIRMWARE</th></tr>
+              <tr><th>Code</th><th>Kind</th><th>Zone</th><th>Status</th><th>Last seen</th><th>Firmware</th></tr>
             </thead>
             <tbody>
               {(data ?? []).map((d) => {

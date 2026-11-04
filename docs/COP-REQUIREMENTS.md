@@ -82,6 +82,6 @@ Owner = who needs it. Verdict: KEEP (built), LATER (after the demo), DELETE (not
 
 - No login: anyone with the address can see and change the farm's data.
 - The riel rate starts as 4,000 per dollar, a placeholder shown with a warning until the farmer saves a rate.
-- ET₀ 4.5 mm/day and irrigation efficiency 0.9 are assumptions, so the water estimate is only as good as they are.
+- The water estimate uses Siem Reap's monthly ET₀ (NASA weather, FAO-56 method; see TOMATO-RESEARCH.md) and an irrigation efficiency of 0.9 (drip), a typical figure the farmer can change. It is an estimate, not a meter.
 - Family wage and land rent are the farmer's own numbers; empty means left out, and the report says so.
 - The compare screen shows what was recorded. It does not prove why two beds differ.

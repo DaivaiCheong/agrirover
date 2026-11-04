@@ -19,7 +19,6 @@ class SettingsIn(BaseModel):
     family_wage_usd_per_day: float | None = Field(None, ge=0, le=10_000)
     water_cost_per_m3_usd: float | None = Field(None, ge=0, le=1_000)
     land_rent_usd_per_ha_year: float | None = Field(None, ge=0, le=1_000_000)
-    et0_mm_day: float | None = Field(None, gt=0, le=15)
     irrigation_efficiency: float | None = Field(None, gt=0, le=1)
 
 
@@ -31,7 +30,7 @@ def _settings_dict(s) -> dict:
     return {"khrPerUsd": _num(s.khr_per_usd), "rateConfirmed": s.rate_confirmed,
             "familyWageUsdPerDay": _num(s.family_wage_usd_per_day),
             "waterCostPerM3Usd": _num(s.water_cost_per_m3_usd),
-            "landRentUsdPerHaYear": _num(s.land_rent_usd_per_ha_year), "et0MmDay": _num(s.et0_mm_day),
+            "landRentUsdPerHaYear": _num(s.land_rent_usd_per_ha_year),
             "irrigationEfficiency": _num(s.irrigation_efficiency)}
 
 

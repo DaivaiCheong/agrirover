@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Empty, Field, Notice, PageHead, Panel, Tag } from "../components/ui";
+import { Empty, Field, Notice, PageIntro, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
 import { todayIso, usd } from "../lib/format";
 import { useData } from "../lib/useData";
 
 const STATUS: Record<string, [string, string]> = {
-  in_service: ["ok", "IN USE"], retired: ["", "RETIRED"], worn_out: ["warn", "FULLY WORN OUT"],
+  in_service: ["ok", "In use"], retired: ["", "Retired"], worn_out: ["warn", "Fully worn out"],
 };
 
 export default function Equipment() {
@@ -37,18 +37,18 @@ export default function Equipment() {
 
   return (
     <>
-      <PageHead crumb="EQUIPMENT" kicker="PUMP, DRIP LINES, TANK, SENSORS: THINGS THAT WEAR OUT" title="EQUIPMENT" />
+      <PageIntro>Pump, drip lines, tank and sensors wear out. Their price is spread over their life.</PageIntro>
       <main className="main stack">
         <Notice>
           Equipment is not a cost the day you buy it. Its price is spread over its life, a little each day, and each
           crop cycle carries its share. Right now that is <b>{usd(perDay, 3)}</b> a day across the farm.
         </Notice>
         {assets.error && <Notice kind="alert">{assets.error}</Notice>}
-        <Panel title="EQUIPMENT LIST" pad={false}>
+        <Panel title="Equipment list" pad={false}>
           {rows.length === 0 ? <Empty>No equipment yet. Add your pump or drip lines below.</Empty> : (
             <table className="tbl">
-              <thead><tr><th>NAME</th><th>BOUGHT</th><th className="r">PRICE</th><th className="r">LIFE (YEARS)</th>
-                <th className="r">PER DAY</th><th>STATUS</th><th /></tr></thead>
+              <thead><tr><th>Name</th><th>Bought</th><th className="r">Price</th><th className="r">Life (years)</th>
+                <th className="r">Per day</th><th>Status</th><th /></tr></thead>
               <tbody>
                 {rows.map((a) => (
                   <tr key={a.id}>
@@ -65,16 +65,16 @@ export default function Equipment() {
             </table>
           )}
         </Panel>
-        <Panel title="ADD EQUIPMENT">
+        <Panel title="Add equipment">
           <form className="form" onSubmit={add} style={{ maxWidth: 560 }}>
-            <Field label="WHAT IS IT"><input required value={name} onChange={(e) => setName(e.target.value)} /></Field>
+            <Field label="What is it"><input required value={name} onChange={(e) => setName(e.target.value)} /></Field>
             <div className="row2">
-              <Field label="PRICE PAID (USD)"><input required inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
-              <Field label="DATE BOUGHT"><input type="date" required value={bought} onChange={(e) => setBought(e.target.value)} /></Field>
+              <Field label="Price paid (USD)"><input required inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
+              <Field label="Date bought"><input type="date" required value={bought} onChange={(e) => setBought(e.target.value)} /></Field>
             </div>
             <div className="row2">
-              <Field label="HOW MANY YEARS IT LASTS"><input required inputMode="decimal" value={life} onChange={(e) => setLife(e.target.value)} /></Field>
-              <Field label="WORTH AT THE END (USD, OPTIONAL)"><input inputMode="decimal" value={salvage} onChange={(e) => setSalvage(e.target.value)} /></Field>
+              <Field label="How many years it lasts"><input required inputMode="decimal" value={life} onChange={(e) => setLife(e.target.value)} /></Field>
+              <Field label="Worth at the end (USD, optional)"><input inputMode="decimal" value={salvage} onChange={(e) => setSalvage(e.target.value)} /></Field>
             </div>
             <div><button className="btn">Add equipment</button></div>
           </form>
