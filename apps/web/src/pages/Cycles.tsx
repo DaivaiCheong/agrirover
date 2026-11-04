@@ -21,6 +21,11 @@ export default function Cycles() {
   const [variety, setVariety] = useState("");
   const [msg, setMsg] = useState<{ kind: "ok" | "alert"; text: string } | null>(null);
 
+  // fix the plant count and area of a cycle that is already running
+  const [editing, setEditing] = useState<string | null>(null);
+  const [ePlants, setEPlants] = useState("");
+  const [eArea, setEArea] = useState("");
+
   const [cName, setCName] = useState("");
   const [kc, setKc] = useState({ ini: "", mid: "", end: "" });
   const [stages, setStages] = useState(["", "", "", ""]);
@@ -49,6 +54,17 @@ export default function Cycles() {
   async function close(id: string, label: string) {
     if (!window.confirm(`Close the cycle on ${label} today? Costs and harvest stay; you can still read the report.`)) return;
     try { await api.closeCycle(id); cycles.reload(); } catch (err) { setMsg({ kind: "alert", text: (err as Error).message }); }
+  }
+
+  async function saveEdit(id: string) {
+    try {
+      await api.updateCycle(id, { plantCount: ePlants === "" ? undefined : Number(ePlants),
+                                  areaM2: eArea === "" ? undefined : Number(eArea) });
+      setEditing(null);
+      cycles.reload();
+    } catch (err) {
+      setMsg({ kind: "alert", text: (err as Error).message });
+    }
   }
 
   async function addCrop(e: React.FormEvent) {
@@ -84,9 +100,18 @@ export default function Cycles() {
                     <td>{c.cropName}{c.variety ? ` (${c.variety})` : ""}</td>
                     <td>{c.plantedOn}</td>
                     <td>{c.status === "active" ? <Tag kind="ok">DAY {c.day}</Tag> : <Tag>CLOSED {c.endedOn}</Tag>}</td>
-                    <td className="r">{c.plantCount ?? "—"}</td>
-                    <td className="r">{c.areaM2 ?? "—"}</td>
+                    <td className="r">{editing === c.id
+                      ? <input className="cell-input" type="number" min={1} value={ePlants} onChange={(e) => setEPlants(e.target.value)} aria-label="Plants" />
+                      : c.plantCount ?? "—"}</td>
+                    <td className="r">{editing === c.id
+                      ? <input className="cell-input" type="number" min={0} step="any" value={eArea} onChange={(e) => setEArea(e.target.value)} aria-label="Area" />
+                      : c.areaM2 ?? "—"}</td>
                     <td className="act">
+                      {editing === c.id ? (
+                        <><button className="linkbtn" onClick={() => saveEdit(c.id)}>Save</button> · <button className="linkbtn" onClick={() => setEditing(null)}>Cancel</button></>
+                      ) : (
+                        <><button className="linkbtn" onClick={() => { setEditing(c.id); setEPlants(c.plantCount?.toString() ?? ""); setEArea(c.areaM2?.toString() ?? ""); }}>Edit</button> · </>
+                      )}
                       <Link to={`/cycles/${c.id}`} className="linkbtn">Cost report</Link>
                       {c.status === "active" && <> · <button className="linkbtn" onClick={() => close(c.id, c.bedLabel)}>Close</button></>}
                     </td>

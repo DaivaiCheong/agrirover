@@ -284,3 +284,4 @@ a.btn{text-decoration:none}
 /* consistent control heights, and selects placed in panel headers */
 .field input,.field select{min-height:46px}
 .panel-head select{font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line-strong);background:#fff;max-width:60%}
+.cell-input{width:92px;padding:5px 8px;font:inherit;font-size:12px;border:1px solid var(--line-strong);text-align:right;background:#fff}
