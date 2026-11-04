@@ -55,3 +55,14 @@ services:
       ROVER_REPORT_DIR: /srv/reports
     depends_on: [ broker ]
     volumes: [ "./edge/rover-agent/reports:/srv/reports" ]
+
+  field-sim:
+    # Simulated ESP8266 field node: publishes soil/rain telemetry, no hardware.
+    # Change SIM_SCENARIO (dry | wet | rain) and `docker compose up -d field-sim`.
+    build: ./edge/field-node-sim
+    profiles: [ "sim" ]
+    environment:
+      MQTT_HOST: broker
+      SIM_SCENARIO: ${SIM_SCENARIO:-dry}
+      SIM_INTERVAL: "10"
+    depends_on: [ broker ]

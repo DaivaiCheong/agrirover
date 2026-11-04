@@ -85,6 +85,7 @@ docker compose --profile sim up -d
 curl -X POST localhost:8000/api/v1/missions -H "content-type: application/json" \
      -d '{"zoneId": "zone-a", "rows": 4, "cols": 10}'
 docker compose logs -f rover-sim
+docker compose logs -f field-sim   # simulated field node; SIM_SCENARIO=dry|wet|rain in .env
 ```
 
 Platform tests: `cd apps/api && pip install -r requirements.txt && python -m pytest`

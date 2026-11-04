@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routers import assistant, auth, devices, irrigation, missions, telemetry, zones
 from app.workers.mqtt_ingest import ingest_lifespan
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 
 @asynccontextmanager
