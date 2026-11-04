@@ -6,13 +6,10 @@ m2 is one litre, so litres per plant per day = ETc x area per plant. Irrigation 
 from datetime import date
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app.main import app
 from app.services import water_plan as wp
 
-T = wp.CROPS["tomato"]
-client = TestClient(app)
+T = wp.TOMATO
 
 
 # ------------------------------------------------ Kc by day (FAO-56, tomato)
@@ -91,35 +88,3 @@ def test_today_in_the_cycle():
     assert wp.position(p, date(2026, 11, 4), date(2026, 11, 4)).day == 1
     assert wp.position(p, date(2026, 11, 5), date(2026, 11, 4)) is None            # not planted yet
     assert wp.position(p, date(2026, 1, 1), date(2026, 11, 4)) is None             # cycle finished
-
-
-# --------------------------------------------------------------------- API
-
-BODY = {"crop": "tomato", "plants": 100, "areaPerPlantM2": 0.5, "et0MmDay": 4.5, "efficiency": 0.9}
-
-
-def test_api_returns_totals_and_a_daily_table():
-    r = client.post("/api/v1/water-plan", json={**BODY, "plantedOn": "2026-10-14", "today": "2026-11-04"})
-    assert r.status_code == 200
-    b = r.json()
-    assert b["cycleDays"] == 135 and len(b["days"]) == 135
-    assert b["netM3"] == pytest.approx(27.781875, rel=1e-4)
-    assert b["grossM3"] == pytest.approx(30.8687, rel=1e-4)
-    assert b["today"]["day"] == 22 and b["today"]["stage"] == "initial"        # days 1-30 are the initial stage
-    assert "FAO" in b["source"] and b["assumptions"]["et0MmDay"] == 4.5
-
-
-def test_api_without_a_planting_date_has_no_today():
-    assert client.post("/api/v1/water-plan", json=BODY).json()["today"] is None
-
-
-def test_api_rejects_bad_input():
-    for patch in ({"plants": 0}, {"efficiency": 0}, {"et0MmDay": -1}, {"crop": "unobtainium"}):
-        assert client.post("/api/v1/water-plan", json={**BODY, **patch}).status_code == 422
-
-
-def test_api_lists_crops_with_their_source_and_defaults():
-    crops = client.get("/api/v1/water-plan/crops").json()
-    tomato = next(c for c in crops if c["id"] == "tomato")
-    assert tomato["stageDays"] == [30, 40, 40, 25] and tomato["kc"] == {"ini": 0.6, "mid": 1.15, "end": 0.8}
-    assert "FAO" in tomato["source"]

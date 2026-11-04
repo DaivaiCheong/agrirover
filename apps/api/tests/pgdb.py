@@ -62,3 +62,27 @@ def with_db(db_name: str):
         return test
 
     return wrap
+
+
+import contextlib  # noqa: E402
+
+
+@contextlib.asynccontextmanager
+async def api(Session):
+    """An HTTP client for the real app, wired to the test database (same event loop, so asyncpg is happy).
+    The app's lifespan (MQTT, Telegram) is not started."""
+    import httpx
+
+    from app.core.db import get_db
+    from app.main import app
+
+    async def override():
+        async with Session() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = override
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            yield client
+    finally:
+        app.dependency_overrides.pop(get_db, None)

@@ -1,11 +1,16 @@
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+from datetime import date
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import get_db
+from app.models.entities import CropProfile
+from app.services import crops as crop_svc
 from app.services import water_plan as wp
+from app.services.clock import farm_today
 
 router = APIRouter(prefix="/water-plan", tags=["water-plan"])
 
@@ -21,13 +26,6 @@ class PlanIn(BaseModel):
     stage_days: list[int] | None = Field(None, min_length=4, max_length=4)
     planted_on: date | None = None
     today: date | None = None                      # default: today in Cambodia
-
-    @field_validator("crop")
-    @classmethod
-    def _known_crop(cls, v: str) -> str:
-        if v not in wp.CROPS:
-            raise ValueError(f"unknown crop {v!r}; choose from {sorted(wp.CROPS)}")
-        return v
 
     @field_validator("stage_days")
     @classmethod
@@ -45,16 +43,23 @@ def _row(r: wp.DayRow) -> dict:
 
 
 @router.get("/crops")
-async def crops():
-    return [{"id": c.id, "name": c.name, "kc": {"ini": c.kc_ini, "mid": c.kc_mid, "end": c.kc_end},
-             "stageDays": list(c.stage_days), "source": c.source} for c in wp.CROPS.values()]
+async def crops(session: AsyncSession = Depends(get_db)):
+    """Crops that have water data, with their numbers and where those came from."""
+    rows = (await session.execute(select(CropProfile).order_by(CropProfile.common_name))).scalars().all()
+    out = []
+    for r in rows:
+        w = crop_svc.water_data(r)
+        if w:
+            out.append({"id": w.id, "name": w.name, "kc": {"ini": w.kc_ini, "mid": w.kc_mid, "end": w.kc_end},
+                        "stageDays": list(w.stage_days), "source": w.source})
+    return out
 
 
 @router.post("")
-async def make_plan(body: PlanIn):
-    crop = wp.CROPS[body.crop]
+async def make_plan(body: PlanIn, session: AsyncSession = Depends(get_db)):
+    crop = await crop_svc.load_crop(session, body.crop)
     p = wp.plan(crop, body.plants, body.area_per_plant_m2, body.et0_mm_day, body.efficiency, body.stage_days)
-    today = body.today or datetime.now(ZoneInfo("Asia/Phnom_Penh")).date()
+    today = body.today or farm_today()
     now_row = wp.position(p, body.planted_on, today) if body.planted_on else None
     return {
         "crop": crop.name,

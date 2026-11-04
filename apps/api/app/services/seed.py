@@ -19,8 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.security import hash_password
-from app.models.entities import (CropProfile, Device, DeviceKind, Farm, IrrigationRule, Planting, Role,
-                                 Sensor, TrialArm, User, Zone)
+from app.models.entities import (CropProfile, Device, DeviceKind, Farm, FarmSetting, IrrigationRule, Planting,
+                                 Role, Sensor, TrialArm, User, Zone)
+from app.services.water_plan import TOMATO
 
 DEFAULT_DEVICE = "ESP-FIELD-01"
 # (zone id, label, trial arm, letter used in probe codes)
@@ -59,6 +60,14 @@ async def seed_stage1(session: AsyncSession, farm_name: str | None = None,
                              opt_moisture_min_pct=30, opt_moisture_max_pct=45)
         session.add(tomato)
         await session.flush()
+    if tomato.slug is None:                      # fill the water numbers, never overwrite ones someone set
+        tomato.slug = TOMATO.id
+        tomato.kc_ini, tomato.kc_mid, tomato.kc_end = TOMATO.kc_ini, TOMATO.kc_mid, TOMATO.kc_end
+        (tomato.stage_ini_days, tomato.stage_dev_days,
+         tomato.stage_mid_days, tomato.stage_late_days) = TOMATO.stage_days
+        tomato.kc_source = TOMATO.source
+    if await session.get(FarmSetting, farm.id) is None:
+        session.add(FarmSetting(farm_id=farm.id))
 
     device = (await session.execute(select(Device).where(Device.code == device_code))).scalar_one_or_none()
     if device is None:

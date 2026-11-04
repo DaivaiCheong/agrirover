@@ -9,7 +9,7 @@ Method (FAO Irrigation and Drainage Paper 56, single crop coefficient):
 
 Rain is NOT subtracted, so the figures are for a fully irrigated crop (an upper bound in
 the wet season). ET0 depends on the place and the month and must be supplied.
-Crops are data: adding one means adding an entry to CROPS, not new code.
+Crops are data (the crop_profile table); TOMATO below is only the definition the seed loads.
 """
 from __future__ import annotations
 
@@ -37,8 +37,6 @@ TOMATO = CropWater(
             "Kc end 0.80, the midpoint of FAO's 0.70-0.90. Kc ini 0.6 is the Solanaceae-row value. "
             "Check stage lengths against your own variety."),
 )
-
-CROPS: dict[str, CropWater] = {TOMATO.id: TOMATO}
 
 
 @dataclass(frozen=True)
@@ -129,6 +127,11 @@ def plan(crop: CropWater, plants: int, area_per_plant_m2: float, et0_mm_day: flo
                      efficiency=efficiency, stage_days=sd, days=days, net_m3=net_m3,
                      gross_m3=net_m3 / efficiency,
                      peak_liters_per_day=max(r.liters_total_gross for r in days))
+
+
+def m3_through(p: WaterPlan, day: int) -> float:
+    """Irrigation water (gross) used from day 1 up to and including `day`, in m3. Used for an open cycle."""
+    return sum(r.liters_total_gross for r in p.days[:max(0, day)]) / 1000
 
 
 def crop_day(planted_on: date, today: date) -> int:

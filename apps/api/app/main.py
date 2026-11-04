@@ -2,11 +2,13 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import (assistant, auth, decisions, devices, irrigation, missions, photos, telemetry,
-                         water_plan, zones)
+from app.routers import (assistant, auth, cycles, decisions, devices, farm, irrigation, missions, photos,
+                         telemetry, water_plan, zones)
+from app.services.errors import Conflict, Invalid, NotFound
 from app.workers.mqtt_ingest import ingest_lifespan
 from app.workers.telegram_worker import telegram_lifespan
 
@@ -38,6 +40,22 @@ app.add_middleware(
 )
 
 V1 = "/api/v1"
+
+
+@app.exception_handler(NotFound)
+async def _not_found(_, exc: NotFound):
+    return JSONResponse({"detail": str(exc)}, status_code=404)
+
+
+@app.exception_handler(Conflict)
+async def _conflict(_, exc: Conflict):
+    return JSONResponse({"detail": str(exc)}, status_code=409)
+
+
+@app.exception_handler(Invalid)
+async def _invalid(_, exc: Invalid):
+    return JSONResponse({"detail": str(exc)}, status_code=422)
+
 app.include_router(auth.router,       prefix=V1)
 app.include_router(zones.router,      prefix=V1)
 app.include_router(telemetry.router,  prefix=V1)
@@ -48,6 +66,8 @@ app.include_router(missions.router,   prefix=V1)
 app.include_router(decisions.router,  prefix=V1)
 app.include_router(photos.router,     prefix=V1)
 app.include_router(water_plan.router, prefix=V1)
+app.include_router(farm.router,       prefix=V1)
+app.include_router(cycles.router,     prefix=V1)
 
 
 @app.get("/health", tags=["system"])

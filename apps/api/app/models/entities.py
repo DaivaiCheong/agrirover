@@ -92,6 +92,16 @@ class CropProfile(Base):
     opt_moisture_min_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
     opt_moisture_max_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
     growth_duration_days: Mapped[int | None] = mapped_column(Integer)
+    # Water coefficients (FAO-56 single Kc). Empty for a crop with no water data yet.
+    slug: Mapped[str | None] = mapped_column(String(48), unique=True)
+    kc_ini: Mapped[float | None] = mapped_column(Numeric(4, 2))
+    kc_mid: Mapped[float | None] = mapped_column(Numeric(4, 2))
+    kc_end: Mapped[float | None] = mapped_column(Numeric(4, 2))
+    stage_ini_days: Mapped[int | None] = mapped_column(SmallInteger)
+    stage_dev_days: Mapped[int | None] = mapped_column(SmallInteger)
+    stage_mid_days: Mapped[int | None] = mapped_column(SmallInteger)
+    stage_late_days: Mapped[int | None] = mapped_column(SmallInteger)
+    kc_source: Mapped[str | None] = mapped_column(Text)
 
 
 class Zone(Base):
@@ -144,7 +154,9 @@ class Planting(Base):
     crop_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crop_profile.id", ondelete="RESTRICT"), nullable=False)
     variety: Mapped[str | None] = mapped_column(String(80))
     planted_on: Mapped[date] = mapped_column(Date, nullable=False)
-    ended_on: Mapped[date | None] = mapped_column(Date)
+    ended_on: Mapped[date | None] = mapped_column(Date)                 # empty while the cycle is open
+    plant_count: Mapped[int | None] = mapped_column(Integer)
+    area_m2: Mapped[float | None] = mapped_column(Numeric(10, 2))
 
 
 class Sensor(Base):
@@ -380,3 +392,132 @@ class FieldObservation(Base):
     value: Mapped[float | None] = mapped_column(Numeric(10, 2))
     note: Mapped[str | None] = mapped_column(Text)
     recorded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+
+# --------------------------------------------------------------------------
+# Management: what a crop cycle costs, and what it yields (cost of production).
+# Every table reaches a farm, so adding login later is not a rewrite.
+# --------------------------------------------------------------------------
+class FarmSetting(Base):
+    """One row per farm. Empty (NULL) means "not set": the report then says so instead of guessing."""
+    __tablename__ = "farm_setting"
+    __table_args__ = (
+        CheckConstraint("khr_per_usd > 0", name="ck_setting_rate"),
+        CheckConstraint("et0_mm_day > 0", name="ck_setting_et0"),
+        CheckConstraint("irrigation_efficiency > 0 AND irrigation_efficiency <= 1", name="ck_setting_eff"),
+    )
+    farm_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("farm.id", ondelete="CASCADE"), primary_key=True)
+    khr_per_usd: Mapped[float] = mapped_column(Numeric(10, 2), default=4000, nullable=False)
+    rate_confirmed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)   # 4000 is a placeholder until saved
+    family_wage_usd_per_day: Mapped[float | None] = mapped_column(Numeric(8, 2))
+    water_cost_per_m3_usd: Mapped[float | None] = mapped_column(Numeric(8, 4))
+    land_rent_usd_per_ha_year: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    et0_mm_day: Mapped[float] = mapped_column(Numeric(4, 1), default=4.5, nullable=False)   # an assumption
+    irrigation_efficiency: Mapped[float] = mapped_column(Numeric(3, 2), default=0.90, nullable=False)
+
+
+class StockItem(Base):
+    """An input kept in the shed. Buying it adds stock; using it on a cycle creates the cost."""
+    __tablename__ = "stock_item"
+    __table_args__ = (UniqueConstraint("farm_id", "name", name="uq_stock_farm_name"),)
+    id: Mapped[uuid.UUID] = _pk()
+    farm_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("farm.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    category: Mapped[str] = mapped_column(String(24), nullable=False)          # seed | fertilizer | pesticide | materials
+    unit: Mapped[str] = mapped_column(String(16), nullable=False)
+    qty_on_hand: Mapped[float] = mapped_column(Numeric(14, 3), default=0, nullable=False)
+    avg_unit_cost_usd: Mapped[float] = mapped_column(Numeric(14, 4), default=0, nullable=False)   # moving average
+
+
+class StockMove(Base):
+    __tablename__ = "stock_move"
+    __table_args__ = (
+        CheckConstraint("qty > 0", name="ck_move_qty"),
+        CheckConstraint("kind IN ('in', 'out')", name="ck_move_kind"),
+    )
+    id: Mapped[uuid.UUID] = _pk()
+    item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("stock_item.id", ondelete="CASCADE"), nullable=False)
+    move_date: Mapped[date] = mapped_column(Date, nullable=False)
+    kind: Mapped[str] = mapped_column(String(3), nullable=False)
+    qty: Mapped[float] = mapped_column(Numeric(14, 3), nullable=False)
+    unit_cost_usd: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
+    planting_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("planting.id", ondelete="RESTRICT"))
+    note: Mapped[str | None] = mapped_column(String(160))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CostEntry(Base):
+    """One line of money spent. The single ledger for the whole farm. An entry with no
+    planting_id is a farm-level cost (overhead) and is shared across the cycles active that day."""
+    __tablename__ = "cost_entry"
+    __table_args__ = (
+        CheckConstraint("amount >= 0", name="ck_cost_amount"),
+        CheckConstraint("currency IN ('USD', 'KHR')", name="ck_cost_currency"),
+    )
+    id: Mapped[uuid.UUID] = _pk()
+    farm_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("farm.id", ondelete="CASCADE"), nullable=False)
+    planting_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("planting.id", ondelete="RESTRICT"))
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    category: Mapped[str] = mapped_column(String(24), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(160))
+    qty: Mapped[float | None] = mapped_column(Numeric(12, 3))
+    unit: Mapped[str | None] = mapped_column(String(16))
+    unit_price: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)       # as entered
+    currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    amount_usd: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)   # frozen at the rate of the day
+    rate_used: Mapped[float | None] = mapped_column(Numeric(10, 2))             # KHR per USD, when currency is KHR
+    source: Mapped[str] = mapped_column(String(16), default="manual", nullable=False)   # manual | stock_use
+    stock_move_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("stock_move.id", ondelete="SET NULL"))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))        # soft delete: nothing is lost
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Asset(Base):
+    """Equipment that wears out: pump, drip lines, tank, sensors. Straight-line depreciation."""
+    __tablename__ = "asset"
+    __table_args__ = (
+        CheckConstraint("life_years > 0", name="ck_asset_life"),
+        CheckConstraint("cost_usd >= 0 AND salvage_usd >= 0 AND salvage_usd <= cost_usd", name="ck_asset_value"),
+    )
+    id: Mapped[uuid.UUID] = _pk()
+    farm_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("farm.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    cost_usd: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    bought_on: Mapped[date] = mapped_column(Date, nullable=False)
+    life_years: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    salvage_usd: Mapped[float] = mapped_column(Numeric(14, 2), default=0, nullable=False)
+    retired_on: Mapped[date | None] = mapped_column(Date)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Harvest(Base):
+    """What came off the plants. Lost = total - marketable - kept at home."""
+    __tablename__ = "harvest"
+    __table_args__ = (
+        CheckConstraint("kg_total >= 0 AND kg_marketable >= 0 AND kg_home >= 0", name="ck_harvest_nonneg"),
+        CheckConstraint("kg_marketable + kg_home <= kg_total", name="ck_harvest_sums"),
+    )
+    id: Mapped[uuid.UUID] = _pk()
+    planting_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("planting.id", ondelete="CASCADE"), nullable=False)
+    harvest_date: Mapped[date] = mapped_column(Date, nullable=False)
+    kg_total: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    kg_marketable: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    kg_home: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(160))
+
+
+class Sale(Base):
+    __tablename__ = "sale"
+    __table_args__ = (
+        CheckConstraint("kg > 0 AND price_per_kg >= 0", name="ck_sale_values"),
+        CheckConstraint("currency IN ('USD', 'KHR')", name="ck_sale_currency"),
+    )
+    id: Mapped[uuid.UUID] = _pk()
+    planting_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("planting.id", ondelete="CASCADE"), nullable=False)
+    sale_date: Mapped[date] = mapped_column(Date, nullable=False)
+    kg: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    price_per_kg: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)     # as entered
+    currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    amount_usd: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)       # kg x price, in USD at the day's rate
+    buyer: Mapped[str | None] = mapped_column(String(120))
