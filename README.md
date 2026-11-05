@@ -61,7 +61,7 @@ Details: [control hierarchy](docs/architecture/control-hierarchy.md) · [rover d
 | Stage-aware crop conditions and alerts (advice only) | `apps/api/app/services/agronomy.py` | **Implemented** · tested |
 | 7-in-1 soil probe and air sensor: ingest, history, ribbon | `apps/api/app/services/metrics.py` | **Implemented** · firmware reader not written |
 | Growing setups and yield forecast, symptom cross-check | `apps/api/app/services/setups.py`, `diagnosis.py` | **Implemented** · tested |
-| Mission API `POST /api/v1/missions` | `apps/api/app/routers/missions.py` | **Implemented** · tested |
+| Mission API, live state, stored surveys, Rover screen | `apps/api/app/routers/missions.py`, `apps/web/src/pages/Rover.tsx` | **Implemented** · tested against the simulated rover |
 | AI assistant — propose / approve | `apps/api/app/services/assistant.py` | Safety checks implemented; model wiring in progress |
 | Disease model — MobileNetV2, tomato leaves | `rover/vision.py` (adapter) | Prototype; model file not in this repo |
 | Database persistence, dashboard | `apps/api`, `apps/web` | Schema complete; in progress |

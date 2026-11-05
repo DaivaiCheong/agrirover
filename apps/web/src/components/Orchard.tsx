@@ -60,7 +60,7 @@ export function JobRow({ j, bed, fruitMm, onDone, onFruit }:
 }
 
 export function JobsHead({ bed }: { bed?: boolean }) {
-  return <thead><tr>{bed && <th>Bed</th>}<th>Job</th><th className="r">When</th><th>Status</th><th /></tr></thead>;
+  return <thead><tr>{bed && <th>Bed</th>}<th>Task</th><th className="r">When</th><th>Status</th><th /></tr></thead>;
 }
 
 export function OrchardJobs({ jobs, fruitMm, onDone, onFruit }:

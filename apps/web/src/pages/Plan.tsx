@@ -131,7 +131,7 @@ export default function Plan() {
 
   const tabs: { id: TabId; label: string; icon: LucideIcon }[] = plan ? [
     { id: "water", label: "Water", icon: Droplets },
-    { id: "jobs", label: "Jobs by stage", icon: CalendarDays },
+    { id: "jobs", label: "Tasks by stage", icon: CalendarDays },
     ...(plan.feed ? [{ id: "feed" as const, label: "Feeding", icon: FlaskConical }] : []),
     ...(plan.harvest ? [{ id: "harvest" as const, label: "Harvest", icon: Wheat }] : []),
     { id: "sources", label: "Sources", icon: BookOpen },
@@ -450,7 +450,7 @@ export default function Plan() {
                 <Panel pad={false}>
                   {!plan.hasGuide && (
                     <div className="panel-pad">
-                      <Notice>{plan.crop} has water numbers but no growing guide yet, so there are no jobs, feeding or harvest notes. Only tomato has been researched so far.</Notice>
+                      <Notice>{plan.crop} has water numbers but no growing guide yet, so there are no tasks, feeding or harvest notes. Only tomato has been researched so far.</Notice>
                     </div>
                   )}
                   {plan.stages.map((s, i) => {

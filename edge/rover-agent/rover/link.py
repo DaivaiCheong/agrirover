@@ -1,13 +1,13 @@
 """MQTT link between the rover and the farm server (Raspberry Pi core).
 
 Subscribes
-    devices/rover-01/mission/set     start a survey  {missionId, zoneId, rows, cols, cellM}
+    devices/rover-01/mission/set     start a survey  {missionId, zoneId, rows, cols, cellM, sim?}
     devices/rover-01/estop           {"estop": true} engages, {"estop": false} releases
     farm/<farm>/zone/+/telemetry     field-node readings; rain aborts a survey
 Publishes
     devices/rover-01/mission/state   progress, then the final summary   (retained)
     devices/rover-01/mission/result  full report
-    devices/rover-01/status          online / offline (last will)        (retained)
+    devices/rover-01/status          online / offline (last will), e-stop on or off  (retained)
 
 Losing the broker connection mid-mission stops the rover at its next check
 (guard `link_lost`). Every report is also written to disk, so nothing is lost
@@ -92,20 +92,22 @@ class RoverLink:
                                   keepalive=self.cfg.guard.mqtt_keepalive_s, will=will) as client:
             self._client = client
             self.guards.link_ok = True
-            await client.publish(self.cfg.topic_status,
-                                 json.dumps({"status": "online", "device": self.cfg.device_code}),
-                                 qos=1, retain=True)
+            await client.publish(self.cfg.topic_status, json.dumps(self._status("online")), qos=1, retain=True)
             for topic in (self.cfg.topic_mission_set, self.cfg.topic_estop, self.cfg.topic_farm_telemetry):
                 await client.subscribe(topic, qos=1)
             log.info("connected to %s:%s", self.cfg.mqtt_host, self.cfg.mqtt_port)
             async for msg in client.messages:
                 await self.handle(str(msg.topic), msg.payload)
 
+    def _status(self, status: str) -> dict:
+        return {"status": status, "device": self.cfg.device_code, "estop": self.guards.estop}
+
     async def handle(self, topic: str, payload) -> None:
         data = decode(payload)
         if topic == self.cfg.topic_estop:
             self.guards.estop = estop_requested(data)
             log.warning("e-stop %s", "ENGAGED" if self.guards.estop else "released")
+            await self._publish(self.cfg.topic_status, self._status("online"), retain=True)
         elif topic == self.cfg.topic_mission_set:
             await self._start(data)
         elif topic.endswith("/telemetry"):

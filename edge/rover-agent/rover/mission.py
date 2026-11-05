@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 from rover.config import DriveLimits, RoverConfig
 from rover.planner import Cell, path_stats, plan, serpentine
+from rover.report import thumbnail
 from rover.safety import Guards, SafetyStop
 from rover.vision import DEFAULT_CALIBRATION, Calibration, Observation, analyze, with_disease
 
@@ -32,12 +33,41 @@ def _int(value, name: str) -> int:
 
 
 @dataclass(frozen=True)
+class SimOptions:
+    """What a simulated rover meets. Only `run --sim-hardware` reads these; on the real rover they do nothing."""
+    seed: int | None = None
+    battery_v: float | None = None
+    rain_at_cell: int | None = None     # rain starts as this many cells have been photographed
+    speedup: float | None = None
+
+    @classmethod
+    def from_payload(cls, payload: object) -> "SimOptions | None":
+        if payload is None:
+            return None
+        if not isinstance(payload, dict):
+            raise ValueError("sim must be a JSON object")
+        seed, rain = payload.get("seed"), payload.get("rainAtCell")
+        battery, speedup = payload.get("batteryV"), payload.get("speedup")
+        if seed is not None and _int(seed, "seed") < 0:
+            raise ValueError("seed must not be negative")
+        if rain is not None and not (1 <= _int(rain, "rainAtCell") <= MAX_CELLS):
+            raise ValueError(f"rainAtCell must be 1-{MAX_CELLS}")
+        for value, name, low, high in ((battery, "batteryV", 9.0, 13.0), (speedup, "speedup", 0.5, 100.0)):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not (low <= value <= high):
+                raise ValueError(f"{name} must be a number from {low} to {high}")
+        return cls(seed, None if battery is None else float(battery), rain, None if speedup is None else float(speedup))
+
+
+@dataclass(frozen=True)
 class MissionSpec:
     mission_id: str
     zone_id: str
     rows: int
     cols: int
     cell_m: float = 0.5
+    sim: SimOptions | None = None
 
     @classmethod
     def from_payload(cls, payload: object, limits: DriveLimits) -> "MissionSpec":
@@ -50,7 +80,7 @@ class MissionSpec:
                 raise ValueError("cellM must be a number")
             spec = cls(mission_id=str(payload["missionId"]), zone_id=str(payload["zoneId"]),
                        rows=_int(payload["rows"], "rows"), cols=_int(payload["cols"], "cols"),
-                       cell_m=float(cell))
+                       cell_m=float(cell), sim=SimOptions.from_payload(payload.get("sim")))
         except KeyError as exc:
             raise ValueError(f"missing field {exc}") from None
         spec.validate(limits)
@@ -96,6 +126,7 @@ class MissionReport:
     est_duration_s: float
     path: list[tuple[int, int]]
     results: list[CellResult] = field(default_factory=list)
+    simulated: bool = False
 
     @property
     def cells_scanned(self) -> int:
@@ -122,7 +153,7 @@ class MissionReport:
         """The fields the farm server stores in survey_mission."""
         return {
             "missionId": self.mission_id, "zoneId": self.zone_id, "status": self.status,
-            "abortReason": self.abort_reason,
+            "abortReason": self.abort_reason, "simulated": self.simulated,
             "cellsScanned": self.cells_scanned, "cellsTotal": self.rows * self.cols,
             "plantsDetected": self.plants_detected,
             "plantsNeedingWater": self.plants_needing_water,
@@ -150,10 +181,11 @@ def _now() -> str:
 class MissionRunner:
     def __init__(self, cfg: RoverConfig, drive, camera, guards: Guards | None = None,
                  cal: Calibration = DEFAULT_CALIBRATION, classifier=None,
-                 on_frame: Callable | None = None):
+                 on_frame: Callable | None = None, simulated: bool = False):
         self.cfg, self.drive, self.camera = cfg, drive, camera
         self.guards = guards or Guards()
         self.cal, self.classifier, self.on_frame = cal, classifier, on_frame
+        self.simulated = simulated
 
     def _check(self) -> None:
         battery = self.drive.battery_v()
@@ -171,13 +203,18 @@ class MissionRunner:
         results: list[CellResult] = []
         status, reason = "completed", None
 
-        def progress(cell: Cell | None) -> None:
+        def progress(cell: Cell | None, img=None) -> None:
             if on_progress is None:
                 return
             try:
-                on_progress({"missionId": spec.mission_id, "status": "running",
-                             "cell": None if cell is None else [cell.row, cell.col],
-                             "cellsScanned": len(results), "cellsTotal": len(path)})
+                state = {"missionId": spec.mission_id, "status": "running", "zoneId": spec.zone_id,
+                         "rows": spec.rows, "cols": spec.cols, "cellM": spec.cell_m, "simulated": self.simulated,
+                         "cell": None if cell is None else [cell.row, cell.col],
+                         "cellsScanned": len(results), "cellsTotal": len(path), "battery": self.drive.battery_v()}
+                if results and cell is not None:      # what the camera just saw, for whoever is watching
+                    state["observation"] = results[-1].to_dict()
+                    state["frame"] = thumbnail(img)
+                on_progress(state)
             except Exception:                  # noqa: BLE001 — a failed status message must not end the mission
                 log.exception("progress callback failed")
 
@@ -200,7 +237,7 @@ class MissionRunner:
                     if hit:
                         obs = with_disease(obs, *hit)
                 results.append(CellResult(cell.row, cell.col, obs))
-                progress(cell)
+                progress(cell, img)
         except SafetyStop as stop:
             status, reason = "aborted", stop.reason
             log.warning("mission %s aborted: %s", spec.mission_id, stop.reason)
@@ -218,7 +255,7 @@ class MissionRunner:
             distance_m=float(getattr(self.drive, "distance_m", 0.0)) - dist0,
             drive_time_s=drive_time,
             est_duration_s=drive_time + len(results) * self.cfg.capture_s,
-            path=[(c.row, c.col) for c in path], results=results,
+            path=[(c.row, c.col) for c in path], results=results, simulated=self.simulated,
         )
 
 

@@ -24,6 +24,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const { mockRequest } = await import("../mock/server");
     return mockRequest<T>(path, init);
   }
+  return fromServer<T>(path, init);
+}
+
+async function fromServer<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -146,6 +150,27 @@ export type Correlation = {
   stage: { key: string; title: string; day: number } | null; zone: string; label: string | null;
   source: "named" | "photo";
 };
+
+// ---- the rover: its real software, with simulated wheels and camera until the chassis is built
+
+export type RoverCell = {
+  row: number; col: number; plant: boolean; needs_water: boolean; flagged: boolean; dryness: number | null;
+  suggested_ml: number | null; canopy?: number | null; chlorosis?: number | null; disease?: string | null; disease_confidence?: number | null;
+};
+export type LiveMission = {
+  missionId: string; zoneId: string; rows: number; cols: number; cellM: number;
+  status: "queued" | "running" | "completed" | "aborted" | "failed" | "rejected" | "lost";
+  reason: string | null; cell: [number, number] | null; battery: number | null; frame: string | null;
+  cellsScanned: number; cellsTotal: number; simulate: string | null; simulated: boolean | null; cells: RoverCell[];
+};
+export type RoverLive = { rover: { code: string; status: "online" | "offline" | "unknown"; estop: boolean }; mission: LiveMission | null };
+export type SurveySummary = {
+  id: string; zone: string; bedLabel: string; status: string; abortReason: string | null; simulated: boolean;
+  rows: number | null; cols: number | null; cellM: number | null; cellsScanned: number | null; plantsDetected: number | null;
+  plantsNeedingWater: number | null; cellsFlagged: number | null; distanceM: number | null; estDurationS: number | null;
+  startedAt: string; finishedAt: string | null;
+};
+export type SurveyInput = { zoneId: string; rows: number; cols: number; cellM: number; simulate: "normal" | "rain" | "low_battery" };
 
 export type ZoneNow = {
   zone: string; label: string | null; areaM2?: number | null; moisturePct: number | null; rain: boolean | null;
@@ -315,6 +340,13 @@ export const api = {
     if (q.rowCm && q.plantCm) { qs.set("rowCm", String(q.rowCm)); qs.set("plantCm", String(q.plantCm)); }
     return request<CropPlan>(`/crop-plan?${qs}`);
   },
+  // the rover runs for real on sample data too; only a survey of a real bed is saved
+  roverLive: () => fromServer<RoverLive>("/missions/live"),
+  roverFrame: (row: number, col: number) => fromServer<{ frame: string | null }>(`/missions/live/frames/${row}/${col}`),
+  roverEstop: (engaged: boolean) => fromServer<{ estop: boolean }>("/missions/estop", { method: "POST", body: JSON.stringify({ engaged }) }),
+  startSurvey: (body: SurveyInput) => fromServer<{ missionId: string }>("/missions", { method: "POST", body: JSON.stringify(body) }),
+  surveys: () => fromServer<SurveySummary[]>("/missions"),
+  survey: (id: string) => fromServer<SurveySummary & { cells: RoverCell[] }>(`/missions/${id}`),
   cyclePlan: (id: string) => request<CropPlan>(`/cycles/${id}/plan`),
   orchardCycle: (id: string, day?: number) => request<OrchardCycle>(`/cycles/${id}/orchard${day ? `?day=${day}` : ""}`),
   orchardJobDone: (id: string, job: string) => send<OrchardCycle>("POST", `/cycles/${id}/orchard/jobs/${job}/done`, {}),

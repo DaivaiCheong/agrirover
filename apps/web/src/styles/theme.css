@@ -200,7 +200,7 @@ a.btn{text-decoration:none}
     border-bottom:1px solid var(--line)}
   .brandmark{padding:0}
   .side-nav,.side-foot{display:none}
-  .bottomnav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;
+  .bottomnav{display:grid;grid-template-columns:repeat(6,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;
     background:var(--surface);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
   .bn{display:grid;justify-items:center;gap:3px;padding:6px 2px;font-size:11.5px;font-weight:600;color:var(--ink-muted);
     text-decoration:none;border-radius:12px}
@@ -740,6 +740,56 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .walk input[type=range]{width:100%;accent-color:var(--brand)}
 .tabs.tabs-in{flex-wrap:wrap}
 
+/* ---------- the rover: a field map is data, so here colour carries state, always with a mark beside it ---------- */
+:root{--soil:#EFE8DA;--soil-line:#D9D0BD;--plant-soft:#DCEBDD;--plant:#3F8A52}
+.tb-left{display:flex;gap:6px;flex-wrap:wrap;margin-right:auto}
+.rm-wrap{padding:12px 14px;display:flex;justify-content:center;background:var(--surface)}
+.rm{display:block;width:100%;max-height:62vh}
+.rm-wrap-sm .rm{max-height:44vh}
+.rm-bg{fill:#fff;stroke:var(--soil-line);stroke-width:1;stroke-dasharray:3 3}
+.rm-cell.rm-bare .rm-bg{fill:var(--soil);stroke-dasharray:none}
+.rm-cell.rm-ok .rm-bg{fill:var(--plant-soft);stroke:#fff;stroke-dasharray:none}
+.rm-cell.rm-water .rm-bg{fill:var(--water);stroke:#fff;stroke-dasharray:none}
+.rm-cell.rm-flag .rm-bg{stroke:#fff}
+.rm-plant{fill:var(--plant)}
+.rm-ml{fill:#fff;font-size:12px;font-weight:700;text-anchor:middle;font-family:var(--font)}
+.rm-outline{fill:none;stroke:var(--warn);stroke-width:2.5}
+.rm-bang{fill:var(--warn);font-size:13px;font-weight:800;text-anchor:middle;font-family:var(--font)}
+.rm-water .rm-bang{fill:#fff}
+.rm-can{cursor:pointer}
+.rm-can:hover .rm-bg{stroke:var(--ink);stroke-width:1.5}
+.rm-can:focus-visible{outline:none}
+.rm-can:focus-visible .rm-bg,.rm-picked .rm-bg{stroke:var(--ink);stroke-width:2.5;stroke-dasharray:none}
+.rm-path{fill:none;stroke:var(--ink-muted);stroke-width:1;stroke-dasharray:2 4;opacity:.45;pointer-events:none}
+.rm-done{fill:none;stroke:var(--ink);stroke-width:2;opacity:.55;stroke-linejoin:round;pointer-events:none}
+.rm-rover{transition:transform .5s ease-out;pointer-events:none}
+.rm-rover path{fill:var(--ink);stroke:#fff;stroke-width:2;stroke-linejoin:round}
+@media (prefers-reduced-motion:reduce){.rm-rover{transition:none}}
+.rm-foot{justify-content:flex-start}
+.rm-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink-muted)}
+.rm-legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{display:inline-grid;place-items:center;width:18px;height:18px;font-style:normal;font-size:9px;font-weight:700;border:1px solid var(--soil-line)}
+.sw-pending{background:#fff;border-style:dashed}
+.sw-bare{background:var(--soil)}
+.sw-ok{background:var(--plant-soft)} .sw-ok b{width:9px;height:9px;border-radius:50%;background:var(--plant)}
+.sw-water{background:var(--water);color:#fff;border-color:var(--water)}
+.sw-flag{background:#fff;color:var(--warn);border:2px solid var(--warn);font-size:11px}
+.rc-cam{display:grid;grid-template-columns:132px minmax(0,1fr);gap:10px;align-items:start}
+.rc-cam img,.rc-nophoto{width:132px;height:132px;border:1px solid var(--line);display:grid;place-items:center;image-rendering:auto}
+.rc-cam .tbl td,.rc-cam .tbl th{padding:3px 8px}
+.rc-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.rc-top{align-items:start}
+.rm-marks{pointer-events:none}
+.rc-list{max-height:320px;overflow:auto}
+.rc-list th{position:sticky;top:0}
+.chks{list-style:none;display:grid;gap:3px;margin-bottom:6px}
+.chk{display:flex;gap:7px;align-items:center;font-size:13px;color:var(--ink-muted)}
+.chk svg{flex:0 0 15px}
+.chk-ok{color:var(--ink)} .chk-ok svg{color:var(--ok)}
+.chk-man{display:flex;gap:7px;align-items:center;font-size:13px;padding:3px 0;cursor:pointer}
+.chk-man input{width:15px;height:15px;accent-color:var(--brand);flex:0 0 15px;margin-left:0}
+.sop-phase td{background:var(--surface-sunk);font-weight:700;font-size:12px;padding-top:4px;padding-bottom:4px}
+
 /* on a phone a job is two lines, so its button is never off screen */
 @media (max-width:600px){
   .jobs-t thead{display:none}
@@ -761,6 +811,10 @@ details.stagecard > summary::-webkit-details-marker{display:none}
   .tbl.costs-t td[data-label=Amount]{grid-column:2;grid-row:2;text-align:right}
   .tbl.costs-t td.act{grid-column:2;grid-row:3;text-align:right}
   /* the arrow and the alert line say it; the name stays whole */
+  .rc-cam{grid-template-columns:96px minmax(0,1fr)}
+  .rc-cam img,.rc-nophoto{width:96px;height:96px}
+  .bn{font-size:10.5px}
+  .chk-man{padding:7px 0}
   .rb-glyph{display:none}
   .st-warning .rb-k,.st-critical .rb-k,.st-stale .rb-k{padding-right:0}
 }

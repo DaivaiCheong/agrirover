@@ -112,7 +112,7 @@ export default function OrchardCycle() {
   async function fruit(mm: number) { await api.orchardFruitSize(id, mm); reload(); }
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: "jobs", label: "Jobs" }, { id: "targets", label: "Targets" }, { id: "feed", label: "Fertigation" },
+    { id: "jobs", label: "Tasks" }, { id: "targets", label: "Targets" }, { id: "feed", label: "Fertigation" },
     { id: "forecast", label: "Forecast" }, { id: "questions", label: `Open questions (${v?.docIssues.length ?? 0})` },
   ];
   const go = () => setTab("questions");

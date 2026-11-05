@@ -3,15 +3,18 @@ import { Link, useLocation } from "react-router-dom";
 import { BRAND } from "../lib/brand";
 import { exitMock, mockOn } from "../lib/mockMode";
 import {
-  Calculator, Camera, ChartColumn, Cpu, Leaf, MapPin, Package, Receipt, Scale, Settings, Sprout, Sun, Tractor, Wallet, Wheat,
-  Wrench, type LucideIcon,
+  Bot, Calculator, Camera, ChartColumn, ClipboardList, Cpu, History, Info, Leaf, MapPin, Package, Receipt, Scale, Settings,
+  Sprout, Sun, Tractor, Wallet, Wheat, Wrench, type LucideIcon,
 } from "lucide-react";
 
 type Tab = { to: string; label: string; icon: LucideIcon };
 
-/** The five places a farmer goes. Everything else is a tab inside one of them. */
+/** The six places a farmer goes. Everything else is a tab inside one of them. */
 export const SECTIONS = {
   today:   { to: "/",         label: "Today",    icon: Sun,         title: "Today", tabs: [] as Tab[] },
+  rover:   { to: "/rover",    label: "Rover",    icon: Bot,         title: "Rover",
+             tabs: [{ to: "/rover", label: "Survey", icon: Bot }, { to: "/rover/about", label: "What it does", icon: Info },
+                    { to: "/rover/sop", label: "SOP", icon: ClipboardList }, { to: "/rover/history", label: "History", icon: History }] },
   crops:   { to: "/cycles",   label: "My crops", icon: Sprout,      title: "My crops", tabs: [] as Tab[] },
   money:   { to: "/costs",    label: "Money",    icon: Wallet,      title: "Money",
              tabs: [{ to: "/costs", label: "Costs", icon: Receipt }, { to: "/stock", label: "Stock", icon: Package },
@@ -34,7 +37,7 @@ export function sectionOf(path: string): SectionKey {
   if (path === "/") return "today";
   if (/^\/cycles\/[^/]+$/.test(path)) return "results";
   if (path.startsWith("/cycles") || path.startsWith("/plan")) return "crops";
-  for (const key of ["money", "results", "farm"] as const) {
+  for (const key of ["rover", "money", "results", "farm"] as const) {
     if (SECTIONS[key].tabs.some((t) => path === t.to || path.startsWith(`${t.to}/`))) return key;
   }
   return "today";
@@ -48,7 +51,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       <aside className="side">
         <div className="brandmark">
           <div className="brand-tile"><Leaf size={21} aria-hidden /></div>
-          <div className="brand">{BRAND.name}<small>{BRAND.tagline}</small></div>
+          <div className="brand">{BRAND.name}</div>
         </div>
         <nav className="side-nav" aria-label="Main">
           {items.map(([key, s]) => (

@@ -15,10 +15,15 @@ import Equipment from "./pages/Equipment";
 import Harvest from "./pages/Harvest";
 import OrchardCycle from "./pages/OrchardCycle";
 import Plan from "./pages/Plan";
+import Rover from "./pages/Rover";
+import RoverAbout from "./pages/RoverAbout";
+import RoverHistory from "./pages/RoverHistory";
+import RoverSop from "./pages/RoverSop";
 import Settings from "./pages/Settings";
 import Stock from "./pages/Stock";
 import Beds from "./pages/Beds";
 
+const rover = (page: ReactNode) => <Section id="rover">{page}</Section>;
 const money = (page: ReactNode) => <Section id="money">{page}</Section>;
 const results = (page: ReactNode) => <Section id="results">{page}</Section>;
 const farm = (page: ReactNode) => <Section id="farm">{page}</Section>;
@@ -29,6 +34,10 @@ export default function App() {
     <Shell>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/rover" element={rover(<Rover />)} />
+        <Route path="/rover/about" element={rover(<RoverAbout />)} />
+        <Route path="/rover/sop" element={rover(<RoverSop />)} />
+        <Route path="/rover/history" element={rover(<RoverHistory />)} />
         <Route path="/plan" element={<Plan />} />
         <Route path="/cycles" element={<Cycles />} />
         <Route path="/cycles/:id" element={<CycleCop />} />

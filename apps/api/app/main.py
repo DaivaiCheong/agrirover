@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AI Auto Farm API",
+    title="AgriRover API",
     version="1.0.0",
     description="Smart irrigation, water treatment and crop monitoring for a small vegetable plot.",
     lifespan=lifespan,

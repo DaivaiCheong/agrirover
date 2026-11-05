@@ -1,7 +1,9 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.routers.missions import TOPIC_MISSION_SET, get_publisher
+from app.services.rover_live import live
 from app.workers.mqtt_ingest import readings
 
 sent: list[tuple[str, dict]] = []
@@ -16,6 +18,13 @@ async def broker_down(topic: str, payload: dict) -> None:
 
 
 client = TestClient(app)        # no `with`: the MQTT ingest lifespan is not started
+
+
+@pytest.fixture(autouse=True)
+def rover_is_idle():
+    live.reset()               # a mission queued by one test must not block the next
+    yield
+    live.reset()
 
 
 def test_mission_is_published_to_the_rover():

@@ -151,3 +151,92 @@ def test_link_rain_from_any_zone_blocks_until_all_dry():
         assert not guards.rain
 
     asyncio.run(scenario())
+
+
+# ---- the live simulation: what the farm server and the screen rely on
+
+from rover.__main__ import live_sim_runner                     # noqa: E402
+from rover.mission import SimOptions                           # noqa: E402
+
+
+def sim_spec(rows=4, cols=5, **sim):
+    return MissionSpec("m-live", "zone-a", rows, cols, 0.5, SimOptions(**{"seed": 3, "speedup": 0, **sim}))
+
+
+def test_progress_tells_the_watcher_what_each_cell_showed():
+    seen = []
+    report = live_sim_runner(CFG, sim_spec(), Guards()).run(sim_spec(), seen.append)
+    assert report.status == "completed" and report.simulated is True
+    assert seen[0]["cell"] is None and "observation" not in seen[0]
+    assert [s["cellsScanned"] for s in seen] == list(range(21))
+    last = seen[-1]
+    assert (last["rows"], last["cols"], last["zoneId"], last["simulated"]) == (4, 5, "zone-a", True)
+    assert last["observation"]["row"] == last["cell"][0] and last["observation"]["col"] == last["cell"][1]
+    assert isinstance(last["frame"], str) and len(last["frame"]) < 8000    # small enough to send for every cell
+    assert 11.1 < last["battery"] < 12.6
+    json.dumps(last)                                                       # it must survive MQTT
+
+
+def test_scripted_rain_ends_the_survey_through_the_normal_stop():
+    s = sim_spec(rain_at_cell=8)
+    runner = live_sim_runner(CFG, s, Guards())
+    report = runner.run(s)
+    assert (report.status, report.abort_reason, report.cells_scanned) == ("aborted", "rain", 7)
+    assert runner.drive.stops == 1
+
+
+def test_low_battery_stops_the_rover_where_the_server_expects():
+    # the server sets this so the guard trips about 40 % along a 20-cell bed: 11.1 + 0.02 V/m x 0.5 m x 8 cells
+    s = sim_spec(battery_v=11.18)
+    report = live_sim_runner(CFG, s, Guards()).run(s)
+    assert (report.status, report.abort_reason) == ("aborted", "battery_low")
+    assert 7 <= report.cells_scanned <= 10
+
+
+def test_a_seed_gives_the_same_field_and_another_seed_a_different_one():
+    def needs(seed):
+        s = sim_spec(seed=seed)
+        return [t["row"] * 100 + t["col"] for t in live_sim_runner(CFG, s, Guards()).run(s).watering_targets]
+    assert needs(3) == needs(3)
+    assert needs(3) != needs(4)
+
+
+@pytest.mark.parametrize("sim", [
+    "rain", {"seed": -1}, {"seed": 1.5}, {"seed": True}, {"rainAtCell": 0}, {"rainAtCell": 401},
+    {"batteryV": 20}, {"batteryV": "12"}, {"batteryV": True}, {"speedup": 0}, {"speedup": 1000},
+])
+def test_bad_simulation_options_are_refused(sim):
+    with pytest.raises(ValueError):
+        MissionSpec.from_payload({"missionId": "m", "zoneId": "z", "rows": 2, "cols": 2, "sim": sim}, DriveLimits())
+
+
+def test_a_plain_mission_has_no_simulation_options():
+    assert MissionSpec.from_payload({"missionId": "m", "zoneId": "z", "rows": 2, "cols": 2}, DriveLimits()).sim is None
+
+
+def test_the_real_runner_is_not_marked_simulated():
+    from rover.camera import SimCamera, SimField
+    from rover.drive import Pose, SimDrive
+    from rover.mission import MissionRunner
+    s = MissionSpec("m", "z", 1, 2, 0.5)
+    runner = MissionRunner(CFG, SimDrive(CFG.drive, Pose(0.25, 0.25)), SimCamera(SimField(1, 2)), Guards())
+    assert runner.run(s).simulated is False
+
+
+def test_the_rover_announces_its_estop_so_a_server_restart_cannot_forget_it():
+    class FakeClient:
+        def __init__(self):
+            self.sent = []
+
+        async def publish(self, topic, payload, qos=0, retain=False):
+            self.sent.append((topic, json.loads(payload), retain))
+
+    guards = Guards()
+    link = RoverLink(CFG, lambda s: None, guards)
+    link._client = FakeClient()
+    asyncio.run(link.handle(CFG.topic_estop, json.dumps({"estop": True})))
+    assert guards.estop is True
+    topic, payload, retain = link._client.sent[-1]
+    assert (topic, payload["status"], payload["estop"], retain) == (CFG.topic_status, "online", True, True)
+    asyncio.run(link.handle(CFG.topic_estop, json.dumps({"estop": False})))
+    assert guards.estop is False and link._client.sent[-1][1]["estop"] is False

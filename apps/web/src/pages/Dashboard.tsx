@@ -182,12 +182,12 @@ export default function Dashboard() {
             <Kpis items={[
               { k: "Beds growing", v: active.length },
               { k: "Water plan today", v: planned ? litres(water) : "—" },
-              { k: "Jobs due", v: planned ? work.length : "—" },
+              { k: "Tasks today", v: planned ? work.length : "—" },
               { k: "Alerts", v: alerts.length === 0 ? "None" : `${alerts.length}${critical ? ` (${critical} critical)` : ""}` },
             ]} />
 
             {work.length > 0 && (
-              <Panel title="Jobs due" pad={false}>
+              <Panel title="Today's tasks" pad={false}>
                 <div className="tablewrap">
                   <table className="tbl jobs-t">
                     <JobsHead bed />

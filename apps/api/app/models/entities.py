@@ -1,5 +1,5 @@
 """
-Domain model for AI Auto Farm.
+Domain model for AgriRover.
 
 See docs/SCHEMA.md for what each relation is for. The rover-related relations
 (survey_mission, survey_finding, crop_image) exist before the rover is
@@ -13,7 +13,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Integer,
-    Numeric, SmallInteger, String, Text, UniqueConstraint, func,
+    Numeric, SmallInteger, String, Text, UniqueConstraint, false, func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -276,6 +276,14 @@ class SurveyMission(Base):
     plants_needing_water: Mapped[int | None] = mapped_column(SmallInteger)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rows: Mapped[int | None] = mapped_column(SmallInteger)
+    cols: Mapped[int | None] = mapped_column(SmallInteger)
+    cell_m: Mapped[float | None] = mapped_column(Numeric(4, 2))
+    abort_reason: Mapped[str | None] = mapped_column(String(48))
+    cells_flagged: Mapped[int | None] = mapped_column(SmallInteger)
+    distance_m: Mapped[float | None] = mapped_column(Numeric(8, 2))
+    est_duration_s: Mapped[float | None] = mapped_column(Numeric(8, 1))
+    simulated: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
 
 
 class CropImage(Base):
@@ -398,6 +406,10 @@ class SurveyFinding(Base):
     disease_code: Mapped[str | None] = mapped_column(String(48))
     confidence: Mapped[float | None] = mapped_column(Numeric(4, 3))
     image_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crop_image.id", ondelete="SET NULL"))
+    canopy: Mapped[float | None] = mapped_column(Numeric(5, 4))
+    dryness: Mapped[float | None] = mapped_column(Numeric(4, 3))
+    suggested_ml: Mapped[int | None] = mapped_column(Integer)
+    flagged: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
 
 
 class FieldObservation(Base):

@@ -24,7 +24,7 @@ Every morning, for each zone: read the soil, decide (water / skip), ask the farm
 | 2 | What the sensors say | `device`, `sensor`, `sensor_reading` |
 | 3 | What the rule engine decided, and why | `irrigation_rule`, `daily_decision` |
 | 4 | What the farmer answered and did | `action_proposal`, `daily_decision` (done fields), `audit_log` |
-| 5 | What the camera saw | `crop_image`, `disease_detection`, `disease_class`, `survey_mission`, `survey_finding` |
+| 5 | What the camera saw | `crop_image`, `disease_detection`, `disease_class`, `survey_mission` (grid, how it ended, simulated or field), `survey_finding` (each cell) |
 | 6 | Proof it works (guided bed vs usual bed) | `zone.trial_arm`, `field_observation` |
 
 ## Diagram

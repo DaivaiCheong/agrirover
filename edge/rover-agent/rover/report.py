@@ -2,11 +2,15 @@
 GitHub) and, when Pillow is installed, a mosaic of what the camera saw."""
 from __future__ import annotations
 
+import base64
+import io
 import json
 from html import escape
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from rover.mission import MissionReport
+if TYPE_CHECKING:
+    from rover.mission import MissionReport
 
 STYLE = {
     "bare": ("#E8E2D6", "Bare soil"),
@@ -16,6 +20,19 @@ STYLE = {
 }
 FLAG = "#E3A21A"
 INK = "#24292F"
+
+
+def thumbnail(img, size: int = 72, quality: int = 70) -> str | None:
+    """A small JPEG of a camera frame as base64, to send while a survey runs. None without Pillow or an image."""
+    if img is None:
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    out = io.BytesIO()
+    Image.fromarray(img[..., :3]).resize((size, size)).save(out, format="JPEG", quality=quality)
+    return base64.b64encode(out.getvalue()).decode("ascii")
 
 
 def _state(result) -> str:

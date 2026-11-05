@@ -16,15 +16,15 @@ import time
 from rover.camera import SimCamera, SimField
 from rover.config import RoverConfig
 from rover.drive import Pose, SimDrive
-from rover.mission import MissionReport, MissionRunner, MissionSpec, planned_stats
+from rover.mission import MissionReport, MissionRunner, MissionSpec, SimOptions, planned_stats
 from rover.planner import Cell
 from rover.report import save_report
-from rover.safety import Guards
+from rover.safety import Guards, SafetyStop
 
 
 def sim_runner(cfg: RoverConfig, spec: MissionSpec, seed: int, guards: Guards,
                battery_v: float = 12.6, on_frame=None,
-               speedup: float = 0.0) -> tuple[MissionRunner, SimField]:
+               speedup: float = 0.0, simulated: bool = True) -> tuple[MissionRunner, SimField]:
     """speedup 0 = instant; 1 = real time; 10 = ten times faster than the real rover."""
     field = SimField(spec.rows, spec.cols, seed=seed)
     start = Cell(0, 0).center(spec.cell_m)
@@ -32,7 +32,26 @@ def sim_runner(cfg: RoverConfig, spec: MissionSpec, seed: int, guards: Guards,
     drive = SimDrive(cfg.drive, Pose(*start, 0.0),
                      fence=(spec.cols * spec.cell_m, spec.rows * spec.cell_m),
                      battery_v=battery_v, sleep=sleep)
-    return MissionRunner(cfg, drive, SimCamera(field), guards, on_frame=on_frame), field
+    return MissionRunner(cfg, drive, SimCamera(field), guards, on_frame=on_frame, simulated=simulated), field
+
+
+def live_sim_runner(cfg: RoverConfig, spec: MissionSpec, guards: Guards, seed: int = 7, speedup: float = 10.0) -> MissionRunner:
+    """The simulated rover on the real broker. Everything but the wheels and the camera is the real software,
+    and a scripted event ends the survey through the same path a real one would."""
+    sim = spec.sim or SimOptions()
+    pace = speedup if sim.speedup is None else sim.speedup
+    photographed = [0]
+
+    def on_frame(_cell, _img) -> None:
+        if pace > 0:
+            time.sleep(cfg.capture_s / pace)   # settle + photograph + analyse takes time on the real rover
+        photographed[0] += 1
+        if sim.rain_at_cell is not None and photographed[0] >= sim.rain_at_cell:
+            raise SafetyStop("rain")
+
+    return sim_runner(cfg, spec, seed if sim.seed is None else sim.seed, guards,
+                      battery_v=12.6 if sim.battery_v is None else sim.battery_v,
+                      on_frame=on_frame, speedup=pace)[0]
 
 
 def agreement(report: MissionReport, field: SimField) -> dict[str, float]:
@@ -82,7 +101,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     guards = Guards()
     if args.sim_hardware:
         def runner_for(spec: MissionSpec) -> MissionRunner:
-            return sim_runner(cfg, spec, args.seed, guards, speedup=args.speedup)[0]
+            return live_sim_runner(cfg, spec, guards, args.seed, args.speedup)
     else:
         from rover.camera import OpenCVCamera, PiCamera
         from rover.drive import SerialDrive

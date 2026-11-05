@@ -53,6 +53,14 @@ Measured in a browser on the same guava sample, before and after (visible words;
 Not yet done: the water plan page keeps its layout and long tomato guidance (only its colours and sizes changed).
 No farmer has used this version, so the claim is "less to read", not "faster to use".
 
+## The rover screens (2026-11-05)
+
+* **The simulation is the real software.** Faking a rover in the browser would show nothing true. Only the wheels, camera and field are generated, and the screen says so.
+* **The field map is the one place colour fills a box.** It is data, not a warning: blue for water, green for plants, tan for bare soil. Every state also has a mark (a dot, the millilitres, an outline and "!"), and the table under it holds the same findings.
+* **Start is locked until the checks pass.** Three are read live (online, e-stop, rain) and three are ticked by a person, again for each survey. A procedure the screen does not enforce gets skipped.
+* **E-stop is the one red button in the app, and always visible.**
+* **Volts, not a battery percentage.** A lithium pack does not discharge in a straight line, so a percentage would be a guess.
+
 ## Soil and air readings (the ribbon)
 
 Question: what must a farmer see per bed? Seven readings (moisture, pH, EC, soil temperature, N-P-K, air temperature, humidity),

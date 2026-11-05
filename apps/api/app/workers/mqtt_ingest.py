@@ -11,8 +11,9 @@ Topics (farm/{farm}/zone/{zone}/...):
     valve/set     server -> device   {command, channel, maxOnMs, requestId}
     valve/state   device -> server   actual relay position + reason   (retained)
 Rover (devices/rover-01/...):
+    status          rover -> server  online / offline                   (retained)
     mission/state   rover -> server  progress, then the final summary   (retained)
-    mission/result  rover -> server  full survey report with watering targets
+    mission/result  rover -> server  full survey report, stored in survey_mission and survey_finding
 """
 from __future__ import annotations
 
@@ -32,6 +33,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.models.entities import Device, Farm, Sensor, SensorReading, Zone
 from app.services.metrics import SOIL_PROBE_METRICS, Refused, clean
+from app.services.rover_live import live as rover_live, store_report
 
 log = logging.getLogger("ingest")      # not "mqtt": aiomqtt owns that logger and pins it to WARNING
 
@@ -39,6 +41,7 @@ TOPIC_TELEMETRY = "farm/+/zone/+/telemetry"
 TOPIC_VALVE_STATE = "farm/+/zone/+/valve/state"
 TOPIC_MISSION_STATE = "devices/+/mission/state"
 TOPIC_MISSION_RESULT = "devices/+/mission/result"
+TOPIC_ROVER_STATUS = "devices/+/status"
 
 
 def _valid(payload: dict) -> bool:
@@ -137,7 +140,7 @@ async def _consume() -> None:
                 password=settings.mqtt_password or None,
             ) as client:
                 for topic in (TOPIC_TELEMETRY, TOPIC_VALVE_STATE,
-                              TOPIC_MISSION_STATE, TOPIC_MISSION_RESULT):
+                              TOPIC_MISSION_STATE, TOPIC_MISSION_RESULT, TOPIC_ROVER_STATUS):
                     await client.subscribe(topic, qos=1)
                 log.info("mqtt connected, subscribed")
                 async for msg in client.messages:
@@ -163,16 +166,22 @@ async def _consume() -> None:
                         # Authoritative actuator position — always recorded as
                         # reported, never as commanded.
                         log.info("valve state %s %s", topic, payload)
+                    elif topic.endswith("/status"):
+                        rover_live.on_status(payload)
                     elif topic.endswith("/mission/state"):
-                        # TODO: upsert survey_mission from the summary fields.
-                        log.info("rover mission state %s", payload)
+                        rover_live.on_state(payload)
                     elif topic.endswith("/mission/result"):
-                        # TODO: store crop_image / findings; turn wateringTargets into
-                        # action_proposal rows (trigger vision_target) for approval.
+                        # Watering targets are shown for a person to act on; they do not become proposals yet.
+                        rover_live.on_result(payload)
                         r = payload if isinstance(payload, dict) else {}
-                        log.info("rover mission result %s: %s cells, %s need water",
-                                 r.get("missionId"), r.get("cellsScanned"),
-                                 r.get("plantsNeedingWater"))
+                        try:
+                            async with SessionLocal() as session:
+                                saved = await store_report(session, payload)
+                            log.info("rover survey %s: %s cells, %s need water, %s",
+                                     r.get("missionId"), r.get("cellsScanned"), r.get("plantsNeedingWater"),
+                                     "saved" if saved else "not saved (unknown bed or already stored)")
+                        except Exception:             # noqa: BLE001 — keep the loop alive
+                            log.exception("could not store rover survey %s", r.get("missionId"))
         except Exception as exc:                      # noqa: BLE001
             log.warning("mqtt loop error (%s); retrying in 5 s", exc)
             await asyncio.sleep(5)

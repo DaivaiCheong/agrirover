@@ -15,20 +15,33 @@ limits as every other irrigation ([control-hierarchy.md](control-hierarchy.md)).
 3. For each cell: check guards → drive → photograph → analyse → record.
 4. Progress goes out on `mission/state` (retained); the full report on
    `mission/result`. The report is also written to disk on the rover.
-5. Watering targets in the report become `action_proposal` rows
-   (trigger `vision_target`) for approval. *(Server-side persistence is in progress.)*
+5. The farm server keeps the live state in memory for the Rover screen (`services/rover_live.py`) and stores the
+   finished report in `survey_mission` and `survey_finding`. A survey of a bed it does not know (a sample-data bed) is
+   not stored. Watering targets are shown for a person to act on; they do not become `action_proposal` rows yet.
 
 The rover must stand on cell (0, 0), facing east (along row 0), before a mission.
+
+Procedure for the person running it: [ROVER-SOP.md](../ROVER-SOP.md).
+
+## The simulation on the Rover screen
+
+`python -m rover run --sim-hardware` (the `rover-sim` service) is the real agent on the real broker: planner, vision,
+guards, MQTT and reports are all production code. Only the wheels (`SimDrive`), the camera (`SimCamera`) and the field
+(`SimField`, random plants, a drip line drying towards the far end) are generated. It runs ten times faster than the real
+rover, and every report says `simulated: true`, so generated data can never pass for a field result.
+
+The optional `sim` block on a mission (`seed`, `batteryV`, `rainAtCell`, `speedup`) is read only with `--sim-hardware`; the
+real rover ignores it. Scripted rain raises the same `SafetyStop` a real rain reading would.
 
 ## MQTT topics
 
 | Topic | Direction | Payload |
 |---|---|---|
 | `devices/rover-01/mission/set` | server → rover | `{missionId, zoneId, rows, cols, cellM}` |
-| `devices/rover-01/mission/state` | rover → server, retained | progress, then the final summary |
+| `devices/rover-01/mission/state` | rover → server, retained | progress (with each cell's reading and a small photo), then the final summary |
 | `devices/rover-01/mission/result` | rover → server | full report: cells, watering targets |
 | `devices/rover-01/estop` | server → rover | `{"estop": true}` engages, `{"estop": false}` releases |
-| `devices/rover-01/status` | rover → server, retained | `online` / `offline` (last will) |
+| `devices/rover-01/status` | rover → server, retained | `online` / `offline` (last will), and whether its e-stop is on |
 | `farm/<farm>/zone/+/telemetry` | field node → all | rain in any zone stops a survey |
 
 ## Safety layers
@@ -79,6 +92,10 @@ Wiring is in the header of `rover_motor_controller.ino`.
 
 ## Known limits — and what comes next
 
+- **No physical e-stop.** The parts list has no power-cut switch, and the on-screen e-stop travels over Wi-Fi and is forgotten if the
+  rover restarts. Fit a switch before any physical run.
+- **No login.** Anyone with the app's address can start or stop the rover. Add one before connecting real hardware.
+- **Tree crops.** A downward camera under a hood suits low beds; it cannot see a guava canopy. Trees need another camera and GPS waypoints.
 - **Dead reckoning.** Position comes from timed wheel runs. Next: wheel encoders and an IMU.
 - **Bed scale.** The grid planner suits beds and row crops. For whole fields:
   GPS waypoints via ArduPilot Rover (the team has already set up ArduPilot GPS waypoint missions on its drone build).
