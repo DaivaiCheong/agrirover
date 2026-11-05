@@ -13,7 +13,7 @@ const VERDICT: Record<Correlation["verdict"], [string, string]> = {
 const NOTHING: Record<Correlation["verdict"], string> = {
   supported: "",
   not_supported: "The readings do not point to a cause in the soil or air.",
-  no_data: "No reading in the last 30 minutes. Check the field node under Devices.",
+  no_data: "No reading in the last 36 hours. Run a rover round.",
 };
 
 const BASIS = { spec: "Farm rule", practice: "Standard practice", guava_doc: "Guava document, not checked" } as const;

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     weather_api_url: str | None = None
     weather_api_key: str | None = None
 
+    # Photo check. A local Ollama: photos stay on the farm's machine. No model named means the check is off.
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str | None = None
+
     # Stage 1 runs one farm; the topic segment farm/{name}/... must match it.
     farm_name: str = "farm-01"
 

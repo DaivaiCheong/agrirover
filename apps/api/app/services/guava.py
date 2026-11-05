@@ -411,6 +411,7 @@ class Symptom:
     explanation: str
     caveat: str | None = None
     rule: str = "any"                            # any | all | cracking
+    basis: str = BASIS
 
 
 SYMPTOMS = {s.id: s for s in (
@@ -421,7 +422,16 @@ SYMPTOMS = {s.id: s for s in (
     Symptom("fruit_fly", "Fruit fly and mealybug", "Puncture marks on the skin, oozing sap, larvae and soft rot inside, white waxy clusters at the calyx.",
             (("air_temperature", ">", 25), ("air_humidity", ">", 70)), "Warm, humid weather suits them. Bag fruit at 3-4 cm: foam net plus plastic bag.", rule="all"),
     Symptom("anthracnose", "Anthracnose and fruit rot", "Dark sunken patches on ripening fruit, often with pink spore masses. Young shoots die back.",
-            (("air_humidity", ">", 85),), "Humid air and dense canopy. Thin the canopy, avoid wetting the leaves. A protective copper or bio-fungicide spray before bagging: confirm the product with an agronomist."),
+            (("air_humidity", ">", 85), ("soil_moisture", ">", 80)),
+            "Wet conditions. Cut the water, remove affected fruit, thin the canopy and avoid wetting the leaves. Spot-spray only with a product an agronomist confirms.",
+            "Wet soil does not cause anthracnose. It spreads in wet, humid weather, and very wet soil only points to the same conditions."),
+    Symptom("algal_leaf_spot", "Algal leaf spot", "Raised, velvety grey-green to rust-orange spots on leaves and fruit.",
+            (("air_humidity", ">", 85), ("soil_moisture", ">", 80)),
+            "Wet, humid conditions and splashing water spread it. Prune for air, fix drainage, keep the feed regular. Guava in high rainfall can need control: ask an agronomist before spraying.",
+            basis="practice"),
+    Symptom("rust", "Guava rust", "Orange-yellow powdery spots on young leaves, shoots, flowers and fruit.",
+            (("air_humidity", ">", 85), ("air_temperature", ">", 25)),
+            "Warm, humid weather suits it. Thin the canopy. Ask an agronomist before spraying.", rule="all", basis="practice"),
     Symptom("cracking", "Fruit cracking", "Splits running along or across the crisp skin of ripening fruit.",
             (("soil_moisture_min", "<", 35), ("soil_moisture", ">", 80), ("soil_ph", ">", 7.5)),
             "A sudden jump in water after a dry spell, or high pH locking up boron and calcium. Keep moisture steady at 50-60 % with short drip pulses. Boron and calcium sprays help: confirm doses with an agronomist.", rule="cracking"),
@@ -431,11 +441,45 @@ SYMPTOMS = {s.id: s for s in (
 )}
 
 
-def correlate(symptom_id: str, readings: Mapping[str, Reading], recent_min: float | None, now: datetime) -> dict:
+STRESS_CEILING = 30.0
+WET_SOIL = 80.0
+ALKALINE_PH = 7.2
+
+
+def why_yellow(stage: Stage, stress: bool, readings: Mapping[str, float]) -> dict:
+    """Why a tree's leaves may be yellow, from the soil under it and the crop's stage. A likely reason, not a diagnosis:
+    a colour count cannot see spots, so every answer still leaves the Disease check open."""
+    moisture, ec, ph = readings.get("soil_moisture"), readings.get("soil_ec"), readings.get("soil_ph")
+    if moisture is not None and moisture > WET_SOIL:
+        return {"cause": "wet", "note": "Yellow leaves: wet soil", "severity": "warn", "text": "soil too wet",
+                "action": "Stop watering and dig up some feeder roots: wet soil speeds wilt."}
+    if stress and stage.n == 1 and moisture is not None and moisture <= STRESS_CEILING:
+        return {"cause": "stress", "note": "Yellow leaves: expected", "severity": "info", "text": "expected from the stress",
+                "action": "Do not water or spray."}
+    if stage.n > 1 and ec is not None and ec < stage.ec[0]:
+        return {"cause": "low_feed", "note": "Yellow leaves: low feed", "severity": "warn", "text": "likely low feed",
+                "action": "Feed on schedule and take a leaf test. No fungicide for this alone."}
+    if ph is not None and ph > ALKALINE_PH:
+        return {"cause": "alkaline", "note": "Yellow leaves: high pH", "severity": "warn", "text": "alkaline soil locks up iron and zinc",
+                "action": "Keep feed water below pH 6.5. Foliar doses: ask an agronomist."}
+    return {"cause": "unknown", "note": "Yellow leaves: look", "severity": "warn", "text": "no cause in the soil", "action": None}
+
+
+def _checks(s: Symptom, stage: Stage | None, stress: bool) -> tuple[tuple[str, str, float], ...]:
+    """A symptom's readings to test. Yellow leaves depend on the stage: stress dries them on purpose, and low EC is relative to the stage's target."""
+    if s.id != "chlorosis" or stage is None:
+        return s.checks
+    if stress and stage.n == 1:
+        return (("soil_moisture", "<", STRESS_CEILING), *s.checks)
+    return (("soil_ec", "<", stage.ec[0]), *s.checks) if stage.n > 1 else s.checks
+
+
+def correlate(symptom_id: str, readings: Mapping[str, Reading], recent_min: float | None, now: datetime,
+              stage: Stage | None = None, stress: bool = False) -> dict:
     """One symptom against a bed's newest readings. An old reading is shown but never counted."""
     s = SYMPTOMS[symptom_id]
     evidence = []
-    for metric, op, limit in s.checks:
+    for metric, op, limit in _checks(s, stage, stress):
         if metric == "soil_moisture_min":
             label, unit, decimals = "Lowest moisture, last 3 days", "pct", 1
             r = readings.get("soil_moisture")
@@ -456,13 +500,19 @@ def correlate(symptom_id: str, readings: Mapping[str, Reading], recent_min: floa
         fits = bool(evidence[0]["met"] and evidence[1]["met"]) or bool(evidence[2]["met"])
     else:
         fits = any(e["met"] for e in evidence)
+    explanation = s.explanation
+    if s.id == "chlorosis" and stage is not None and fits:
+        fresh = {e["metric"]: e["value"] for e in evidence if e["met"] is not None}
+        why = why_yellow(stage, stress, fresh)
+        explanation = s.explanation if why["cause"] == "unknown" else f"Yellow leaves: {why['text']}. {why['action']}"
     return {"symptom": s.id, "title": s.title, "looksLike": s.looks_like, "evidence": evidence,
             "verdict": "supported" if fits else ("not_supported" if seen else "no_data"),
-            "explanation": s.explanation if fits else None, "basis": BASIS if fits else None, "caveat": s.caveat}
+            "explanation": explanation if fits else None, "basis": s.basis if fits else None, "caveat": s.caveat}
 
 
 _LABELS = (("anthracnose", "anthracnose"), ("fruit_fly", "fruit_fly"), ("fruit fly", "fruit_fly"), ("mealybug", "fruit_fly"), ("wilt", "guava_decline"),
-           ("decline", "guava_decline"), ("crack", "cracking"), ("chlorosis", "chlorosis"), ("yellow", "chlorosis"))
+           ("decline", "guava_decline"), ("crack", "cracking"), ("chlorosis", "chlorosis"), ("yellow", "chlorosis"),
+           ("algal", "algal_leaf_spot"), ("rust", "rust"))
 
 
 def match_symptom(label: str | None) -> str | None:

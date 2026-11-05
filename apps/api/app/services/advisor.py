@@ -108,7 +108,8 @@ def advise_trees(ctx: WaterContext, trees: Sequence[dict]) -> list[dict]:
         if ec is not None and ec > ec_high:
             row["notes"].append("Salty: no feed")
         if t.get("flagged"):
-            row["notes"].append("Yellow leaves: look")
+            row["yellow"] = guava.why_yellow(ctx.stage, ctx.stress, r)
+            row["notes"].append(row["yellow"]["note"])
         if mean_canopy and t.get("canopy") is not None and t["canopy"] < BEHIND_SHARE * mean_canopy:
             row["notes"].append("Small canopy: look")
         out.append(row)
@@ -222,12 +223,22 @@ def todo(*, trees: Sequence[dict], water_litres: float, feed: dict, stage: Stage
         out.append({"kind": "feed", "severity": "warn" if feed["action"] != "feed" else "info", "text": verb + amount, "detail": feed["reason"]})
     for note in feed["notes"]:
         out.append({"kind": "feed", "severity": "warn", "text": note, "detail": None})
-    for word, label in (("Yellow leaves", "yellow leaves"), ("Small canopy", "a small canopy")):
-        marked = [t for t in living if any(n.startswith(word) for n in t["notes"])]
-        if marked:
-            names = ", ".join(_cell(t) for t in marked)
-            count = f"{len(marked)} tree{'s' if len(marked) > 1 else ''}"
-            out.append({"kind": "look", "severity": "warn", "text": f"Look at {count} with {label}", "detail": names})
+    yellow: dict[str, list[dict]] = {}
+    for t in living:
+        if t.get("yellow"):
+            yellow.setdefault(t["yellow"]["cause"], []).append(t)
+    for cause, marked in yellow.items():
+        names = ", ".join(_cell(t) for t in marked)
+        count = f"{len(marked)} tree{'s' if len(marked) > 1 else ''}"
+        why = marked[0]["yellow"]
+        if cause == "unknown":
+            out.append({"kind": "look", "severity": "warn", "text": f"Look at {count} with yellow leaves", "detail": names})
+        else:
+            out.append({"kind": "look", "severity": why["severity"], "text": f"{count} with yellow leaves: {why['text']}", "detail": f"{why['action']} {names}."})
+    small = [t for t in living if "Small canopy: look" in t["notes"]]
+    if small:
+        count = f"{len(small)} tree{'s' if len(small) > 1 else ''}"
+        out.append({"kind": "look", "severity": "warn", "text": f"Look at {count} with a small canopy", "detail": ", ".join(_cell(t) for t in small)})
     return out
 
 

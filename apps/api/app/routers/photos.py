@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import get_db
 from app.services import diagnosis
-from app.services.disease import Classifier, get_classifier
+from app.services.disease import Classifier, ModelUnavailable, get_classifier
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
@@ -31,14 +31,17 @@ async def check_photo(photo: UploadFile = File(...), zone: str | None = None,
         raise HTTPException(415, "send a JPEG or PNG photo")
     if classifier is None:
         raise HTTPException(503, "disease model not installed")
-    result = await run_in_threadpool(classifier.classify, data)
+    try:
+        result = await run_in_threadpool(classifier.classify, data)
+    except ModelUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
     if result is None:
-        return {"status": "uncertain", "label": None, "confidence": None, "symptom": None, "correlation": None,
-                "note": "The model is not confident. Take a clearer, closer photo of one leaf. " + NOTE}
-    label, confidence = result
-    symptom = diagnosis.match_symptom(label)
+        return {"status": "uncertain", "label": None, "confidence": None, "seen": None, "symptom": None, "correlation": None,
+                "note": "The model is not sure. Take a clearer, closer photo of one leaf or fruit. " + NOTE}
+    symptom = diagnosis.match_symptom(result.label)
     correlation = None
     if zone and symptom:
         correlation = {**await diagnosis.diagnose(session, settings.farm_name, zone, symptom), "source": "photo"}
-    return {"status": "ok", "label": label, "confidence": round(float(confidence), 3), "symptom": symptom,
+    confidence = None if result.confidence is None else round(float(result.confidence), 3)
+    return {"status": "ok", "label": result.label, "confidence": confidence, "seen": result.seen, "symptom": symptom,
             "correlation": correlation, "note": NOTE}

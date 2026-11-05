@@ -1,8 +1,10 @@
 """API behind the web pages: devices registry, live zone readings, photo check."""
 import asyncio
+import base64
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import httpx
 import pgdb
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +16,7 @@ from app.routers import devices as devices_router
 from app.routers import photos as photos_router
 from app.routers import zones as zones_router
 from app.services import registry as reg
-from app.services.disease import get_classifier
+from app.services.disease import ModelUnavailable, OllamaClassifier, Seen, get_classifier
 from app.services.seed import seed_stage1
 from app.workers.mqtt_ingest import store_telemetry
 
@@ -82,11 +84,73 @@ def test_photo_check_without_a_model_says_so_instead_of_guessing(client):
 
 
 def test_photo_check_returns_a_triage_result(client):
-    r = _post(client, classifier=StubClassifier(("leaf_blight", 0.93)))
+    r = _post(client, classifier=StubClassifier(Seen("leaf_blight", 0.93)))
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok" and body["label"] == "leaf_blight" and body["confidence"] == 0.93
     assert "not a diagnosis" in body["note"]
+
+
+def test_a_language_model_reports_what_it_saw_and_no_invented_percentage(client):
+    body = _post(client, classifier=StubClassifier(Seen("rust", None, "Orange powder on young leaves."))).json()
+    assert body["confidence"] is None and body["seen"] == "Orange powder on young leaves." and body["symptom"] == "rust"
+
+
+def test_a_model_that_is_down_says_so_rather_than_guessing(client):
+    class Down:
+        def classify(self, data):
+            raise ModelUnavailable("cannot reach the disease model at http://x")
+    r = _post(client, classifier=Down())
+    assert r.status_code == 503 and "cannot reach" in r.json()["detail"]
+
+
+class _Res:
+    def __init__(self, status, content="{}"):
+        self.status_code, self._content = status, content
+
+    def json(self):
+        return {"message": {"content": self._content}}
+
+
+def _gemma(status=200, content='{"seen": "Dark sunken spots on the fruit.", "label": "problem"}', sent=None):
+    def post(url, json, timeout):
+        if sent is not None:
+            sent.update(json, url=url)
+        return _Res(status, content)
+    return OllamaClassifier("http://farm:11434/", "gemma4", post=post)
+
+
+def test_gemma_is_sent_the_photo_and_held_to_the_labels():
+    sent = {}
+    seen = _gemma(sent=sent).classify(JPEG)
+    assert seen == Seen("problem", None, "Dark sunken spots on the fruit.")
+    assert sent["url"] == "http://farm:11434/api/chat" and sent["model"] == "gemma4" and sent["options"]["temperature"] == 0
+    assert sent["messages"][0]["images"] == [base64.b64encode(JPEG).decode()]
+    # it named diseases wrongly on real photos, so it cannot be asked to
+    assert sent["format"]["properties"]["label"]["enum"] == ["healthy", "problem", "unsure"]
+
+
+def test_gemmas_problem_never_picks_a_symptom_or_triggers_advice(client):
+    body = _post(client, classifier=_gemma()).json()
+    assert body["label"] == "problem" and body["symptom"] is None and body["correlation"] is None
+    assert body["seen"] == "Dark sunken spots on the fruit." and body["confidence"] is None
+
+
+def test_gemma_being_unsure_is_not_a_label():
+    assert _gemma(content='{"seen": "Too dark.", "label": "unsure"}').classify(JPEG) is None
+
+
+@pytest.mark.parametrize("status,content,word", [(404, "{}", "not installed"), (500, "{}", "answered 500"), (200, "not json", "could not be read")])
+def test_gemma_failures_become_a_plain_error(status, content, word):
+    with pytest.raises(ModelUnavailable, match=word):
+        _gemma(status, content).classify(JPEG)
+
+
+def test_gemma_being_unreachable_is_a_plain_error():
+    def post(url, json, timeout):
+        raise httpx.ConnectError("refused")
+    with pytest.raises(ModelUnavailable, match="cannot reach"):
+        OllamaClassifier("http://farm:11434", "gemma4", post=post).classify(JPEG)
 
 
 def test_photo_check_below_threshold_is_uncertain_not_a_label(client):
@@ -95,7 +159,7 @@ def test_photo_check_below_threshold_is_uncertain_not_a_label(client):
 
 
 def test_photo_check_rejects_non_images_and_huge_files(client):
-    ok = StubClassifier(("healthy", 0.99))
+    ok = StubClassifier(Seen("healthy", 0.99))
     assert _post(client, b"not an image", ok).status_code == 415
     assert _post(client, JPEG + b"0" * (photos_router.MAX_BYTES + 1), ok).status_code == 413
 

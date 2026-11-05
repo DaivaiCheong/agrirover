@@ -103,22 +103,26 @@ export default function Crop() {
             {!result && !error && <p className="small muted">No photo checked yet.</p>}
             {error && (
               <Notice kind="warn">
-                {error === "disease model not installed"
-                  ? "Disease model not installed. Pick the symptom below."
-                  : `Could not check the photo: ${error}`}
+                {`Could not check the photo: ${error}. You can still pick the symptom below.`}
               </Notice>
             )}
             {result && (
               <>
                 {result.status === "ok" ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <Tag>{result.label}</Tag>
-                    <span className="mono-sm">confidence <b>{Math.round((result.confidence ?? 0) * 100)}%</b></span>
+                    <Tag>{result.label === "problem" ? "Something looks wrong" : result.label === "healthy" ? "Looks healthy" : (result.label ?? "").replace(/_/g, " ")}</Tag>
+                    {result.confidence !== null && <span className="mono-sm">confidence <b>{Math.round(result.confidence * 100)}%</b></span>}
                   </div>
                 ) : (
                   <Tag kind="warn">Not sure</Tag>
                 )}
-                {result.status === "ok" && !result.symptom && (
+                {result.seen && <p className="mono-sm" style={{ marginTop: 10 }}>{result.seen}</p>}
+                {result.label === "problem" && (
+                  <p className="mono-sm muted" style={{ marginTop: 10 }}>
+                    The photo check does not name diseases. Choose the closest symptom below.
+                  </p>
+                )}
+                {result.status === "ok" && !result.symptom && result.label !== "healthy" && result.label !== "problem" && (
                   <p className="mono-sm muted" style={{ marginTop: 10 }}>
                     No sensor rule for this one, so there is nothing to cross-check.
                   </p>

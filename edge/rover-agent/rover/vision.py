@@ -6,9 +6,11 @@ on the Pi in milliseconds and every number can be explained to a farmer.
     dryness    brightness of the visible soil, between calibrated wet and dry
                references (dry soil is lighter than wet soil)
 
-A yellowing tree is only *flagged*. If the MobileNetV2 disease model is
-installed it is run on flagged cells; its answer is advisory and never
-triggers a pump, valve or treatment.
+A yellowing tree is only *flagged*. These thresholds have only seen the
+simulator's images, never a real guava tree. If a disease model is installed
+it is run on flagged cells; its answer is advisory and never triggers a pump,
+valve or treatment. No guava model exists yet: the adapter below was written
+for a tomato model that is not in this repository.
 
 Calibration: the defaults match the simulator. On a real bed, photograph a
 patch of saturated soil and a patch of dry soil under the rover's own light

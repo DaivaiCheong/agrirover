@@ -55,6 +55,21 @@ Sellers' pages claiming 10-30 % higher guava yield from fertigation gave no sour
 
 **Not found:** direct evidence that excess nitrogen lowers guava sugar. The app's rule of no nitrogen before harvest comes from the guava document, not a study found here.
 
+## Photo check: what was measured (2026-11-05)
+
+Test photos: [BD Guava Fruit and Leaf Disease Dataset v5](https://data.mendeley.com/datasets/rgp9xy5gy2) (CC BY 4.0), Bangladesh, monsoon: 1,092 photos, 10 classes, YOLO labels. **It has no anthracnose and no wilt**, and many photos are picked leaves on a plain background, so these scores say little about a rover's view of a tree. Most classes come from one or two collection sessions, so disease and session are tangled.
+
+| Test | Result | What it means |
+|---|---|---|
+| Gemma 4 (`gemma4`, local, RTX 2080 Super, about 3 s a photo), 123 photos, asked to name the disease | Named a disease on 30 sick photos: 6 right. Said anthracnose 22 times, all wrong. 73 unsure | Must not name diseases. Each false anthracnose would have told a farmer to cut water and remove fruit |
+| Gemma 4, same photos, asked healthy, problem or unsure | 112 of 121 right, 2 unsure. Missed 5 of 99 sick (4 insect bites). False alarm on 4 of 24 healthy (all fruit) | Usable as a first screen. The prompt was changed after seeing these photos, so this is optimistic. This is the app's setting |
+| MobileNetV3-Small trained on the dataset (random 70/15/15 split, 169 test photos, about 1 minute on the GPU, 6 MB) | 91.1 % across the 10 classes. Sick called healthy 3 of 118, healthy called sick 0 of 51 | Promising, but see the next row. Not installed in the app |
+| The same model, leaf or fruit blacked out using the dataset's boxes | **51.5 %**, where always guessing the biggest class gets 16 % | A large part of the 91 % comes from something other than the disease: session, background or box shape. Not proof it works in our orchard |
+
+**Rule from this:** no disease name reaches a farmer until a model passes on Siem Reap photos from sessions it never trained on. `scripts/eval_photo_check.py` scores any Ollama model on a folder of labelled photos.
+
+Wider evidence: models trained on PlantVillage lab photos drop from above 99 % to below 30 % on field photos ([Kyushu 2025](https://catalog.lib.kyushu-u.ac.jp/opac_download_md/7395548/2025_p0402.pdf), summary only). Anthracnose spreads under humid conditions, rust in warm humid weather, and algal spot with wet conditions and splashing water, where guava in high rainfall is a crop that can need control ([IPM Guava](https://agritech.tnau.ac.in/horticulture/pdf/tech_bulletin/national/IPM-GUAVA-Revised-Sept2011.pdf), [Pacific Pests](https://apps.lucidcentral.org/ppp/text/web_full/entities/algal_leaf_spot_148.htm), summaries only). No source found links soil moisture to anthracnose, so the app says wet soil is not the cause.
+
 ## Open
 
 - The guava document's own numbers remain unchecked (see [GUAVA-REQUIREMENTS.md](GUAVA-REQUIREMENTS.md)).

@@ -192,7 +192,7 @@ export type DeviceRow = {
 };
 
 export type PhotoResult = {
-  status: "ok" | "uncertain"; label: string | null; confidence: number | null; note: string;
+  status: "ok" | "uncertain"; label: string | null; confidence: number | null; seen: string | null; note: string;
   symptom: string | null; correlation: Correlation | null;
 };
 

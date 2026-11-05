@@ -17,7 +17,8 @@ async def diagnose(session: AsyncSession, farm_name: str, zone_name: str, sympto
     """The symptom against one bed's readings. Unknown bed -> NotFound."""
     now = now or utcnow()
     snap = (await load_snapshots(session, farm_name, now, zone_name))[0]
-    out = guava.correlate(symptom, snap.readings, snap.recent_min, now)
     stage = guava.stage_of(snap.day) if snap.day and snap.day >= 1 else None
+    stress = bool(snap.planting and snap.planting.regulation == "withhold")
+    out = guava.correlate(symptom, snap.readings, snap.recent_min, now, stage, stress)
     return {**out, "zone": snap.zone.name, "label": snap.zone.label,
             "stage": None if stage is None else {"key": stage.key, "title": stage.title, "day": snap.day}}

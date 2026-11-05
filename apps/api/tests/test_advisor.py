@@ -133,6 +133,30 @@ class TestLooking:
         rows = advise_trees(ctx(), [tree(0, 72, canopy=0.5), tree(1, 72, canopy=0.5, flagged=True), tree(2, 72, canopy=0.2)])
         assert rows[0]["notes"] == [] and "Yellow leaves: look" in rows[1]["notes"] and "Small canopy: look" in rows[2]["notes"]
 
+    def test_yellow_leaves_during_stress_are_expected_not_a_problem(self):
+        stress = WaterContext(stage=STRESS, stress=True, et0=4.5, area_per_tree=10.5, efficiency=0.9)
+        rows = advise_trees(stress, [tree(0, 26.2, flagged=True)])
+        assert rows[0]["yellow"]["cause"] == "stress" and "Do not water or spray" in rows[0]["yellow"]["action"]
+
+    def test_stress_does_not_explain_yellow_leaves_on_wet_soil(self):
+        stress = WaterContext(stage=STRESS, stress=True, et0=4.5, area_per_tree=10.5, efficiency=0.9)
+        assert advise_trees(stress, [tree(0, 45, flagged=True)])[0]["yellow"]["cause"] == "unknown"
+
+    def test_yellow_leaves_on_low_ec_ask_for_feed_and_a_leaf_test_not_fungicide(self):
+        why = guava.why_yellow(FLUSH, False, {"soil_moisture": 65, "soil_ec": 0.70, "soil_ph": 6.3})
+        assert why["cause"] == "low_feed" and "leaf test" in why["action"] and "No fungicide" in why["action"]
+
+    def test_yellow_leaves_on_soaked_soil_blame_the_water_first(self):
+        assert guava.why_yellow(guava.STAGES[4], False, {"soil_moisture": 82.8, "soil_ec": 1.0})["cause"] == "wet"
+
+    def test_the_cause_reaches_the_days_instructions_with_the_trees_named(self):
+        stress = WaterContext(stage=STRESS, stress=True, et0=4.5, area_per_tree=10.5, efficiency=0.9)
+        trees = advise_trees(stress, [tree(0, 26.2, flagged=True), tree(1, 26.2, flagged=True)])
+        look = [t for t in advisor.todo(trees=trees, water_litres=0, feed=advise_feed(STRESS, 30, B, 2, 1.0, 6.3), stage=STRESS, stress=True, raining=False,
+                                        alerts=[], hours=0, firmware_limit_s=90) if t["kind"] == "look"]
+        assert look == [{"kind": "look", "severity": "info", "text": "2 trees with yellow leaves: expected from the stress",
+                         "detail": "Do not water or spray. R1 T1, R1 T2."}]
+
     def test_salty_tree_is_named(self):
         rows = advise_trees(ctx(), [tree(0, 72, readings={"soil_ec": 2.6})])
         assert "Salty: no feed" in rows[0]["notes"]
@@ -291,6 +315,23 @@ class TestSymptoms:
     def test_fruit_fly_needs_warmth_and_humidity_together(self):
         assert guava.correlate("fruit_fly", self.reads(air_temperature=29, air_humidity=76), None, NOW)["verdict"] == "supported"
         assert guava.correlate("fruit_fly", self.reads(air_temperature=29, air_humidity=60), None, NOW)["verdict"] == "not_supported"
+
+    def test_a_stress_block_reads_yellow_leaves_as_expected(self):
+        out = guava.correlate("chlorosis", self.reads(soil_moisture=26.2, soil_ph=6.2), None, NOW, STRESS, True)
+        assert out["verdict"] == "supported" and "expected from the stress" in out["explanation"]
+
+    def test_low_ec_explains_yellow_leaves_against_the_stages_own_target(self):
+        out = guava.correlate("chlorosis", self.reads(soil_ec=0.70, soil_ph=6.4), None, NOW, FLUSH)
+        assert out["verdict"] == "supported" and "leaf test" in out["explanation"]
+        assert guava.correlate("chlorosis", self.reads(soil_ec=1.5, soil_ph=6.4), None, NOW, FLUSH)["verdict"] == "not_supported"
+
+    def test_anthracnose_on_soaked_soil_says_cut_the_water_and_that_soil_is_not_the_cause(self):
+        out = guava.correlate("anthracnose", self.reads(soil_moisture=82.8, air_humidity=68), None, NOW, guava.STAGES[4])
+        assert out["verdict"] == "supported" and "Cut the water" in out["explanation"] and "does not cause" in out["caveat"]
+
+    def test_algal_spot_and_rust_have_rules(self):
+        assert guava.match_symptom("algal_leaf_spot") == "algal_leaf_spot" and guava.match_symptom("red rust") == "rust"
+        assert guava.correlate("rust", self.reads(air_humidity=90, air_temperature=28), None, NOW)["verdict"] == "supported"
 
     def test_no_readings_is_no_answer(self):
         assert guava.correlate("anthracnose", {}, None, NOW)["verdict"] == "no_data"
