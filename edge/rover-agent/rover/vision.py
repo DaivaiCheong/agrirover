@@ -6,7 +6,7 @@ on the Pi in milliseconds and every number can be explained to a farmer.
     dryness    brightness of the visible soil, between calibrated wet and dry
                references (dry soil is lighter than wet soil)
 
-A yellowing cell is only *flagged*. If the MobileNetV2 disease model is
+A yellowing tree is only *flagged*. If the MobileNetV2 disease model is
 installed it is run on flagged cells; its answer is advisory and never
 triggers a pump, valve or treatment.
 

@@ -18,6 +18,7 @@ from rover.config import RoverConfig
 from rover.drive import Pose, SimDrive
 from rover.mission import MissionReport, MissionRunner, MissionSpec, SimOptions, planned_stats
 from rover.planner import Cell
+from rover.probe import SimProbe
 from rover.report import save_report
 from rover.safety import Guards, SafetyStop
 
@@ -26,16 +27,18 @@ def sim_runner(cfg: RoverConfig, spec: MissionSpec, seed: int, guards: Guards,
                battery_v: float = 12.6, on_frame=None,
                speedup: float = 0.0, simulated: bool = True) -> tuple[MissionRunner, SimField]:
     """speedup 0 = instant; 1 = real time; 10 = ten times faster than the real rover."""
-    field = SimField(spec.rows, spec.cols, seed=seed)
-    start = Cell(0, 0).center(spec.cell_m)
+    sim = spec.sim or SimOptions()
+    field = SimField(spec.rows, spec.cols, seed=seed, base=sim.base,
+                     moisture_spread=12.0 if sim.moisture_spread is None else sim.moisture_spread)
+    row_m = spec.row_spacing
     sleep = (lambda s: time.sleep(s / speedup)) if speedup > 0 else None
-    drive = SimDrive(cfg.drive, Pose(*start, 0.0),
-                     fence=(spec.cols * spec.cell_m, spec.rows * spec.cell_m),
+    drive = SimDrive(cfg.drive, Pose(spec.cell_m / 2, row_m / 2, 0.0),
+                     fence=(spec.cols * spec.cell_m, spec.rows * row_m),
                      battery_v=battery_v, sleep=sleep)
-    return MissionRunner(cfg, drive, SimCamera(field), guards, on_frame=on_frame, simulated=simulated), field
+    return MissionRunner(cfg, drive, SimCamera(field), guards, on_frame=on_frame, simulated=simulated, probe=SimProbe(field)), field
 
 
-def live_sim_runner(cfg: RoverConfig, spec: MissionSpec, guards: Guards, seed: int = 7, speedup: float = 10.0) -> MissionRunner:
+def live_sim_runner(cfg: RoverConfig, spec: MissionSpec, guards: Guards, seed: int = 7, speedup: float = 40.0) -> MissionRunner:
     """The simulated rover on the real broker. Everything but the wheels and the camera is the real software,
     and a scripted event ends the survey through the same path a real one would."""
     sim = spec.sim or SimOptions()
@@ -44,7 +47,7 @@ def live_sim_runner(cfg: RoverConfig, spec: MissionSpec, guards: Guards, seed: i
 
     def on_frame(_cell, _img) -> None:
         if pace > 0:
-            time.sleep(cfg.capture_s / pace)   # settle + photograph + analyse takes time on the real rover
+            time.sleep((cfg.capture_s + cfg.probe_s) / pace)   # photographing and probing take time on the real rover
         photographed[0] += 1
         if sim.rain_at_cell is not None and photographed[0] >= sim.rain_at_cell:
             raise SafetyStop("rain")
@@ -62,14 +65,13 @@ def agreement(report: MissionReport, field: SimField) -> dict[str, float]:
     truths = [field.truth(Cell(r.row, r.col)) for r in report.results]
     return {
         "plant": sum(r.obs.plant == t.plant for r, t in zip(report.results, truths)) / n,
-        "needs_water": sum(r.obs.needs_water == t.needs_water for r, t in zip(report.results, truths)) / n,
         "yellowing": sum(r.obs.flagged == (t.chlorosis > 0) for r, t in zip(report.results, truths)) / n,
     }
 
 
 def cmd_sim(args: argparse.Namespace) -> int:
     cfg = RoverConfig(report_dir=args.out)
-    spec = MissionSpec(args.mission or f"sim-seed{args.seed}", "zone-a", args.rows, args.cols, args.cell)
+    spec = MissionSpec(args.mission or f"sim-seed{args.seed}", "g1", args.rows, args.cols, args.cell)
     spec.validate(cfg.drive)
     frames: dict = {}
     runner, field = sim_runner(cfg, spec, args.seed, Guards(), args.battery,
@@ -78,17 +80,15 @@ def cmd_sim(args: argparse.Namespace) -> int:
     paths = save_report(report, args.out, frames)
 
     plan = planned_stats(spec)
-    print(f"\nAgriRover simulated survey · {spec.rows} x {spec.cols} cells of {spec.cell_m} m")
+    print(f"\nAgriRover simulated round · {spec.rows} rows of {spec.cols} trees, {spec.cell_m} m apart")
     print(f"  status            {report.status}" + (f" ({report.abort_reason})" if report.abort_reason else ""))
-    print(f"  cells scanned     {report.cells_scanned} / {spec.rows * spec.cols}")
-    print(f"  plants detected   {report.plants_detected}")
-    print(f"  need water        {report.plants_needing_water}  "
-          f"({sum(t['ml'] for t in report.watering_targets)} ml proposed in total)")
+    print(f"  stops             {report.cells_scanned} / {spec.rows * spec.cols}")
+    print(f"  trees seen        {report.plants_detected}")
     print(f"  flagged (yellow)  {report.cells_flagged}")
     print(f"  path              {report.distance_m:.1f} m driven of {plan['distance_m']} m planned, "
           f"{plan['turns']} turns")
     print(f"  est. duration     {report.est_duration_s / 60:.1f} min "
-          f"(drive {report.drive_time_s:.0f} s + {cfg.capture_s:.0f} s per photo)")
+          f"(drive {report.drive_time_s:.0f} s + {cfg.capture_s + cfg.probe_s:.0f} s per tree)")
     for key, value in agreement(report, field).items():
         print(f"  vision vs truth   {key:<12} {value:.0%}")
     for kind, path in paths.items():
@@ -127,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("sim", help="simulated survey; writes report.json and field-map.svg")
     s.add_argument("--rows", type=int, default=4)
     s.add_argument("--cols", type=int, default=10)
-    s.add_argument("--cell", type=float, default=0.5, help="cell size in metres")
+    s.add_argument("--cell", type=float, default=3.0, help="metres from tree to tree")
     s.add_argument("--seed", type=int, default=7)
     s.add_argument("--battery", type=float, default=12.6, help="starting battery voltage")
     s.add_argument("--mission", default=None)
@@ -138,8 +138,8 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--sim-hardware", action="store_true", help="simulated drive and camera")
     r.add_argument("--usb-camera", action="store_true", help="USB webcam instead of the Pi camera")
     r.add_argument("--seed", type=int, default=7)
-    r.add_argument("--speedup", type=float, default=10.0,
-                   help="with --sim-hardware: 1 = real time, 10 = 10x faster (default), 0 = instant")
+    r.add_argument("--speedup", type=float, default=40.0,
+                   help="with --sim-hardware: 1 = real time, 40 = 40x faster (default), 0 = instant")
     r.set_defaults(func=cmd_run)
 
     args = p.parse_args(argv)

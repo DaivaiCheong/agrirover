@@ -30,20 +30,20 @@ def rover_is_idle():
 def test_mission_is_published_to_the_rover():
     app.dependency_overrides[get_publisher] = lambda: fake_publish
     sent.clear()
-    r = client.post("/api/v1/missions", json={"zoneId": "zone-a", "rows": 4, "cols": 10})
+    r = client.post("/api/v1/missions", json={"zoneId": "g1", "rows": 4, "cols": 10})
     assert r.status_code == 202 and r.json()["status"] == "queued"
     topic, payload = sent[0]
     assert topic == TOPIC_MISSION_SET
-    assert payload == {"missionId": r.json()["missionId"], "zoneId": "zone-a",
-                       "rows": 4, "cols": 10, "cellM": 0.5}
+    assert payload == {"missionId": r.json()["missionId"], "zoneId": "g1",
+                       "rows": 4, "cols": 10, "cellM": 3.0, "rowM": 3.0}
     app.dependency_overrides.clear()
 
 
 def test_oversized_or_invalid_missions_are_refused():
     app.dependency_overrides[get_publisher] = lambda: fake_publish
-    for body in ({"zoneId": "zone-a", "rows": 30, "cols": 30},
-                 {"zoneId": "zone-a", "rows": 0, "cols": 3},
-                 {"zoneId": "zone-a", "rows": 2, "cols": 2, "cellM": 3},
+    for body in ({"zoneId": "g1", "rows": 30, "cols": 30},
+                 {"zoneId": "g1", "rows": 0, "cols": 3},
+                 {"zoneId": "g1", "rows": 2, "cols": 2, "cellM": 11},
                  {"rows": 2, "cols": 2}):
         assert client.post("/api/v1/missions", json=body).status_code == 422
     app.dependency_overrides.clear()
@@ -51,7 +51,7 @@ def test_oversized_or_invalid_missions_are_refused():
 
 def test_broker_down_is_a_503_not_a_silent_success():
     app.dependency_overrides[get_publisher] = lambda: broker_down
-    r = client.post("/api/v1/missions", json={"zoneId": "zone-a", "rows": 2, "cols": 2})
+    r = client.post("/api/v1/missions", json={"zoneId": "g1", "rows": 2, "cols": 2})
     assert r.status_code == 503
     app.dependency_overrides.clear()
 

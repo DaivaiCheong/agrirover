@@ -13,7 +13,7 @@ from app.services.errors import Invalid, NotFound
 from app.services.metrics import SOIL_PROBE_METRICS, SPECS
 from app.services.rule_engine import utcnow
 
-MAX_HOURS = 24 * 14
+MAX_HOURS = 24 * 90
 MAX_METRICS = 12
 MIN_BUCKET_S = 60
 

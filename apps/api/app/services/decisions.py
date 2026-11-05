@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
@@ -26,7 +26,7 @@ from app.models.entities import (DailyDecision, Farm, IrrigationEvent, Irrigatio
 from app.services.farm_data import active_plantings
 from app.services.metrics import SOIL_PROBE_METRICS
 from app.services.rule_engine import Decision, RuleConfig, RuleInput, evaluate
-from app.services.water_plan import crop_day
+from app.services.guava import days_between as crop_day, stage_of
 
 DECISION_HOUR_LOCAL = 6
 
@@ -50,7 +50,7 @@ class ZoneDecision:
     reason: str
     moisture_pct: float | None
     decision_at: datetime
-    label: str | None = None          # "Tomato bed A"
+    label: str | None = None          # "G1 Wide orchard"
     planting_day: int | None = None   # day 21 of the crop
     arm: str | None = None            # trial arm: guided | usual | None
     zone_id: object = None
@@ -66,7 +66,7 @@ class ZoneDecision:
 
     @property
     def text(self) -> str:
-        """The line the farmer reads: 'Tomato bed A (day 21): water 40 s' or '...: skip, it is raining'."""
+        """The line the farmer reads: 'G1 Wide orchard (day 21): water 40 s' or '...: skip, it is raining'."""
         if self.decision is Decision.IRRIGATE:
             return f"{self.name}: water {round(self.duration_ms / 1000)} s"
         return f"{self.name}: skip, {REASON_TEXT.get(self.reason, self.reason.replace('_', ' '))}"
@@ -179,6 +179,8 @@ async def decisions_for_farm(session: AsyncSession, farm_name: str,
         moisture, rain = latest_signal(by_zone.get(z.id, []))
         planting, crop = plantings.get(z.id, (None, None))
         day = crop_day(planting.planted_on, today) if planting else None      # planting day = day 1
+        if planting and planting.regulation == "withhold" and stage_of(day).n == 1:
+            cfg = replace(cfg, enabled=False)                                 # stress: dry soil is the point, so the rule stays out
         inputs = {"moisture_pct": moisture, "sensor": sensors[z.id][1] if z.id in sensors else None,
                   "rain": rain, "threshold_pct": cfg.moisture_threshold_pct,
                   "planting_day": day, "crop": crop.common_name if crop else None}

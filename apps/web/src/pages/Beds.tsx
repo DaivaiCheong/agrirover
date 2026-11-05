@@ -104,7 +104,7 @@ export default function Beds() {
           { k: "Area", v: totalArea > 0 ? `${num(totalArea, 0)} m²` : "—" },
         ]} />
 
-        <Panel title="Beds" icon={Activity} pad={false}
+        <Panel title="Blocks" icon={Activity} pad={false}
                right={
                  <div className="seg" role="group" aria-label="History period">
                    {RANGES.map((r) => (
@@ -174,7 +174,7 @@ export default function Beds() {
                 </tbody></table>
               )}
               <BedTrends zone={openCond.zone} params={openCond.params} hours={hours} />
-              <p className="small muted trend-source">Advice only. Targets: {openCond.source}</p>
+              <p className="small muted trend-source">Rover's daily average. Advice only. Targets: {openCond.source}</p>
             </div>
           )}
         </Panel>
@@ -198,6 +198,7 @@ export default function Beds() {
 
       <AddCropModal
         isOpen={Boolean(plantingZone)}
+        zone={plantingZone}
         onClose={() => setPlantingZone(null)}
         onAdded={() => { zones.reload(); cycles.reload(); }}
       />

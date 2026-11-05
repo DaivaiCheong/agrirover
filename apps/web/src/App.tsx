@@ -14,9 +14,9 @@ import Devices from "./pages/Devices";
 import Equipment from "./pages/Equipment";
 import Harvest from "./pages/Harvest";
 import OrchardCycle from "./pages/OrchardCycle";
-import Plan from "./pages/Plan";
 import Rover from "./pages/Rover";
 import RoverAbout from "./pages/RoverAbout";
+import RoverGrowth from "./pages/RoverGrowth";
 import RoverHistory from "./pages/RoverHistory";
 import RoverSop from "./pages/RoverSop";
 import Settings from "./pages/Settings";
@@ -36,9 +36,9 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/rover" element={rover(<Rover />)} />
         <Route path="/rover/about" element={rover(<RoverAbout />)} />
+        <Route path="/rover/growth" element={rover(<RoverGrowth />)} />
         <Route path="/rover/sop" element={rover(<RoverSop />)} />
         <Route path="/rover/history" element={rover(<RoverHistory />)} />
-        <Route path="/plan" element={<Plan />} />
         <Route path="/cycles" element={<Cycles />} />
         <Route path="/cycles/:id" element={<CycleCop />} />
         <Route path="/cycles/:id/orchard" element={<OrchardCycle />} />
@@ -52,7 +52,6 @@ export default function App() {
         <Route path="/settings" element={farm(<Settings />)} />
         <Route path="/devices" element={farm(<Devices />)} />
         <Route path="/crop" element={farm(<Crop />)} />
-        <Route path="/water" element={<Navigate to="/plan" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>

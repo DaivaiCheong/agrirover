@@ -1,10 +1,10 @@
 """M2 through the real API: costs, stock, equipment, harvest, sales, and the COP report.
 
-The worked example matches tests/test_cop.py, except water: here the planner supplies it.
+The worked example matches tests/test_cop.py, except water: here the stage's full demand supplies it.
 Tomato, 100 plants on 50 m2 (0.5 m2 each), planted 1 January (ET0 4.47, Siem Reap's January), efficiency 0.9,
 Kc 0.6 in the first 10 days:
   litres/day = 0.6 x 4.47 x 0.5 / 0.9 x 100 = 149  ->  10 days = 1.49 m3  x 0.10 USD = 0.149
-  total = 286 + depreciation 10 + land 0.05 + water 0.149 = 296.20      COP = 2.962 per kg."""
+  total = 286 + depreciation 10 + land 0.05 + water 0.168 = 296.22      COP = 2.962 per kg."""
 import csv
 import io
 
@@ -27,7 +27,7 @@ async def farm_with_cycle(c, label="Test bed", planted="2026-01-01", closed="202
         "khrPerUsd": 4000, "familyWageUsdPerDay": 6, "waterCostPerM3Usd": 0.1, "landRentUsdPerHaYear": 365,
         "irrigationEfficiency": 0.9})).status_code == 200
     bed = (await c.post(f"{V1}/zones", json={"label": label, "areaM2": area})).json()
-    cyc = (await c.post(f"{V1}/cycles", json={"zone": bed["name"], "crop": "tomato", "plantedOn": planted,
+    cyc = (await c.post(f"{V1}/cycles", json={"zone": bed["name"], "crop": "guava", "plantedOn": planted,
                                               "plantCount": plants, "areaM2": area})).json()
     if closed:
         assert (await c.post(f"{V1}/cycles/{cyc['id']}/close", json={"endedOn": closed})).status_code == 200
@@ -67,12 +67,12 @@ async def test_cost_of_production_end_to_end(Session):
         assert by["labour_family"]["amountUsd"] == 120 and by["services"]["amountUsd"] == 15
         assert by["depreciation"]["amountUsd"] == pytest.approx(10.0)
         assert by["land"]["amountUsd"] == pytest.approx(0.05)
-        assert by["water_energy"]["amountUsd"] == pytest.approx(0.15, abs=0.006) and by["water_energy"]["estimate"]
-        assert cop["totalCostUsd"] == pytest.approx(296.20, abs=0.01)
+        assert by["water_energy"]["amountUsd"] == pytest.approx(0.17, abs=0.006) and by["water_energy"]["estimate"]
+        assert cop["totalCostUsd"] == pytest.approx(296.22, abs=0.01)
         assert cop["copPerKg"] == pytest.approx(2.962, abs=0.001)
         assert cop["costPerPlant"] == pytest.approx(2.962, abs=0.001) and cop["costPerM2"] == pytest.approx(5.924, abs=0.001)
         assert cop["kgMarketable"] == 100 and cop["kgLost"] == 10
-        assert cop["revenueUsd"] == 320 and cop["marginUsd"] == pytest.approx(23.8, abs=0.01)
+        assert cop["revenueUsd"] == 320 and cop["marginUsd"] == pytest.approx(23.78, abs=0.01)
         assert cop["breakEvenPricePerKg"] == cop["copPerKg"]
         assert abs(sum(x["sharePct"] for x in cop["lines"]) - 100) < 0.2
         assert cop["cycle"]["bedLabel"] == "Test bed"
@@ -109,7 +109,7 @@ async def test_family_labour_needs_a_wage(Session):
     await seeded(Session)
     async with pgdb.api(Session) as c:
         bed = (await c.post(f"{V1}/zones", json={"label": "B1"})).json()
-        cyc = (await c.post(f"{V1}/cycles", json={"zone": bed["name"], "crop": "tomato", "plantedOn": "2026-01-01"})).json()
+        cyc = (await c.post(f"{V1}/cycles", json={"zone": bed["name"], "crop": "guava", "plantedOn": "2026-01-01"})).json()
         r = await c.post(f"{V1}/costs", json={"plantingId": cyc["id"], "date": "2026-01-02",
                                               "category": "labour_family", "qty": 2, "unit": "day"})
         assert r.status_code == 422 and "family wage" in r.json()["detail"].lower()
@@ -181,7 +181,7 @@ async def test_compare_two_beds_and_export(Session):
     async with pgdb.api(Session) as c:
         a = await farm_with_cycle(c, label="Bed A2")
         b = (await c.post(f"{V1}/zones", json={"label": "Bed B2", "areaM2": 50})).json()
-        cb = (await c.post(f"{V1}/cycles", json={"zone": b["name"], "crop": "tomato", "plantedOn": "2026-01-01",
+        cb = (await c.post(f"{V1}/cycles", json={"zone": b["name"], "crop": "guava", "plantedOn": "2026-01-01",
                                                  "plantCount": 100, "areaM2": 50})).json()["id"]
         await c.post(f"{V1}/cycles/{cb}/close", json={"endedOn": "2026-01-10"})
         await add_cost(c, a, "seed", amount=10)

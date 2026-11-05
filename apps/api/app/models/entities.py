@@ -15,7 +15,7 @@ from sqlalchemy import (
     Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Integer,
     Numeric, SmallInteger, String, Text, UniqueConstraint, false, func,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -120,7 +120,7 @@ class Zone(Base):
     farm_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("farm.id", ondelete="CASCADE"), nullable=False)
     crop_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crop_profile.id", ondelete="SET NULL"))
     name: Mapped[str] = mapped_column(String(80), nullable=False)          # short id, used in MQTT topics
-    label: Mapped[str | None] = mapped_column(String(80))                  # what the farmer reads: "Tomato bed A"
+    label: Mapped[str | None] = mapped_column(String(80))                  # what the farmer reads: "G1 Wide orchard"
     trial_arm: Mapped[TrialArm | None] = mapped_column(Enum(TrialArm, name="trial_arm"))
     area_m2: Mapped[float | None] = mapped_column(Numeric(8, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -156,7 +156,7 @@ class Contact(Base):
 
 
 class Planting(Base):
-    """What is growing in a zone, and since when. Day 21 of tomato comes from planted_on."""
+    """A guava cycle in a zone. planted_on is the day this cycle started (day 1); the trees went in on trees_planted_on."""
     __tablename__ = "planting"
     __table_args__ = (CheckConstraint("expected_price_usd_per_kg IS NULL OR expected_price_usd_per_kg >= 0",
                                       name="ck_planting_price"),)
@@ -171,6 +171,17 @@ class Planting(Base):
     # Growing setup (services/setups.py): picks the spacing and the yield benchmark. Empty = not chosen.
     setup: Mapped[str | None] = mapped_column(String(24))
     expected_price_usd_per_kg: Mapped[float | None] = mapped_column(Numeric(10, 4))   # for the revenue forecast
+    trees_planted_on: Mapped[date | None] = mapped_column(Date)
+    regulation: Mapped[str | None] = mapped_column(String(16))          # how the cycle was started: services/guava.py METHODS
+    fruit_mm: Mapped[float | None] = mapped_column(Numeric(5, 1))       # last fruit size measured, for bagging
+
+
+class OrchardJobDone(Base):
+    """A task ticked off in a cycle."""
+    __tablename__ = "orchard_job_done"
+    planting_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("planting.id", ondelete="CASCADE"), primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    done_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Sensor(Base):
@@ -407,8 +418,7 @@ class SurveyFinding(Base):
     confidence: Mapped[float | None] = mapped_column(Numeric(4, 3))
     image_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crop_image.id", ondelete="SET NULL"))
     canopy: Mapped[float | None] = mapped_column(Numeric(5, 4))
-    dryness: Mapped[float | None] = mapped_column(Numeric(4, 3))
-    suggested_ml: Mapped[int | None] = mapped_column(Integer)
+    readings: Mapped[dict | None] = mapped_column(JSONB)                # what the probe and air sensor read at this tree
     flagged: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
 
 

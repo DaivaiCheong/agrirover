@@ -1,6 +1,6 @@
 import { useState } from "react";
 import RoverMap, { RoverLegend } from "../components/RoverMap";
-import { ToCheck } from "./Rover";
+import { TreeTable } from "./Rover";
 import { Empty, Notice, Panel, Tag } from "../components/ui";
 import { api, type SurveySummary } from "../lib/api";
 import { STATUS_WORD, minutes, stopInfo } from "../lib/rover";
@@ -24,11 +24,11 @@ export default function RoverHistory() {
     <main className="main stack" style={{ paddingTop: 12 }}>
       {list.error && <Notice kind="alert">{list.error}</Notice>}
       {one.error && <Notice kind="alert">{one.error}</Notice>}
-      <Panel title="Surveys" pad={false} right={<span className="small muted">Photos are not kept</span>}>
-        {rows.length === 0 ? <Empty>No surveys saved yet. A survey of a sample-data bed is not saved.</Empty> : (
-          <div className="tablewrap">
+      <Panel title="Rounds" pad={false} right={<span className="small muted">Photos are not kept</span>}>
+        {rows.length === 0 ? <Empty>No rounds saved yet.</Empty> : (
+          <div className="tablewrap rc-history">
             <table className="tbl">
-              <thead><tr><th>When</th><th>Bed</th><th>Source</th><th>Status</th><th className="r">Cells</th><th className="r">Plants</th><th className="r">Need water</th><th className="r">Yellowing</th><th className="r">Distance m</th><th className="r">Real time</th></tr></thead>
+              <thead><tr><th>When</th><th>Block</th><th>Source</th><th>Status</th><th className="r">Stops</th><th className="r">Trees</th><th className="r">Yellow</th><th className="r">Real time</th></tr></thead>
               <tbody>
                 {rows.map((s) => (
                   <tr key={s.id} className={`pickable${open === s.id ? " picked" : ""}`} onClick={() => setOpen(open === s.id ? null : s.id)}>
@@ -38,9 +38,7 @@ export default function RoverHistory() {
                     <td className="nowrap"><StatusCell s={s} /></td>
                     <td className="r nowrap">{s.cellsScanned ?? 0} of {(s.rows ?? 0) * (s.cols ?? 0)}</td>
                     <td className="r">{s.plantsDetected ?? "—"}</td>
-                    <td className="r">{s.plantsNeedingWater ?? "—"}</td>
                     <td className="r">{s.cellsFlagged ?? "—"}</td>
-                    <td className="r">{s.distanceM ?? "—"}</td>
                     <td className="r nowrap">{s.estDurationS === null ? "—" : minutes(s.estDurationS)}</td>
                   </tr>
                 ))}
@@ -51,11 +49,11 @@ export default function RoverHistory() {
       </Panel>
       {open && r && r.rows && r.cols && (
         <>
-          <Panel title={`Bed map · ${r.bedLabel}`} pad={false} right={r.simulated ? <span className="small muted">Generated field, not a real bed</span> : undefined}>
+          <Panel title={`Block map · ${r.bedLabel}`} pad={false} right={r.simulated ? <span className="small muted">Generated orchard, not a real one</span> : undefined}>
             <div className="rm-wrap rm-wrap-sm"><RoverMap rows={r.rows} cols={r.cols} cells={r.cells} /></div>
             <div className="panel-foot rm-foot"><RoverLegend /></div>
           </Panel>
-          <ToCheck cells={r.cells} />
+          <TreeTable cells={r.cells} />
         </>
       )}
     </main>

@@ -18,11 +18,11 @@ from app.services.seed import seed_stage1
 from app.workers.mqtt_ingest import readings, store_telemetry
 
 AT = datetime(2026, 11, 4, 6, 0, tzinfo=ZoneInfo("Asia/Phnom_Penh")).astimezone(timezone.utc)
-TOPIC = "farm/farm-01/zone/zone-a/telemetry"
+TOPIC = "farm/farm-01/zone/g1/telemetry"
 
 # Exactly the payload in the spec.
 SPEC_PAYLOAD = {
-    "device": "ESP-FIELD-01", "zone": "zone-a",
+    "device": "ESP-FIELD-01", "zone": "g1",
     "measurements": [
         {"metric": "soil_moisture", "value": 68.2, "unit": "%"},
         {"metric": "soil_ph", "value": 6.35, "unit": "pH"},
@@ -163,7 +163,7 @@ def test_the_spec_payload_is_stored_whole_and_the_probe_readings_belong_to_the_d
 
 
 def test_a_dead_probe_costs_only_its_own_readings(caplog):
-    payload = {"device": "ESP-FIELD-01", "zone": "zone-a", "measurements": [
+    payload = {"device": "ESP-FIELD-01", "zone": "g1", "measurements": [
         {"metric": "soil_ph", "value": 655.35, "unit": "pH"},              # dead RS485 link
         {"metric": "soil_temperature", "value": 85, "unit": "C"},
         {"metric": "soil_ec", "value": 2450, "unit": "uS/cm"},             # fine, in microsiemens
@@ -184,7 +184,7 @@ def test_a_dead_probe_costs_only_its_own_readings(caplog):
 def test_a_payload_that_names_another_bed_is_not_stored_under_this_topic():
     async def scenario(Session):
         async with Session() as s:
-            assert await store_telemetry(s, TOPIC, {**SPEC_PAYLOAD, "zone": "zone-b"}, now=AT) == 0
+            assert await store_telemetry(s, TOPIC, {**SPEC_PAYLOAD, "zone": "g2"}, now=AT) == 0
         assert await _rows(Session) == {}
 
     _run("aaf_probe_ingest_c", scenario)

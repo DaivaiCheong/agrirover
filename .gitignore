@@ -45,3 +45,6 @@ Thumbs.db
 # --- build ---
 build/
 .arduino-build/
+
+# database backups
+backups/

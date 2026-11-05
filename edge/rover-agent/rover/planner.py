@@ -1,16 +1,16 @@
-"""Coverage planning over a bed divided into a grid of cells.
+"""The daily round: every tree of an orchard block, once.
 
-The rover visits every cell exactly once in serpentine (boustrophedon) order:
-along row 0 eastwards, one step north, along row 1 westwards, and so on. Every
-step is to an adjacent cell, so no single move is longer than one cell and the
-path never crosses itself — dead-reckoning error stays small and the wheels
-never cross ground the rover has already surveyed.
+Trees stand in rows, so the rover visits them in serpentine (boustrophedon) order:
+along row 0 eastwards, across to the next row, along row 1 westwards, and so on.
+A cell here is one tree. The path never crosses itself, so the wheels do not cross
+ground already driven, and each stop is next to the last.
 
 Frame: x east (along a row, increasing column), y north (increasing row).
 Heading 0 deg = east, 90 deg = north; a positive turn is counter-clockwise.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -48,11 +48,22 @@ def serpentine(rows: int, cols: int) -> list[Cell]:
     return path
 
 
-def plan(path: list[Cell], cell_m: float, start_heading: float = 0.0) -> list[list[Move]]:
-    """Moves to reach each cell of `path`. legs[i] takes the rover from path[i-1]
-    to path[i]; legs[0] is empty because the rover starts on the first cell."""
-    if cell_m <= 0:
-        raise ValueError("cell size must be positive")
+def _forward(metres: float, max_step_m: float | None) -> list[Move]:
+    """One move, or several no longer than the longest step the drive will take."""
+    if not max_step_m or metres <= max_step_m:
+        return [Move("forward", metres)]
+    pieces = math.ceil(metres / max_step_m - 1e-9)
+    return [Move("forward", metres / pieces)] * pieces
+
+
+def plan(path: list[Cell], cell_m: float, start_heading: float = 0.0, row_m: float | None = None,
+         max_step_m: float | None = None) -> list[list[Move]]:
+    """Moves to reach each tree of `path`. legs[i] takes the rover from path[i-1]
+    to path[i]; legs[0] is empty because the rover starts at the first tree.
+    cell_m is tree to tree along a row, row_m between rows (the same if not given)."""
+    if cell_m <= 0 or (row_m is not None and row_m <= 0):
+        raise ValueError("spacing must be positive")
+    row_m = row_m or cell_m
     legs: list[list[Move]] = [[]]
     heading = start_heading
     for a, b in zip(path, path[1:]):
@@ -64,7 +75,7 @@ def plan(path: list[Cell], cell_m: float, start_heading: float = 0.0) -> list[li
         turn = wrap_deg(target - heading)
         if abs(turn) > 1e-9:
             leg.append(Move("turn", turn))
-        leg.append(Move("forward", cell_m))
+        leg.extend(_forward(row_m if step[0] else cell_m, max_step_m))
         legs.append(leg)
         heading = target
     return legs

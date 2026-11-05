@@ -36,7 +36,8 @@ class RoverConfig:
     mqtt_password: str | None = None
     serial_port: str = "/dev/ttyUSB0"
     serial_baud: int = 115200
-    capture_s: float = 1.0           # settle + photograph + analyse, per cell
+    capture_s: float = 1.0           # settle + photograph + analyse, per tree
+    probe_s: float = 40.0            # lower the probe, let it settle, read, raise: an estimate until the arm is built
     report_dir: str = "reports"
     drive: DriveLimits = field(default_factory=DriveLimits)
     guard: GuardLimits = field(default_factory=GuardLimits)

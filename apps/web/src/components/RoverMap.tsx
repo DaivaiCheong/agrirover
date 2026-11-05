@@ -5,15 +5,18 @@ const PX = 44;
 
 function describe(c: RoverCell | undefined, row: number, col: number): string {
   const name = cellName(row, col);
-  if (!c) return `${name}: not scanned`;
-  const parts = [c.plant ? "plant" : "bare soil"];
-  if (c.needs_water) parts.push(`needs water, ${c.suggested_ml} ml`);
-  if (c.flagged) parts.push("yellowing, check it");
+  if (!c) return `${name}: not reached`;
+  if (!c.plant) return `${name}: no tree`;
+  const parts: string[] = [];
+  const m = c.readings?.soil_moisture;
+  if (m !== undefined) parts.push(`soil ${m} %`);
+  if (c.advice) parts.push(c.advice.litres > 0 ? `water ${c.advice.litres} L` : "no water today");
+  if (c.flagged) parts.push("yellow leaves, go and look");
   return `${name}: ${parts.join(", ")}`;
 }
 
-/** The bed from above, row 1 at the bottom, as the rover's own field map draws it. Every state has a mark as
- *  well as a colour: a dot for a plant, millilitres for water, an outline and "!" for yellowing. */
+/** The block from above, row 1 at the bottom. Every state has a mark as well as a colour: a dot for a tree,
+ *  the litres for water, an outline and "!" for yellow leaves. */
 export default function RoverMap({ rows, cols, cells, at, selected, onPick }:
   { rows: number; cols: number; cells: RoverCell[]; at?: [number, number] | null; selected?: [number, number] | null; onPick?: (row: number, col: number) => void }) {
   const byCell = new Map(cells.map((c) => [`${c.row},${c.col}`, c]));
@@ -27,7 +30,7 @@ export default function RoverMap({ rows, cols, cells, at, selected, onPick }:
 
   return (
     <svg className="rm" viewBox={`-1 -1 ${cols * PX + 2} ${rows * PX + 2}`} role="group"
-         aria-label={`Bed map, ${rows} rows by ${cols} columns, ${cells.length} cells scanned`}>
+         aria-label={`Block map, ${rows} rows of ${cols} trees, ${cells.length} reached`}>
       {path.map(([row, col]) => {
         const c = byCell.get(`${row},${col}`);
         const x = col * PX, top = y(row);
@@ -47,10 +50,11 @@ export default function RoverMap({ rows, cols, cells, at, selected, onPick }:
       <g className="rm-marks">
         {cells.map((c) => {
           const x = c.col * PX, top = y(c.row);
+          const litres = c.advice?.litres ?? 0;
           return (
-            <g key={`${c.row}-${c.col}`} className={c.needs_water ? "rm-water" : undefined}>
-              {c.plant && !c.needs_water && <circle cx={x + PX / 2} cy={top + PX / 2} r={3 + Math.min(1, (c.canopy ?? 0.2) / 0.35) * 8} className="rm-plant" />}
-              {c.needs_water && words && <text x={x + PX / 2} y={top + PX / 2 + 4} className="rm-ml">{c.suggested_ml}</text>}
+            <g key={`${c.row}-${c.col}`} className={litres > 0 ? "rm-water" : undefined}>
+              {c.plant && litres === 0 && <circle cx={x + PX / 2} cy={top + PX / 2} r={3 + Math.min(1, (c.canopy ?? 0.3) / 0.55) * 8} className="rm-plant" />}
+              {litres > 0 && words && <text x={x + PX / 2} y={top + PX / 2 + 4} className="rm-ml">{litres < 10 ? litres.toFixed(1) : Math.round(litres)}</text>}
               {c.flagged && <rect x={x + 3} y={top + 3} width={PX - 6} height={PX - 6} className="rm-outline" />}
               {c.flagged && words && <text x={x + PX - 9} y={top + 15} className="rm-bang">!</text>}
             </g>
@@ -70,11 +74,11 @@ export default function RoverMap({ rows, cols, cells, at, selected, onPick }:
 export function RoverLegend() {
   return (
     <div className="rm-legend" aria-hidden>
-      <span><i className="sw sw-pending" />Not scanned</span>
-      <span><i className="sw sw-bare" />Bare soil</span>
-      <span><i className="sw sw-ok"><b /></i>Plant, moisture fine</span>
-      <span><i className="sw sw-water">ml</i>Needs water</span>
-      <span><i className="sw sw-flag">!</i>Yellowing</span>
+      <span><i className="sw sw-pending" />Not reached</span>
+      <span><i className="sw sw-bare" />No tree</span>
+      <span><i className="sw sw-ok"><b /></i>No water today</span>
+      <span><i className="sw sw-water">L</i>Water, litres</span>
+      <span><i className="sw sw-flag">!</i>Yellow leaves</span>
     </div>
   );
 }

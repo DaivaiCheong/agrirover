@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.routers.missions import SIM_DRAIN_V_PER_M, SIM_STOP_V, TOPIC_ESTOP, TOPIC_MISSION_SET, get_publisher
+from app.routers import missions
 from app.services.rover_live import live
 
 sent: list[tuple[str, dict]] = []
@@ -22,8 +23,18 @@ async def broker_down(topic: str, payload: dict) -> None:
 client = TestClient(app)
 
 
+async def no_base(session, zone):
+    return {"soil_moisture": 60.0}, 9.0
+
+
+async def no_trees(*args, **kwargs):
+    return None
+
+
 @pytest.fixture(autouse=True)
-def clean():
+def clean(monkeypatch):
+    monkeypatch.setattr(missions, "_sim_base", no_base)          # these tests have no database behind them
+    monkeypatch.setattr(missions.advice, "advise_live_trees", no_trees)
     live.reset()
     sent.clear()
     app.dependency_overrides[get_publisher] = lambda: fake_publish
@@ -33,15 +44,15 @@ def clean():
 
 
 def start(**extra) -> str:
-    r = client.post("/api/v1/missions", json={"zoneId": "zone-a", "rows": 2, "cols": 5, **extra})
+    r = client.post("/api/v1/missions", json={"zoneId": "g1", "rows": 2, "cols": 5, **extra})
     assert r.status_code == 202
     return r.json()["missionId"]
 
 
 def running(mission_id, row=0, col=0, scanned=1, **extra):
-    return {"missionId": mission_id, "status": "running", "zoneId": "zone-a", "rows": 2, "cols": 5, "cellM": 0.5,
+    return {"missionId": mission_id, "status": "running", "zoneId": "g1", "rows": 2, "cols": 5, "cellM": 3.0, "rowM": 3.0,
             "simulated": True, "cell": [row, col], "cellsScanned": scanned, "cellsTotal": 10, "battery": 12.5,
-            "observation": {"row": row, "col": col, "plant": True, "needs_water": True, "flagged": False, "suggested_ml": 180},
+            "observation": {"row": row, "col": col, "plant": True, "flagged": False, "canopy": 0.4, "readings": {"soil_moisture": 60}},
             "frame": f"photo-{row}-{col}", **extra}
 
 
@@ -53,13 +64,13 @@ def test_a_plain_mission_sends_no_simulation_options():
 
 def test_each_scenario_is_set_where_the_map_shows_both_parts():
     start(simulate="normal")
-    assert set(sent[-1][1]["sim"]) == {"seed", "speedup"}
+    assert set(sent[-1][1]["sim"]) == {"seed", "speedup", "base", "moistureSpread"}
     live.reset()
     start(simulate="rain")
     assert sent[-1][1]["sim"]["rainAtCell"] == 4
     live.reset()
     start(simulate="low_battery")
-    expected = SIM_STOP_V + SIM_DRAIN_V_PER_M * 0.5 * 4
+    expected = SIM_STOP_V + SIM_DRAIN_V_PER_M * 3.0 * 4
     assert sent[-1][1]["sim"]["batteryV"] == pytest.approx(expected)
 
 
@@ -103,7 +114,7 @@ def test_the_report_fills_in_cells_lost_on_the_way():
 
 def test_a_second_survey_cannot_start_over_a_running_one():
     start()
-    assert client.post("/api/v1/missions", json={"zoneId": "zone-a", "rows": 1, "cols": 1}).status_code == 409
+    assert client.post("/api/v1/missions", json={"zoneId": "g1", "rows": 1, "cols": 1}).status_code == 409
     assert len(sent) == 1
 
 
@@ -181,26 +192,29 @@ def test_the_rovers_own_word_on_the_estop_survives_a_server_restart():
 import pgdb                                                                 # noqa: E402
 from sqlalchemy import select                                               # noqa: E402
 
-from app.models.entities import SurveyFinding, SurveyMission                # noqa: E402
-from app.services.rover_live import store_report                            # noqa: E402
-from app.services.seed import seed_stage1                                    # noqa: E402
+from app.models.entities import Metric, SensorReading, SurveyFinding, SurveyMission  # noqa: E402
+from app.services.rover_live import bed_means, store_report                 # noqa: E402
+from app.services.seed import seed_stage1                                   # noqa: E402
 
 
-def _report(mission_id, zone="zone-a", **extra):
+def _report(mission_id, zone="g1", **extra):
     return {"missionId": mission_id, "zoneId": zone, "status": "aborted", "abortReason": "rain", "simulated": True,
-            "cellsScanned": 2, "cellsTotal": 4, "plantsDetected": 1, "plantsNeedingWater": 1, "cellsFlagged": 1,
-            "distanceM": 0.5, "estDurationS": 4.5, "startedAt": "2026-11-05T01:00:00+00:00",
-            "finishedAt": "2026-11-05T01:01:00+00:00", "grid": {"rows": 2, "cols": 2, "cellM": 0.5},
+            "cellsScanned": 2, "cellsTotal": 4, "plantsDetected": 1, "cellsFlagged": 1,
+            "distanceM": 3.0, "estDurationS": 90, "startedAt": "2026-11-05T01:00:00+00:00",
+            "finishedAt": "2026-11-05T01:01:00+00:00", "grid": {"rows": 2, "cols": 2, "cellM": 3.0, "rowM": 3.0},
             "cells": [
-                {"row": 0, "col": 0, "canopy": 0.2, "plant": True, "dryness": 0.8, "needs_water": True, "chlorosis": 0.1,
-                 "flagged": True, "suggested_ml": 200, "disease": None, "disease_confidence": None},
-                {"row": 0, "col": 1, "canopy": 0.0, "plant": False, "dryness": 0.2, "needs_water": False, "chlorosis": 0.0,
-                 "flagged": False, "suggested_ml": 0, "disease": None, "disease_confidence": None},
+                {"row": 0, "col": 0, "canopy": 0.4, "plant": True, "chlorosis": 0.2, "flagged": True, "disease": None, "disease_confidence": None,
+                 "readings": {"soil_moisture": 60.0, "soil_ec": 2.0, "nitrogen": 100}},
+                {"row": 0, "col": 1, "canopy": 0.0, "plant": False, "chlorosis": 0.0, "flagged": False, "disease": None, "disease_confidence": None, "readings": {}},
             ], **extra}
 
 
+def test_a_bed_mean_uses_only_the_trees_that_gave_a_reading():
+    assert bed_means([{"readings": {"soil_moisture": 60}}, {"readings": {"soil_moisture": 70, "not_a_metric": 1}}, {"readings": {}}, {}]) == {"soil_moisture": 65}
+
+
 @pgdb.with_db("aaf_test_rover")
-async def test_a_survey_is_stored_once_and_read_back(Session):
+async def test_a_round_is_stored_once_and_read_back(Session):
     async with Session() as s:
         await seed_stage1(s)
     mid = str(uuid.uuid4())
@@ -208,22 +222,23 @@ async def test_a_survey_is_stored_once_and_read_back(Session):
         assert await store_report(s, _report(mid)) is True
     async with Session() as s:
         assert await store_report(s, _report(mid)) is False                          # a repeat changes nothing
-        assert await store_report(s, _report(str(uuid.uuid4()), zone="g1")) is False  # a sample bed is not saved
-        assert await store_report(s, _report("sim-seed7")) is False                  # not one of this server's missions
+        assert await store_report(s, _report(str(uuid.uuid4()), zone="nope")) is False  # an unknown bed is not saved
+        assert await store_report(s, _report("sim-seed7")) is False                  # not one of this server's rounds
         assert await store_report(s, "text") is False
         assert len((await s.scalars(select(SurveyMission))).all()) == 1
-        assert len((await s.scalars(select(SurveyFinding))).all()) == 2
+        found = (await s.scalars(select(SurveyFinding).order_by(SurveyFinding.cell_col))).all()
+        assert found[0].readings["soil_moisture"] == 60 and found[1].readings == {}
+        # the rover feeds the same table a fixed probe would
+        moisture = (await s.scalars(select(SensorReading).where(SensorReading.metric == Metric.soil_moisture))).all()
+        assert [float(r.value) for r in moisture] == [60.0] and moisture[0].sensor_id is not None
 
     async with pgdb.api(Session) as c:
         listed = (await c.get("/api/v1/missions")).json()
         assert [m["id"] for m in listed] == [mid]
         assert (listed[0]["status"], listed[0]["abortReason"], listed[0]["simulated"]) == ("aborted", "rain", True)
-        assert (listed[0]["rows"], listed[0]["cols"], listed[0]["cellM"], listed[0]["cellsFlagged"]) == (2, 2, 0.5, 1)
+        assert (listed[0]["rows"], listed[0]["cols"], listed[0]["cellM"], listed[0]["cellsFlagged"]) == (2, 2, 3.0, 1)
         one = (await c.get(f"/api/v1/missions/{mid}")).json()
         cells = sorted(one["cells"], key=lambda x: x["col"])
-        assert [(x["col"], x["plant"], x["needs_water"], x["flagged"], x["suggested_ml"]) for x in cells] == [
-            (0, True, True, True, 200), (1, False, False, False, 0)]
-        assert cells[0]["dryness"] == pytest.approx(0.8)
+        assert (cells[0]["plant"], cells[0]["flagged"], cells[0]["readings"]["soil_ec"]) == (True, True, 2.0)
         assert (await c.get(f"/api/v1/missions/{uuid.uuid4()}")).status_code == 404
         assert (await c.get("/api/v1/missions/not-an-id")).status_code == 422
-

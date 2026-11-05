@@ -47,31 +47,31 @@ class FakeTelegram:
         self.edit_buttons = buttons
 
 
-def run_d(zone="zone-a", decision=Decision.IRRIGATE, ms=40_000, reason="auto_threshold", moisture=20.0):
+def run_d(zone="g1", decision=Decision.IRRIGATE, ms=40_000, reason="auto_threshold", moisture=20.0):
     return ZoneDecision(zone, decision, ms, reason, moisture, AT_6)
 
 
 # ------------------------------------------------------------ pure: wording
 
 def test_message_lists_every_zone_and_buttons_only_for_runs():
-    decisions = [run_d(), run_d("zone-b", Decision.HOLD_IN_RANGE, 0, "within_range", 35.0)]
-    text, buttons = dm.compose(decisions, {"zone-a": "pid-1"})
+    decisions = [run_d(), run_d("g2", Decision.HOLD_IN_RANGE, 0, "within_range", 35.0)]
+    text, buttons = dm.compose(decisions, {"g1": "pid-1"})
     assert "04 Nov" in text
-    assert "zone-a: water 40 s" in text and "zone-b: skip, soil is wet enough" in text
-    assert buttons == [[("Approve zone-a", "approve:pid-1"), ("Skip zone-a", "skip:pid-1")]]
+    assert "g1: water 40 s" in text and "g2: skip, soil is wet enough" in text
+    assert buttons == [[("Approve g1", "approve:pid-1"), ("Skip g1", "skip:pid-1")]]
     assert "not opened automatically" in text         # honest about what Approve does
 
 
 def test_message_with_nothing_to_water_has_no_buttons():
-    text, buttons = dm.compose([run_d("zone-a", Decision.DEFER_RAIN, 0, "rain_lockout", 10.0)], {})
+    text, buttons = dm.compose([run_d("g1", Decision.DEFER_RAIN, 0, "rain_lockout", 10.0)], {})
     assert buttons == [] and "Nothing to water" in text
 
 
 def test_deciding_one_zone_keeps_the_other_zones_buttons():
     markup = {"inline_keyboard": [
-        [{"text": "Approve zone-a", "callback_data": "approve:p1"}, {"text": "Skip zone-a", "callback_data": "skip:p1"}],
-        [{"text": "Approve zone-b", "callback_data": "approve:p2"}, {"text": "Skip zone-b", "callback_data": "skip:p2"}]]}
-    assert dm.remaining_buttons(markup, "p1") == [[("Approve zone-b", "approve:p2"), ("Skip zone-b", "skip:p2")]]
+        [{"text": "Approve g1", "callback_data": "approve:p1"}, {"text": "Skip g1", "callback_data": "skip:p1"}],
+        [{"text": "Approve g2", "callback_data": "approve:p2"}, {"text": "Skip g2", "callback_data": "skip:p2"}]]}
+    assert dm.remaining_buttons(markup, "p1") == [[("Approve g2", "approve:p2"), ("Skip g2", "skip:p2")]]
     assert dm.remaining_buttons(markup, "p2")[0][0][1] == "approve:p1"
     assert dm.remaining_buttons(None, "p1") == []
 
@@ -152,7 +152,7 @@ def scenario(db_name):
             async with Session() as s:
                 await seed_stage1(s, planted_on=PLANTED)
             async with Session() as s:
-                await store_telemetry(s, "farm/farm-01/zone/zone-a/telemetry", _dry(), now=AT_6)
+                await store_telemetry(s, "farm/farm-01/zone/g1/telemetry", _dry(), now=AT_6)
             await fn(Session)
         body.__name__ = fn.__name__
         return pgdb.with_db(db_name)(body)
@@ -168,10 +168,10 @@ async def _send(Session, tg):
 async def test_daily_message_creates_a_pending_proposal_and_sends_buttons(Session):
     tg = FakeTelegram()
     ids = await _send(Session, tg)
-    assert len(ids) == 1                                   # only zone-a needs water
+    assert len(ids) == 1                                   # only g1 needs water
     chat, text, buttons = tg.sent[0]
-    assert chat == CHAT and "Tomato bed A (day 21): water 40 s" in text
-    assert "Tomato bed B" not in text                      # the usual bed is never messaged
+    assert chat == CHAT and "G1 Wide orchard (day 21): water 40 s" in text
+    assert "G2 Kimju block" not in text                      # the usual bed is never messaged
     assert buttons[0][0][1] == f"approve:{ids[0]}"
     async with Session() as s:
         p = (await s.execute(select(ActionProposal))).scalar_one()

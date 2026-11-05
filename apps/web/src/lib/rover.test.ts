@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cellName, estimate, headingAt, kindOf, litresToWater, serpentine, stopInfo, toCheck } from "./rover";
+import { cellName, estimate, fullLitresOf, headingAt, kindOf, litresOf, minutes, serpentine, stopInfo } from "./rover";
 import type { RoverCell } from "./api";
 
-const cell = (over: Partial<RoverCell>): RoverCell => ({ row: 0, col: 0, plant: true, needs_water: false, flagged: false, dryness: 0.2, suggested_ml: 0, ...over });
+const cell = (over: Partial<RoverCell>): RoverCell => ({ row: 0, col: 0, plant: true, flagged: false, readings: {}, ...over });
 
-describe("the rover's path", () => {
-  it("visits every cell once, one step at a time", () => {
+describe("the rover's round", () => {
+  it("visits every tree once, next to the last", () => {
     const path = serpentine(3, 4);
     expect(path.slice(0, 6)).toEqual([[0, 0], [0, 1], [0, 2], [0, 3], [1, 3], [1, 2]]);
     expect(new Set(path.map(String)).size).toBe(12);
@@ -19,34 +19,36 @@ describe("the rover's path", () => {
   });
 });
 
-describe("the estimate matches the rover's own report", () => {
-  it("2 x 5 at 0.5 m: 4.5 m and 36.5 s, as the rover reported in a real run", () => {
-    const e = estimate(2, 5, 0.5);
-    expect([e.cells, e.distanceM, e.seconds]).toEqual([10, 4.5, 36.5]);
+describe("the estimate", () => {
+  it("uses row and tree spacing, and stops at every tree", () => {
+    const e = estimate(2, 2, 5, 3);
+    // 3 m along, 5 m across, 3 m back = 11 m; 2 turns of 90 degrees; 4 stops of 41 s
+    expect([e.trees, e.distanceM, e.seconds]).toEqual([4, 11, 11 / 0.2 + 4 + 4 * 41]);
+    expect(e.areaM2).toBe(60);
   });
-  it("one row needs no turn; one column turns once", () => {
-    expect(estimate(1, 3, 0.5).seconds).toBeCloseTo(1 / 0.2 + 3);
-    expect(estimate(3, 1, 0.5).seconds).toBeCloseTo(1 / 0.2 + 2 + 3);
+  it("one row needs no turn", () => {
+    expect(estimate(1, 3, 5, 2).seconds).toBeCloseTo(4 / 0.2 + 3 * 41);
   });
-  it("gives the area covered", () => {
-    expect(estimate(4, 10, 0.5).areaM2).toBe(10);
+  it("reads as seconds, minutes or hours", () => {
+    expect([minutes(45), minutes(600), minutes(7200)]).toEqual(["45 s", "10 min", "2.0 h"]);
   });
 });
 
-describe("what a cell shows", () => {
+describe("what a tree shows", () => {
+  const advice = (litres: number) => ({ litres, fullLitres: 10, notes: [], plant: true, row: 0, col: 0 });
   it("is one of four kinds", () => {
     expect(kindOf(undefined)).toBe("pending");
     expect(kindOf(cell({ plant: false }))).toBe("bare");
-    expect(kindOf(cell({}))).toBe("ok");
-    expect(kindOf(cell({ needs_water: true }))).toBe("water");
+    expect(kindOf(cell({ advice: advice(0) }))).toBe("ok");
+    expect(kindOf(cell({ advice: advice(4) }))).toBe("water");
   });
-  it("lists only what someone should look at, and adds up the water", () => {
-    const cells = [cell({ col: 0 }), cell({ col: 1, needs_water: true, suggested_ml: 200 }), cell({ col: 2, flagged: true }), cell({ col: 3, needs_water: true, suggested_ml: 150, flagged: true })];
-    expect(toCheck(cells).map((c) => c.col)).toEqual([1, 2, 3]);
-    expect(litresToWater(cells)).toBeCloseTo(0.35);
+  it("adds up the water", () => {
+    const cells = [cell({ advice: advice(4) }), cell({ advice: advice(1.5) }), cell({})];
+    expect(litresOf(cells)).toBeCloseTo(5.5);
+    expect(fullLitresOf(cells)).toBe(20);
   });
-  it("numbers cells from one for people", () => {
-    expect(cellName(0, 4)).toBe("R1 C5");
+  it("numbers trees from one for people", () => {
+    expect(cellName(0, 4)).toBe("R1 T5");
   });
 });
 
@@ -57,7 +59,6 @@ describe("why it stopped", () => {
   });
   it("still says something readable for one it has not seen", () => {
     expect(stopInfo("error:OSError")?.label).toBe("error OSError");
-    expect(stopInfo("error:OSError")?.next).toMatch(/log/);
     expect(stopInfo(null)).toBeNull();
   });
 });

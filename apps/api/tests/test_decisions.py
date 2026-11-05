@@ -56,45 +56,45 @@ def test_no_readings_means_no_signal():
 
 
 def test_dry_zone_at_six_gets_a_bounded_run():
-    d = svc.decide("zone-a", CFG, moisture=20.0, rain=False, now=AT_6, last_event_ended_at=None)
+    d = svc.decide("g1", CFG, moisture=20.0, rain=False, now=AT_6, last_event_ended_at=None)
     assert d.decision is Decision.IRRIGATE
     assert d.duration_ms == 40_000                       # 10 points below 30 % x 4 s
-    assert d.text == "zone-a: water 40 s"
+    assert d.text == "g1: water 40 s"
 
 
 def test_very_dry_zone_is_capped_by_the_rule():
-    d = svc.decide("zone-a", CFG, moisture=0.0, rain=False, now=AT_6, last_event_ended_at=None)
+    d = svc.decide("g1", CFG, moisture=0.0, rain=False, now=AT_6, last_event_ended_at=None)
     assert d.duration_ms == CFG.max_duration_ms
-    assert d.text == "zone-a: water 90 s"
+    assert d.text == "g1: water 90 s"
 
 
 def test_wet_zone_is_skipped_with_reason():
-    d = svc.decide("zone-a", CFG, moisture=35.0, rain=False, now=AT_6, last_event_ended_at=None)
+    d = svc.decide("g1", CFG, moisture=35.0, rain=False, now=AT_6, last_event_ended_at=None)
     assert d.decision is Decision.HOLD_IN_RANGE
-    assert d.text == "zone-a: skip, soil is wet enough"
+    assert d.text == "g1: skip, soil is wet enough"
 
 
 def test_rain_defers_even_when_dry():
-    d = svc.decide("zone-a", CFG, moisture=10.0, rain=True, now=AT_6, last_event_ended_at=None)
+    d = svc.decide("g1", CFG, moisture=10.0, rain=True, now=AT_6, last_event_ended_at=None)
     assert d.decision is Decision.DEFER_RAIN
-    assert d.text == "zone-a: skip, it is raining"
+    assert d.text == "g1: skip, it is raining"
 
 
 def test_night_defers_with_reason():
-    d = svc.decide("zone-a", CFG, moisture=10.0, rain=False, now=AT_22, last_event_ended_at=None)
+    d = svc.decide("g1", CFG, moisture=10.0, rain=False, now=AT_22, last_event_ended_at=None)
     assert d.decision is Decision.DEFER_DARK
-    assert d.text == "zone-a: skip, too dark to run the pump"
+    assert d.text == "g1: skip, too dark to run the pump"
 
 
 def test_missing_reading_is_a_skip_never_a_run():
-    d = svc.decide("zone-a", CFG, moisture=None, rain=False, now=AT_6, last_event_ended_at=None)
+    d = svc.decide("g1", CFG, moisture=None, rain=False, now=AT_6, last_event_ended_at=None)
     assert d.decision is Decision.HOLD_IN_RANGE
-    assert d.text == "zone-a: skip, no sensor reading"
+    assert d.text == "g1: skip, no sensor reading"
 
 
 def test_recent_run_suppresses_another():
     last = AT_6 - timedelta(minutes=10)
-    d = svc.decide("zone-a", CFG, moisture=20.0, rain=False, now=AT_6, last_event_ended_at=last)
+    d = svc.decide("g1", CFG, moisture=20.0, rain=False, now=AT_6, last_event_ended_at=last)
     assert d.decision is Decision.SUPPRESS_COOLDOWN
 
 
@@ -102,7 +102,7 @@ def test_recent_run_suppresses_another():
 
 def test_endpoint_returns_decisions_in_the_documented_shape(monkeypatch):
     async def fake(session, farm_name, now=None):
-        return [svc.ZoneDecision("zone-a", Decision.IRRIGATE, 40_000, "auto_threshold", 20.0, AT_6)]
+        return [svc.ZoneDecision("g1", Decision.IRRIGATE, 40_000, "auto_threshold", 20.0, AT_6)]
 
     async def no_db():
         yield None
@@ -115,7 +115,7 @@ def test_endpoint_returns_decisions_in_the_documented_shape(monkeypatch):
         app.dependency_overrides.clear()
     assert r.status_code == 200
     assert r.json()[0] == {
-        "zone": "zone-a", "decision": "irrigate", "text": "zone-a: water 40 s",
+        "zone": "g1", "decision": "irrigate", "text": "g1: water 40 s",
         "durationSeconds": 40, "reason": "auto_threshold", "moisturePct": 20.0, "thresholdPct": None,
         "decisionAt": AT_6.isoformat().replace("+00:00", "Z"),
     }
@@ -123,7 +123,7 @@ def test_endpoint_returns_decisions_in_the_documented_shape(monkeypatch):
 
 def test_endpoint_tells_which_threshold_the_bed_is_watered_by(monkeypatch):
     async def fake(session, farm_name, now=None):
-        return [svc.ZoneDecision("zone-a", Decision.HOLD_IN_RANGE, 0, "within_range", 40.0, AT_6,
+        return [svc.ZoneDecision("g1", Decision.HOLD_IN_RANGE, 0, "within_range", 40.0, AT_6,
                                  inputs={"threshold_pct": 30.0})]
 
     async def no_db():
@@ -165,21 +165,21 @@ def test_telemetry_is_stored_and_drives_todays_decision():
             async with Session() as s:
                 await seed_stage1(s, planted_on=date(2026, 10, 15))
 
-            topic = "farm/farm-01/zone/zone-a/telemetry"
+            topic = "farm/farm-01/zone/g1/telemetry"
             async with Session() as s:
                 assert await store_telemetry(s, topic, _payload(20.0), now=AT_6) == 4
             async with Session() as s:
                 by_zone = {d.zone: d for d in await svc.decisions_for_farm(s, "farm-01", now=AT_6)}
-            assert by_zone["zone-a"].decision is Decision.IRRIGATE
-            assert by_zone["zone-a"].text == "Tomato bed A (day 21): water 40 s"
-            assert by_zone["zone-b"].text == "Tomato bed B (day 21): skip, no sensor reading"   # no data yet
+            assert by_zone["g1"].decision is Decision.IRRIGATE
+            assert by_zone["g1"].text == "G1 Wide orchard (day 21): water 40 s"
+            assert by_zone["g2"].text == "G2 Kimju block (day 21): skip, no sensor reading"   # no data yet
 
             # the newest reading wins: once the soil is wet, the decision flips
             async with Session() as s:
                 await store_telemetry(s, topic, _payload(35.0), now=AT_6 + timedelta(minutes=1))
             async with Session() as s:
                 by_zone = {d.zone: d for d in await svc.decisions_for_farm(s, "farm-01", now=AT_6)}
-            assert by_zone["zone-a"].text == "Tomato bed A (day 21): skip, soil is wet enough"
+            assert by_zone["g1"].text == "G1 Wide orchard (day 21): skip, soil is wet enough"
         finally:
             await engine.dispose()
 
@@ -199,7 +199,7 @@ def test_telemetry_from_an_unknown_device_is_dropped_not_stored():
                 await seed_stage1(s, planted_on=date(2026, 10, 15))
             rogue = {**_payload(10.0), "device": "NOT-A-DEVICE"}
             async with Session() as s:
-                n = await store_telemetry(s, "farm/farm-01/zone/zone-a/telemetry", rogue, now=AT_6)
+                n = await store_telemetry(s, "farm/farm-01/zone/g1/telemetry", rogue, now=AT_6)
             assert n == 0
         finally:
             await engine.dispose()

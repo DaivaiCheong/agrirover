@@ -1,239 +1,175 @@
-"""Bed conditions (stage-rated readings and alerts) and reading history, through the service and the HTTP routes."""
-import asyncio
+"""Stored readings, rated against the guava stage of the open cycle; and the advice the rover's rounds lead to."""
+import uuid
 from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 import pgdb
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.core.db import Base
-from app.models.entities import Planting, Zone
-from app.services import conditions as cond
-from app.services import crops as crop_svc
-from app.services import history
+from app.core.config import settings
+from app.models.entities import OrchardJobDone, Planting, Zone
+from app.services.advice import bed_growth, farm_advice
 from app.services.clock import farm_today
+from app.services.conditions import bed_conditions
+from app.services.demo_orchard import backfill_rounds, readings_for
+from app.services.rover_live import store_report
 from app.services.seed import seed_stage1
-from app.workers.mqtt_ingest import store_telemetry
 
-LOCAL = ZoneInfo("Asia/Phnom_Penh")
-NOON = datetime(2026, 11, 4, 12, 0, tzinfo=LOCAL).astimezone(timezone.utc)
-PLANTED_DAY_50 = date(2026, 11, 4) - timedelta(days=49)
-TOPIC = "farm/farm-01/zone/zone-a/telemetry"
+FARM = settings.farm_name
+NOW = datetime.now(timezone.utc)
 
 
-def payload(**values):
-    units = {"soil_moisture": "%", "soil_ph": "pH", "soil_ec": "mS/cm", "soil_temperature": "C", "nitrogen": "mg/kg",
-             "phosphorus": "mg/kg", "potassium": "mg/kg", "air_temperature": "C", "air_humidity": "%"}
-    return {"device": "ESP-FIELD-01", "zone": "zone-a",
-            "measurements": [{"metric": k, "value": v, "unit": units[k]} for k, v in values.items()]}
+async def seeded(Session):
+    async with Session() as s:
+        await seed_stage1(s)
 
 
-HEALTHY = dict(soil_moisture=68.2, soil_ph=6.35, soil_ec=2.45, soil_temperature=24.1, nitrogen=130, phosphorus=85,
-               potassium=210, air_temperature=28.4, air_humidity=72.0)
+def report(zone, readings, *, at=None, status="completed", trees=4):
+    at = at or NOW - timedelta(minutes=10)
+    cells = [{"row": 0, "col": c, "plant": True, "canopy": 0.4, "chlorosis": 0.0, "flagged": False, "readings": dict(readings)} for c in range(trees)]
+    return {"missionId": str(uuid.uuid4()), "zoneId": zone, "status": status, "simulated": True, "cellsScanned": trees, "cellsTotal": trees,
+            "plantsDetected": trees, "cellsFlagged": 0, "distanceM": 9.0, "estDurationS": 200, "startedAt": (at - timedelta(minutes=5)).isoformat(),
+            "finishedAt": at.isoformat(), "grid": {"rows": 1, "cols": trees, "cellM": 3.0, "rowM": 3.0}, "cells": cells}
 
 
-def _run(db, scenario, planted_on=PLANTED_DAY_50):
-    url = pgdb.require(db)
-
-    async def go():
-        engine = create_async_engine(url)
-        async with engine.begin() as c:
-            await c.run_sync(Base.metadata.create_all)
-        Session = async_sessionmaker(engine, expire_on_commit=False)
-        try:
-            async with Session() as s:
-                await seed_stage1(s, planted_on=planted_on)
-            await scenario(Session)
-        finally:
-            await engine.dispose()
-
-    asyncio.run(go())
+async def bed(Session, zone):
+    async with Session() as s:
+        return next(b for b in await bed_conditions(s, FARM) if b["zone"] == zone)
 
 
-# ------------------------------------------------------------------ conditions
-
-def test_stored_readings_are_rated_against_the_stage_of_the_open_cycle():
-    async def scenario(Session):
-        async with Session() as s:
-            await store_telemetry(s, TOPIC, payload(**HEALTHY), now=NOON)
-        async with Session() as s:
-            beds = {b["zone"]: b for b in await cond.bed_conditions(s, "farm-01", now=NOON)}
-        a, b = beds["zone-a"], beds["zone-b"]
-        assert (a["label"], a["crop"], a["cropName"], a["day"]) == ("Tomato bed A", "tomato", "Tomato", 50)
-        assert a["stage"]["key"] == "flowering" and a["stage"]["moisture"] == [65, 80]
-        assert a["status"] == "normal" and a["alerts"] == [] and a["rated"] is True
-        assert [p["status"] for p in a["params"]] == ["normal"] * 9
-        assert a["recordedAt"] is not None
-        assert b["status"] == "no_data" and b["recordedAt"] is None and b["stage"]["key"] == "flowering"
-
-    _run("aaf_cond_a", scenario)
+def param(b, metric):
+    return next(p for p in b["params"] if p["metric"] == metric)
 
 
-def test_heat_dry_soil_and_salt_raise_the_alerts_of_the_spec():
-    async def scenario(Session):
-        async with Session() as s:
-            await store_telemetry(s, TOPIC, payload(**{**HEALTHY, "air_temperature": 34.0, "soil_moisture": 40.0,
-                                                       "soil_ec": 4.4, "soil_temperature": 31.0, "soil_ph": 5.5,
-                                                       "air_humidity": 90.0}), now=NOON)
-        async with Session() as s:
-            a = next(b for b in await cond.bed_conditions(s, "farm-01", now=NOON) if b["zone"] == "zone-a")
-        assert {x["id"] for x in a["alerts"]} == {"pollen_sterility", "calcium_lockup", "fungal_window", "salinity",
-                                                   "root_heat", "flowering_moisture_floor"}
-        assert a["status"] == "critical"
-        by_metric = {p["metric"]: p for p in a["params"]}
-        assert by_metric["air_temperature"]["status"] == "critical" and by_metric["soil_ph"]["direction"] == "low"
-
-    _run("aaf_cond_b", scenario)
-
-
-def test_a_reading_from_hours_ago_is_old_news_not_an_alert():
-    async def scenario(Session):
-        async with Session() as s:
-            await store_telemetry(s, TOPIC, payload(air_temperature=40.0), now=NOON - timedelta(hours=3))
-        async with Session() as s:
-            a = next(b for b in await cond.bed_conditions(s, "farm-01", now=NOON) if b["zone"] == "zone-a")
-        assert a["alerts"] == [] and a["status"] == "stale"
-        assert next(p for p in a["params"] if p["metric"] == "air_temperature")["value"] == 40.0   # still shown
-
-    _run("aaf_cond_c", scenario)
+@pgdb.with_db("aaf_guava_seed")
+async def test_the_seed_is_six_guava_beds_at_their_own_stages_and_repeatable(Session):
+    await seeded(Session)
+    await seeded(Session)
+    async with Session() as s:
+        zones = (await s.scalars(select(Zone).order_by(Zone.name))).all()
+        assert [z.name for z in zones] == ["g1", "g2", "g3", "g4", "g5", "g6"]
+        plantings = (await s.scalars(select(Planting))).all()
+        assert len(plantings) == 5
+        assert all(p.trees_planted_on < p.planted_on for p in plantings)
+        # a task whose time has passed is already done, except the one left open to show an overdue task
+        g3 = next(p for p in plantings if p.setup == "hedgerow")
+        done = set((await s.scalars(select(OrchardJobDone.job_id).where(OrchardJobDone.planting_id == g3.id))).all())
+        assert "pinch" in done and "zn_b" not in done
+    assert (await bed(Session, "g6"))["stage"] is None
 
 
-def test_the_same_morning_reading_means_different_things_at_different_crop_days():
-    async def scenario(Session):
-        async with Session() as s:
-            await store_telemetry(s, TOPIC, payload(soil_moisture=52.0), now=NOON)
-        out = {}
-        for day in (80, 50):
-            async with Session() as s:
-                p = (await s.execute(select(Planting).join(Zone).where(Zone.name == "zone-a"))).scalar_one()
-                p.planted_on = date(2026, 11, 4) - timedelta(days=day - 1)
-                await s.commit()
-            async with Session() as s:
-                a = next(b for b in await cond.bed_conditions(s, "farm-01", now=NOON) if b["zone"] == "zone-a")
-            out[day] = (a["stage"]["key"], a["params"][0]["status"], [x["id"] for x in a["alerts"]])
-        assert out[80] == ("fruiting", "normal", [])                              # 52 % is right for fruit bulking
-        assert out[50] == ("flowering", "critical", ["flowering_moisture_floor"])  # and under the flowering floor
-
-    _run("aaf_cond_d", scenario)
+@pgdb.with_db("aaf_guava_round")
+async def test_a_round_feeds_the_telemetry_table_and_is_rated_by_stage(Session):
+    await seeded(Session)
+    async with Session() as s:
+        assert await store_report(s, report("g3", {"soil_moisture": 52.0, "soil_ec": 1.9, "soil_ph": 6.3, "nitrogen": 1}))
+    b = await bed(Session, "g3")
+    assert b["stage"]["key"] == "bloom"
+    assert param(b, "soil_moisture")["value"] == 52 and param(b, "soil_moisture")["status"] == "critical"
+    assert "bloom_floor" in [a["id"] for a in b["alerts"]] and b["status"] == "critical"
+    assert param(b, "nitrogen")["status"] == "unrated"
 
 
-def test_a_bed_with_no_open_cycle_has_no_stage_and_no_alerts():
-    async def scenario(Session):
-        async with Session() as s:
-            for p in (await s.execute(select(Planting))).scalars():
-                p.ended_on = date(2026, 11, 1)
-            await s.commit()
-            await store_telemetry(s, TOPIC, payload(air_temperature=40.0, soil_moisture=60.0), now=NOON)
-        async with Session() as s:
-            a = next(b for b in await cond.bed_conditions(s, "farm-01", now=NOON) if b["zone"] == "zone-a")
-        assert a["crop"] is None and a["day"] is None and a["stage"] is None and a["alerts"] == []
-        assert a["params"][0]["status"] == "normal" and a["params"][0]["target"] == [50, 80]   # the general range
-
-    _run("aaf_cond_e", scenario)
+@pgdb.with_db("aaf_guava_stress")
+async def test_dry_soil_is_right_for_a_stressed_bed(Session):
+    await seeded(Session)
+    async with Session() as s:
+        assert await store_report(s, report("g1", {"soil_moisture": 25.0}))
+    assert param(await bed(Session, "g1"), "soil_moisture")["status"] == "normal"
 
 
-def test_a_bed_of_a_crop_without_a_stage_table_is_shown_but_not_rated():
-    async def scenario(Session):
-        async with Session() as s:
-            cucumber = await crop_svc.create_crop(s, "Cucumber", {"ini": 0.6, "mid": 1.0, "end": 0.75}, [20, 30, 40, 15])
-            zone = (await s.execute(select(Zone).where(Zone.name == "zone-a"))).scalar_one()
-            for p in (await s.execute(select(Planting).where(Planting.zone_id == zone.id))).scalars():
-                p.ended_on = date(2026, 11, 1)
-            s.add(Planting(zone_id=zone.id, crop_id=cucumber.id, planted_on=date(2026, 10, 20)))
-            await s.commit()
-            await store_telemetry(s, TOPIC, payload(soil_moisture=10.0, air_temperature=40.0), now=NOON)
-        async with Session() as s:
-            a = next(b for b in await cond.bed_conditions(s, "farm-01", now=NOON) if b["zone"] == "zone-a")
-        assert (a["crop"], a["rated"], a["status"], a["alerts"]) == ("cucumber", False, "unrated", [])
-        assert a["params"][0]["value"] == 10.0 and a["params"][0]["status"] == "unrated"
-
-    _run("aaf_cond_f", scenario)
+@pgdb.with_db("aaf_guava_stale")
+async def test_a_round_from_two_days_ago_is_shown_but_not_acted_on(Session):
+    await seeded(Session)
+    async with Session() as s:
+        assert await store_report(s, report("g3", {"soil_moisture": 52.0}, at=NOW - timedelta(hours=48)))
+    b = await bed(Session, "g3")
+    assert param(b, "soil_moisture")["status"] == "stale" and b["alerts"] == []
+    async with Session() as s:
+        g3 = next(a for a in await farm_advice(s, FARM) if a["zone"] == "g3")
+    assert g3["surveyed"] is False and g3["todo"] == [] and g3["treesSeen"] == 0
 
 
-def test_the_conditions_route_and_the_unknown_farm():
-    async def scenario(Session):
-        async with Session() as s:
-            await store_telemetry(s, TOPIC, payload(air_temperature=33.0), now=datetime.now(timezone.utc))
-        async with pgdb.api(Session) as client:
-            r = await client.get("/api/v1/conditions")
-            assert r.status_code == 200
-            beds = {b["zone"]: b for b in r.json()}
-            assert set(beds) == {"zone-a", "zone-b"}
-            assert {"zone", "label", "areaM2", "crop", "cropName", "variety", "day", "recordedAt", "rated", "status",
-                    "basis", "stage", "params", "alerts"} <= beds["zone-a"].keys()
-            assert beds["zone-a"]["params"][7]["metric"] == "air_temperature"
-            assert (await client.get("/api/v1/conditions?farm=no-such-farm")).json() == []
-
-    _run("aaf_cond_g", scenario, planted_on=farm_today() - timedelta(days=49))
-
-
-# --------------------------------------------------------------------- history
-
-def test_history_is_bucketed_averaged_and_comes_from_the_deciding_probe():
-    async def scenario(Session):
-        async with Session() as s:
-            # two readings in the same hour, one an hour later, and a shallow-probe pH that must be ignored
-            await store_telemetry(s, TOPIC, payload(soil_ph=6.0, air_temperature=26.0), now=NOON - timedelta(hours=2))
-            await store_telemetry(s, TOPIC, payload(soil_ph=6.4, air_temperature=28.0), now=NOON - timedelta(hours=2, minutes=-10))
-            await store_telemetry(s, TOPIC, payload(soil_ph=6.2, air_temperature=30.0), now=NOON - timedelta(minutes=5))
-            await store_telemetry(s, TOPIC, {"device": "ESP-FIELD-01", "measurements": [
-                {"metric": "soil_ph", "value": 9.0, "unit": "pH", "sensor": "S-A-10"}]}, now=NOON - timedelta(minutes=4))
-        async with Session() as s:
-            out = await history.series(s, "farm-01", "zone-a", history.parse_metrics("soil_ph,air_temperature"),
-                                       hours=3, points=3, now=NOON)
-        assert out["zone"] == "zone-a" and out["bucketSeconds"] == 3600 and out["hours"] == 3
-        ph = out["series"]["soil_ph"]
-        assert [p["v"] for p in ph] == [6.2, 6.2] and len(ph) == 2          # (6.0 + 6.4) / 2, then 6.2: never the 9.0
-        air = out["series"]["air_temperature"]
-        assert [p["v"] for p in air] == [27.0, 30.0]                        # the air sensor belongs to the node
-        assert ph[0]["t"] < ph[1]["t"] and ph[0]["t"].endswith("+00:00")
-
-    _run("aaf_hist_a", scenario)
+@pgdb.with_db("aaf_guava_advice")
+async def test_advice_waters_only_the_dry_trees_and_holds_feed_in_salty_soil(Session):
+    await seeded(Session)
+    r = report("g3", {"soil_moisture": 72.0, "soil_ec": 2.5, "soil_ph": 6.3})
+    r["cells"][1]["readings"] = {"soil_moisture": 60.0, "soil_ec": 2.5, "soil_ph": 6.3}
+    async with Session() as s:
+        assert await store_report(s, r)
+    async with Session() as s:
+        g3 = next(a for a in await farm_advice(s, FARM) if a["zone"] == "g3")
+    assert (g3["surveyed"], g3["simulated"], g3["treesSeen"], g3["treesWatered"]) == (True, True, 4, 1)
+    water = g3["water"]
+    assert 0 < water["litres"] < water["fullLitres"] and water["savedLitres"] == water["fullLitres"] - water["litres"]
+    assert g3["feed"]["action"] == "hold"
+    assert any(t["kind"] == "feed" and "Hold" in t["text"] for t in g3["todo"])
 
 
-def test_history_window_excludes_old_and_future_readings_and_empty_metrics_are_empty_lists():
-    async def scenario(Session):
-        async with Session() as s:
-            await store_telemetry(s, TOPIC, payload(soil_ph=6.1), now=NOON - timedelta(hours=30))
-            await store_telemetry(s, TOPIC, payload(soil_ph=6.5), now=NOON + timedelta(hours=1))
-        async with Session() as s:
-            out = await history.series(s, "farm-01", "zone-a", history.parse_metrics("soil_ph,soil_ec"), hours=24, now=NOON)
-        assert out["series"] == {"soil_ph": [], "soil_ec": []}
-
-    _run("aaf_hist_b", scenario)
-
-
-def test_history_route_answers_and_refuses_bad_asks():
-    async def scenario(Session):
-        async with Session() as s:
-            await store_telemetry(s, TOPIC, payload(soil_ph=6.3), now=datetime.now(timezone.utc) - timedelta(minutes=2))
-        async with pgdb.api(Session) as client:
-            ok = await client.get("/api/v1/telemetry/zone-a?metrics=soil_ph&hours=1&points=10")
-            assert ok.status_code == 200 and ok.json()["series"]["soil_ph"][0]["v"] == 6.3
-            assert (await client.get("/api/v1/telemetry/zone-zzz")).status_code == 404
-            assert (await client.get("/api/v1/telemetry/zone-a?metrics=salinity")).status_code == 422
-            assert (await client.get("/api/v1/telemetry/zone-a?hours=0")).status_code == 422
-            assert (await client.get("/api/v1/telemetry/zone-a?hours=99999")).status_code == 422
-            assert (await client.get("/api/v1/telemetry/zone-a?metrics=")).status_code == 422
-
-    _run("aaf_hist_c", scenario)
+@pgdb.with_db("aaf_guava_advice_stress")
+async def test_a_stressed_bed_gets_no_water_and_says_why(Session):
+    await seeded(Session)
+    async with Session() as s:
+        assert await store_report(s, report("g1", {"soil_moisture": 25.0}))
+    async with Session() as s:
+        g1 = next(a for a in await farm_advice(s, FARM) if a["zone"] == "g1")
+    assert g1["water"]["paused"] is True and g1["water"]["litres"] == 0
+    assert "stress" in g1["todo"][0]["text"]
 
 
-def test_bucket_size_never_drops_below_a_minute_and_covers_the_window():
-    assert history.bucket_seconds(1, 500) == 60
-    assert history.bucket_seconds(24, 96) == 900
-    assert history.bucket_seconds(168, 100) == 6048
-    assert history.bucket_seconds(168, 100) * 100 >= 168 * 3600
+@pgdb.with_db("aaf_guava_backfill")
+async def test_two_weeks_of_simulated_rounds_show_growth_and_are_added_once(Session):
+    await seeded(Session)
+    async with Session() as s:
+        added = await backfill_rounds(s, FARM, NOW)
+    assert added == 5 * 14
+    async with Session() as s:
+        assert await backfill_rounds(s, FARM, NOW) == 0
+        grown = await bed_growth(s, "g2", FARM, NOW)             # day 60: in the flush
+        shed = await bed_growth(s, "g1", FARM, NOW)              # day 30: under stress
+    assert len(grown["rounds"]) == 14 and all(r["simulated"] for r in grown["rounds"])
+    assert grown["summary"]["verdict"] == "ok" and grown["summary"]["changePoints"] > 0
+    assert shed["summary"]["verdict"] == "ok" and shed["summary"]["changePoints"] < 0
 
 
-def test_bucket_size_survives_a_zero_point_ask():
-    assert history.bucket_seconds(24, 0) == 24 * 3600
+@pgdb.with_db("aaf_guava_events")
+async def test_the_scripted_events_raise_the_alert_each_bed_should_show(Session):
+    await seeded(Session)
+    async with Session() as s:
+        await backfill_rounds(s, FARM, NOW)
+    want = {"g1": "stress_humidity", "g2": "low_ec", "g3": "bloom_floor", "g4": "bag_now", "g5": "cracking"}
+    for zone, alert in want.items():
+        assert alert in [a["id"] for a in (await bed(Session, zone))["alerts"]], zone
 
 
-def test_a_crop_with_no_slug_is_unrated_not_nothing_planted():
-    import types
-    snap = cond.BedSnapshot(zone=types.SimpleNamespace(name="z"), readings={"air_temperature": cond.Reading(40.0, NOON)},
-                            planting=object(), crop=types.SimpleNamespace(slug=None), day=50, farm_tz="Asia/Phnom_Penh")
-    a = snap.assess(NOON)
-    assert (a.rated, a.alerts, a.status) == (False, (), "unrated")
+@pgdb.with_db("aaf_guava_cycle")
+async def test_the_cycle_page_and_its_tasks_through_the_api(Session):
+    await seeded(Session)
+    async with pgdb.api(Session) as c:
+        cycles = (await c.get("/api/v1/cycles")).json()
+        g4 = next(x for x in cycles if x["zone"] == "g4")
+        assert g4["grid"] == {"rows": 5, "cols": 5, "rowM": 2, "treeM": 1} and g4["perennial"]["regulation"] == "pruning"
+        view = (await c.get(f"/api/v1/cycles/{g4['id']}/orchard")).json()
+        assert view["day"] == 120 and view["stage"]["key"] == "bulking" and view["fruitMm"] == 34
+        assert next(j for j in view["jobs"] if j["id"] == "bag")["state"] == "due"
+        done = (await c.post(f"/api/v1/cycles/{g4['id']}/orchard/jobs/bag/done")).json()
+        assert done["bagged"] is True and next(j for j in done["jobs"] if j["id"] == "bag")["state"] == "done"
+        assert (await c.post(f"/api/v1/cycles/{g4['id']}/orchard/jobs/nope/done")).status_code == 422
+        assert (await c.post(f"/api/v1/cycles/{g4['id']}/orchard/fruit", json={"mm": 38})).json()["fruitMm"] == 38
+        assert (await c.post(f"/api/v1/cycles/{g4['id']}/orchard/fruit", json={"mm": 0})).status_code == 422
+        crops = (await c.get("/api/v1/crops")).json()
+        assert [x["slug"] for x in crops] == ["guava"]
+        assert len((await c.get("/api/v1/setups")).json()) == 4
+        started = await c.post("/api/v1/cycles", json={"zone": "g6", "plantedOn": "2026-10-01", "plantCount": 25, "setup": "meadow", "regulation": "bending"})
+        assert started.status_code == 201 and started.json()["perennial"]["regulationLabel"] == "Branch bending"
+        assert (await c.post("/api/v1/cycles", json={"zone": "g6", "plantedOn": "2026-10-01"})).status_code == 409
+        assert (await c.post("/api/v1/cycles", json={"zone": "g6", "plantedOn": "2026-10-01", "setup": "nope"})).status_code == 422
+
+
+def test_a_cycle_day_gives_readings_inside_its_stage_unless_an_event_says_otherwise():
+    assert 60 <= readings_for(50, False)["soil_moisture"] <= 70
+    assert readings_for(90, False)["soil_moisture"] == 52
+    assert readings_for(30, True)["soil_moisture"] <= 30
+
+
+def test_today_is_cambodia_not_the_server():
+    assert isinstance(farm_today(), date)

@@ -13,10 +13,9 @@ if TYPE_CHECKING:
     from rover.mission import MissionReport
 
 STYLE = {
-    "bare": ("#E8E2D6", "Bare soil"),
-    "ok": ("#5E9E4F", "Plant · moisture OK"),
-    "water": ("#2F78B7", "Plant · needs water"),
-    "unscanned": ("#FFFFFF", "Not scanned"),
+    "bare": ("#E8E2D6", "No tree"),
+    "ok": ("#5E9E4F", "Tree"),
+    "unscanned": ("#FFFFFF", "Not reached"),
 }
 FLAG = "#E3A21A"
 INK = "#24292F"
@@ -40,7 +39,7 @@ def _state(result) -> str:
         return "unscanned"
     if not result.obs.plant:
         return "bare"
-    return "water" if result.obs.needs_water else "ok"
+    return "ok"
 
 
 def field_map_svg(report: MissionReport, px: int = 56) -> str:
@@ -65,10 +64,10 @@ def field_map_svg(report: MissionReport, px: int = 56) -> str:
         f'width="{width}" height="{height}" font-family="Segoe UI, Helvetica, Arial, sans-serif">',
         f'<rect width="{width}" height="{height}" fill="#FAFAF7"/>',
         f'<text x="24" y="30" font-size="18" font-weight="700" fill="{INK}">'
-        f'AgriRover survey · {escape(report.zone_id)} · mission {escape(report.mission_id[:12])}</text>',
+        f'AgriRover round · {escape(report.zone_id)} · mission {escape(report.mission_id[:12])}</text>',
         f'<text x="24" y="52" font-size="13" fill="#57606A">'
-        f'{report.cells_scanned}/{rows * cols} cells · {report.plants_detected} plants · '
-        f'{report.plants_needing_water} need water · {report.cells_flagged} flagged for disease check · '
+        f'{report.cells_scanned}/{rows * cols} stops · {report.plants_detected} trees · '
+        f'{report.cells_flagged} flagged for a look · '
         f'{report.distance_m:.1f} m{escape(status)}</text>',
     ]
 
@@ -83,9 +82,10 @@ def field_map_svg(report: MissionReport, px: int = 56) -> str:
             if result is not None and result.obs.flagged:
                 out.append(f'<rect x="{x + 4}" y="{y + 4}" width="{px - 8}" height="{px - 8}" '
                            f'fill="none" stroke="{FLAG}" stroke-width="3"/>')
-            if result is not None and result.obs.needs_water:
+            moisture = result.readings.get("soil_moisture") if result is not None else None
+            if moisture is not None:
                 out.append(f'<text x="{x + px / 2}" y="{y + px - 8}" font-size="11" '
-                           f'text-anchor="middle" fill="#FFFFFF">{result.obs.suggested_ml} ml</text>')
+                           f'text-anchor="middle" fill="#FFFFFF">{moisture:.0f} %</text>')
 
     scanned = [centre(r, c) for r, c in report.path[:max(report.cells_scanned, 1)]]
     if len(scanned) > 1:
@@ -99,8 +99,8 @@ def field_map_svg(report: MissionReport, px: int = 56) -> str:
         out.append(f'<circle cx="{ex:.1f}" cy="{ey:.1f}" r="5" fill="#FFFFFF" stroke="{INK}" stroke-width="2"/>')
 
     ly = head + rows * px + 26
-    items = [(STYLE["ok"][0], "none", STYLE["ok"][1]), (STYLE["water"][0], "none", STYLE["water"][1]),
-             (STYLE["bare"][0], "none", STYLE["bare"][1]), ("none", FLAG, "Yellowing · check for disease")]
+    items = [(STYLE["ok"][0], "none", STYLE["ok"][1]), (STYLE["bare"][0], "none", STYLE["bare"][1]),
+             ("none", FLAG, "Yellowing · go and look")]
     for i, (fill, stroke, label) in enumerate(items):
         lx = 24 + (i % 2) * (width - 48) / 2
         y = ly + (i // 2) * 22

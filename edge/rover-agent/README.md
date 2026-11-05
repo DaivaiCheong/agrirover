@@ -4,14 +4,14 @@ Runs on the rover's Raspberry Pi. Design and safety: [docs/architecture/rover.md
 
 ```bash
 pip install -r requirements.txt
-python -m pytest                          # 65 tests, no hardware needed
+python -m pytest                          # no hardware needed
 
-python -m rover sim                       # simulated 4 x 10 bed -> reports/<mission>/
+python -m rover sim                       # simulated block of 4 rows of 10 trees -> reports/<mission>/
 python -m rover sim --rows 6 --cols 12 --seed 3
-python -m rover sim --battery 11.3        # low-battery guard stops the rover mid-bed
+python -m rover sim --battery 11.15       # low-battery guard stops the rover mid-block
 ```
 
-Each survey writes `report.json`, `field-map.svg` and `camera-frames.png`.
+Each round writes `report.json`, `field-map.svg` and `camera-frames.png`.
 
 ## On the rover
 
@@ -27,7 +27,8 @@ Without hardware, against a real broker: `python -m rover run --sim-hardware`
 | Module | Does |
 |---|---|
 | `planner.py` | Serpentine coverage path and the turns / moves between cells |
-| `vision.py` | Plant, dryness and yellowing per photo; optional TFLite disease model |
+| `probe.py` | The soil probe and air sensor at each tree. The real RS485 reader is not written |
+| `vision.py` | Leaf cover and yellowing per photo; optional TFLite disease model |
 | `mission.py` | Runs a survey; checks the guards before every move; builds the report |
 | `safety.py` | Guards (e-stop, rain, battery, link) and command clamps |
 | `drive.py` | `SimDrive` and `SerialDrive` (motor controller over USB) |

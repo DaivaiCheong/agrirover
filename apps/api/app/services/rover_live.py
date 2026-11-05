@@ -2,27 +2,29 @@
 
 Live state is in memory on purpose: it is rebuilt from the rover's own messages, the photos are only worth
 keeping while someone is looking, and the rover's retained messages restore its status after a restart.
-A finished survey goes to the database, and only if its bed exists: a survey of a sample-data bed is not saved.
+A finished round goes to the database, and only if its bed exists. Each tree's readings are kept, and the bed's
+averages also go into sensor_reading, so the rover is what feeds the telemetry table and its history.
 """
 from __future__ import annotations
 
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.entities import Device, SurveyFinding, SurveyMission, Zone
+from app.models.entities import Device, Metric, Sensor, SensorReading, SurveyFinding, SurveyMission, Zone
+from app.services import guava
+from app.services.metrics import SOIL_PROBE_METRICS, Refused, clean
 
 log = logging.getLogger("rover")
 
 ROVER_CODE = "ROVER-01"
 RUNNING = {"queued", "running"}
 FINAL = {"completed", "aborted", "failed", "rejected", "lost"}
-SUMMARY_FIELDS = ("cellsScanned", "cellsTotal", "plantsDetected", "plantsNeedingWater", "cellsFlagged", "distanceM",
-                  "estDurationS", "startedAt", "finishedAt")
+SUMMARY_FIELDS = ("cellsScanned", "cellsTotal", "plantsDetected", "cellsFlagged", "distanceM", "estDurationS", "startedAt", "finishedAt")
 
 
 def _cell_key(cell: dict) -> tuple[int, int] | None:
@@ -46,9 +48,9 @@ class RoverLive:
     def running(self) -> bool:
         return self.mission is not None and self.mission["status"] in RUNNING
 
-    def queued(self, mission_id: str, zone_id: str, rows: int, cols: int, cell_m: float, simulate: str | None) -> None:
+    def queued(self, mission_id: str, zone_id: str, rows: int, cols: int, tree_m: float, row_m: float, simulate: str | None) -> None:
         self.cells, self.frames = {}, {}
-        self.mission = {"missionId": mission_id, "zoneId": zone_id, "rows": rows, "cols": cols, "cellM": cell_m,
+        self.mission = {"missionId": mission_id, "zoneId": zone_id, "rows": rows, "cols": cols, "cellM": tree_m, "rowM": row_m,
                         "status": "queued", "reason": None, "cell": None, "battery": None, "frame": None,
                         "cellsScanned": 0, "cellsTotal": rows * cols, "simulate": simulate, "simulated": None}
 
@@ -59,7 +61,7 @@ class RoverLive:
         self.status = status
         if isinstance(payload.get("estop"), bool):    # the rover's word beats what this server last asked for
             self.estop = payload["estop"]
-        if status == "offline" and self.running:     # it went away mid-survey: nothing more is coming
+        if status == "offline" and self.running:     # it went away mid-round: nothing more is coming
             self.mission.update(status="lost", reason="link_lost")
 
     def on_state(self, payload: object) -> None:
@@ -68,15 +70,15 @@ class RoverLive:
         mission_id, status = payload.get("missionId"), payload.get("status")
         ours = self.mission is not None and self.mission["missionId"] == mission_id
         if status == "rejected":
-            if ours:                                 # a refusal of another request must not end this survey
+            if ours:                                 # a refusal of another request must not end this round
                 self.mission.update(status="rejected", reason=payload.get("reason"))
             return
         if not ours:
-            # After a server restart a survey still in progress is adopted; a finished one is only history.
+            # After a server restart a round still in progress is adopted; a finished one is only history.
             if status != "running" or not isinstance(payload.get("rows"), int) or not isinstance(payload.get("cols"), int):
                 return
             self.queued(str(mission_id), str(payload.get("zoneId", "")), payload["rows"], payload["cols"],
-                        float(payload.get("cellM", 0.5)), None)
+                        float(payload.get("cellM", 3.0)), float(payload.get("rowM", 3.0)), None)
         m = self.mission
         if status == "running":
             m["status"] = "running"
@@ -104,7 +106,7 @@ class RoverLive:
     def snapshot(self) -> dict:
         m = None
         if self.mission is not None:
-            m = {**self.mission, "cells": [self.cells[k] for k in sorted(self.cells)]}
+            m = {**self.mission, "cells": [dict(self.cells[k]) for k in sorted(self.cells)]}
         return {"rover": {"code": ROVER_CODE, "status": self.status, "estop": self.estop}, "mission": m}
 
 
@@ -118,8 +120,32 @@ def _when(text: object) -> datetime | None:
         return None
 
 
+def bed_means(cells: list[dict]) -> dict[str, float]:
+    """The average of each reading over the trees that gave one."""
+    totals: dict[str, list[float]] = {}
+    for cell in cells:
+        for metric, value in (cell.get("readings") or {}).items():
+            if metric in guava.META and isinstance(value, (int, float)) and not isinstance(value, bool):
+                totals.setdefault(metric, []).append(float(value))
+    return {m: sum(v) / len(v) for m, v in totals.items()}
+
+
+async def _store_bed_means(session: AsyncSession, zone: Zone, device: Device, at: datetime, cells: list[dict]) -> None:
+    deciding = await session.scalar(select(Sensor).where(Sensor.zone_id == zone.id, Sensor.used_for_decision.is_(True)))
+    for metric, value in bed_means(cells).items():
+        try:
+            c = clean({"metric": metric, "value": round(value, 3), "unit": guava.META[metric][2], "quality": "valid"})
+        except Refused as why:
+            log.warning("rover reading refused: %s", why)
+            continue
+        session.add(SensorReading(device_id=device.id, zone_id=zone.id, sensor_id=deciding.id if deciding and c.metric in SOIL_PROBE_METRICS else None,
+                                  metric=Metric(metric), value=c.value, unit=c.unit, quality=c.quality, sample_count=len(cells), recorded_at=at))
+    if device.last_seen_at is None or at > device.last_seen_at:
+        device.last_seen_at = at
+
+
 async def store_report(session: AsyncSession, report: object) -> bool:
-    """Save one finished survey. False when it cannot belong to this farm (an unknown bed or a foreign id)."""
+    """Save one finished round. False when it cannot belong to this farm (an unknown bed or a foreign id)."""
     if not isinstance(report, dict):
         return False
     try:
@@ -131,26 +157,23 @@ async def store_report(session: AsyncSession, report: object) -> bool:
     if zone is None or device is None or await session.get(SurveyMission, mission_id) is not None:
         return False
     grid = report.get("grid") if isinstance(report.get("grid"), dict) else {}
+    finished = _when(report.get("finishedAt"))
     session.add(SurveyMission(
         id=mission_id, zone_id=zone.id, device_id=device.id, status=str(report.get("status"))[:16],
         rows=grid.get("rows"), cols=grid.get("cols"), cell_m=grid.get("cellM"),
         abort_reason=(str(report["abortReason"])[:48] if report.get("abortReason") else None),
-        cells_scanned=report.get("cellsScanned"), plants_detected=report.get("plantsDetected"),
-        plants_needing_water=report.get("plantsNeedingWater"), cells_flagged=report.get("cellsFlagged"),
-        distance_m=report.get("distanceM"), est_duration_s=report.get("estDurationS"),
-        simulated=bool(report.get("simulated")),
-        started_at=_when(report.get("startedAt")), completed_at=_when(report.get("finishedAt")),
+        cells_scanned=report.get("cellsScanned"), plants_detected=report.get("plantsDetected"), cells_flagged=report.get("cellsFlagged"),
+        distance_m=report.get("distanceM"), est_duration_s=report.get("estDurationS"), simulated=bool(report.get("simulated")),
+        started_at=_when(report.get("startedAt")), completed_at=finished,
     ))
     await session.flush()
-    for cell in report.get("cells") or []:
-        if not isinstance(cell, dict) or _cell_key(cell) is None:
-            continue
+    cells = [c for c in (report.get("cells") or []) if isinstance(c, dict) and _cell_key(c) is not None]
+    for cell in cells:
         session.add(SurveyFinding(
-            mission_id=mission_id, cell_row=cell["row"], cell_col=cell["col"],
-            plant_present=bool(cell.get("plant")), needs_water=bool(cell.get("needs_water")),
-            flagged=bool(cell.get("flagged")), yellowing=cell.get("chlorosis"), canopy=cell.get("canopy"),
-            dryness=cell.get("dryness"), suggested_ml=cell.get("suggested_ml"),
+            mission_id=mission_id, cell_row=cell["row"], cell_col=cell["col"], plant_present=bool(cell.get("plant")),
+            flagged=bool(cell.get("flagged")), yellowing=cell.get("chlorosis"), canopy=cell.get("canopy"), readings=cell.get("readings") or {},
             disease_code=cell.get("disease"), confidence=cell.get("disease_confidence"),
         ))
+    await _store_bed_means(session, zone, device, finished or datetime.now(timezone.utc), cells)
     await session.commit()
     return True

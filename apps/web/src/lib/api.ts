@@ -1,5 +1,3 @@
-import { mockOn } from "./mockMode";
-
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000/api/v1";
 
 /** An error from the API with the message a farmer can read. */
@@ -20,14 +18,6 @@ function readableDetail(detail: unknown, fallback: string): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  if (mockOn) {                                      // sample data: answered in the browser, the server is never called
-    const { mockRequest } = await import("../mock/server");
-    return mockRequest<T>(path, init);
-  }
-  return fromServer<T>(path, init);
-}
-
-async function fromServer<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -126,9 +116,8 @@ export type OrchardParamRule = { label: string; target: string; critical: string
 
 /** Everything the cycle page needs, for any day of the cycle. The contract for the real endpoint. */
 export type OrchardCycle = {
-  cycle: Cycle; day: number; actualDay: number; sample: boolean; stages: OrchardStage[]; stage: OrchardStage;
-  conditions: BedConditions; jobs: OrchardJob[]; fertigation: FertigationPlan; rules: OrchardParamRule[];
-  water: { litresPerTree: number; litresTotal: number; hoursPerRun: number; emitterLphPerTree: number; firmwareLimitSeconds: number };
+  cycle: Cycle; day: number; stages: OrchardStage[]; stage: OrchardStage; conditions: BedConditions; jobs: OrchardJob[];
+  fertigation: FertigationPlan; rules: OrchardParamRule[]; leafRanges: { nutrient: string; range: string }[]; advice: Advice | null;
   fruitMm: number | null; bagged: boolean; setup: SetupInfo | null; docIssues: DocIssue[];
 };
 export type Forecast = {
@@ -153,12 +142,13 @@ export type Correlation = {
 
 // ---- the rover: its real software, with simulated wheels and camera until the chassis is built
 
+export type TreeAdvice = { row: number; col: number; plant: boolean; litres: number; fullLitres: number; notes: string[] };
 export type RoverCell = {
-  row: number; col: number; plant: boolean; needs_water: boolean; flagged: boolean; dryness: number | null;
-  suggested_ml: number | null; canopy?: number | null; chlorosis?: number | null; disease?: string | null; disease_confidence?: number | null;
+  row: number; col: number; plant: boolean; flagged: boolean; readings: Record<string, number>; canopy?: number | null; chlorosis?: number | null;
+  disease?: string | null; disease_confidence?: number | null; advice?: TreeAdvice | null;
 };
 export type LiveMission = {
-  missionId: string; zoneId: string; rows: number; cols: number; cellM: number;
+  missionId: string; zoneId: string; rows: number; cols: number; cellM: number; rowM: number;
   status: "queued" | "running" | "completed" | "aborted" | "failed" | "rejected" | "lost";
   reason: string | null; cell: [number, number] | null; battery: number | null; frame: string | null;
   cellsScanned: number; cellsTotal: number; simulate: string | null; simulated: boolean | null; cells: RoverCell[];
@@ -167,10 +157,28 @@ export type RoverLive = { rover: { code: string; status: "online" | "offline" | 
 export type SurveySummary = {
   id: string; zone: string; bedLabel: string; status: string; abortReason: string | null; simulated: boolean;
   rows: number | null; cols: number | null; cellM: number | null; cellsScanned: number | null; plantsDetected: number | null;
-  plantsNeedingWater: number | null; cellsFlagged: number | null; distanceM: number | null; estDurationS: number | null;
+  cellsFlagged: number | null; distanceM: number | null; estDurationS: number | null;
   startedAt: string; finishedAt: string | null;
 };
-export type SurveyInput = { zoneId: string; rows: number; cols: number; cellM: number; simulate: "normal" | "rain" | "low_battery" };
+export type SurveyInput = { zoneId: string; rows: number; cols: number; cellM: number; rowM: number; simulate: "normal" | "rain" | "low_battery" };
+
+export type FeedAdvice = {
+  action: "feed" | "hold" | "flush" | "wait" | "none"; reason: string; due: boolean; nextDay: number | null; aim: string; nitrogen: string; notes: string[];
+  dose: FeedDose | null; plannedDose: FeedDose | null;
+};
+export type FeedDose = { runs: number; perTree: { n: number; p: number; k: number }; total: { n: number; p: number; k: number } };
+/** One bed's day, worked out from its newest fresh round. Advice only. */
+export type Advice = {
+  zone: string; label: string; cycleId: string; day: number; stage: { n: number; short: string; title: string };
+  surveyed: boolean; surveyedAt: string | null; simulated: boolean; partial: boolean; treesSeen: number; treesWatered: number;
+  water: { litres: number; fullLitres: number; savedLitres: number; hours: number; emitterLph: number; firmwareLimitSeconds: number; raining: boolean; paused: boolean; et0: number };
+  feed: FeedAdvice; trees: TreeAdvice[]; todo: { kind: string; severity: "critical" | "warn" | "info"; text: string; detail: string | null }[]; source: string;
+};
+export type Growth = {
+  zone: string; label: string; stage: string; rounds: { at: string; canopy: number; yellow: number; simulated: boolean }[];
+  summary: { canopyNow: number; changePoints: number; overDays: number; verdict: string; word: string; yellowNow: number } | null;
+  trees: { row: number; col: number; first: number; now: number }[];
+};
 
 export type ZoneNow = {
   zone: string; label: string | null; areaM2?: number | null; moisturePct: number | null; rain: boolean | null;
@@ -183,72 +191,12 @@ export type DeviceRow = {
   lastSeenAt: string | null; firmwareVersion: string | null;
 };
 
-export type PlanTask = {
-  text: string; firstDay: number; lastDay: number; startsOn: string; endsOn: string; basis: string;
-};
-
-export type PlanNow =
-  | { state: "not_planted"; startsInDays: number }
-  | { state: "finished"; daysAgo: number }
-  | {
-      state: "growing"; day: number; daysLeft: number; stage: string; stageTitle?: string; stagePlain?: string;
-      litersToday: number; litersPerPlant: number; ifCloudy: number; ifRainy: number;
-      tasks: PlanTask[]; next: (PlanTask & { inDays: number }) | null;
-    };
-
-export type PlanStage = {
-  stage: string; title: string; plain: string | null; watch: string | null; watchBasis: string | null;
-  firstDay: number; lastDay: number; startsOn: string; endsOn: string; days: number; grossM3: number;
-  avgLitersPerPlantPerDay: number; tasks: PlanTask[];
-};
-
-export type PlanSource = { key: string; label: string; url: string; read: string; supports: string };
-
-export type CropPlan = {
-  crop: string; slug: string; hasGuide: boolean; plants: number; plantedOn: string; endsOn: string; cycleDays: number;
-  areaPerPlantM2: number; areaM2: number; now: PlanNow;
-  water: {
-    grossM3: number; netM3: number; efficiency: number; perPlantWholeCycleL: number; peakLitersPerDay: number;
-    avgEt0MmDay: number; et0Source: string; rainIgnored: boolean;
-    days: { day: number; stage: string; et0Mm: number; litersTotalGross: number; litersPerPlantGross: number }[];
-    weeks: { week: number; startsOn: string; firstDay: number; stage: string; litersPerDay: number;
-             litersPerPlantPerDay: number; et0MmDay: number }[];
-    check: { ourPeakMmDay: number; japanMmDayRange: [number, number]; verdict: "inside" | "close" | "outside";
-             japanLitersPerPlantPeak: [number, number] };
-    howTo?: { text: string; basis: string }[];
-  };
-  stages: PlanStage[];
-  season: {
-    hotDays: number; rainyDays: number; notes: { kind: "warn" | "note"; text: string; basis: string }[];
-    months: { month: number; days: number; et0MmDay: number; avgHighC: number; rainMmDay: number }[];
-  };
-  kcSource: string;
-  feed?: {
-    rows: { when: string; what: string; nitrogenG: number; urea46G: number; compostKg?: number; phosphateG?: number;
-            tspG?: number; potashG?: number; mopG?: number }[];
-    totalsForAllPlants: { compostKg: number; mulchKg: number; ureaKg: number; tspKg: number; mopKg: number };
-    note: string; basis: string;
-  };
-  harvest?: {
-    firstPickDay: number; firstPickOn: string; lastDay: number; lastOn: string; basis: string;
-    benchmark: { label: string; caution: string;
-                 rows: { label: string; tPer10a: number; kgPerPlant: number; kgForYourPlants: number }[] };
-  };
-  tasks?: PlanTask[];
-  sources: PlanSource[];
-};
-
-export type CropPlanQuery = {
-  crop: string; plants: number; plantedOn: string; efficiency?: number; rowCm?: number; plantCm?: number;
-};
-
 export type PhotoResult = {
   status: "ok" | "uncertain"; label: string | null; confidence: number | null; note: string;
   symptom: string | null; correlation: Correlation | null;
 };
 
 async function checkPhoto(file: File, zone?: string): Promise<PhotoResult> {
-  if (mockOn) throw new ApiError("disease model not installed");   // the same answer the real server gives today
   const body = new FormData();
   body.append("photo", file);                       // multipart: the browser sets the content type
   const res = await fetch(`${BASE}/photos/check${zone ? `?${new URLSearchParams({ zone })}` : ""}`, { method: "POST", body });
@@ -282,6 +230,7 @@ export type Cycle = {
   day: number | null; stage: string | null; stageTitle: string | null; plantCount: number | null; areaM2: number | null;
   setup: string | null; setupLabel: string | null; expectedPriceUsdPerKg: number | null; forecast: Forecast | null;
   perennial?: Perennial | null;
+  grid?: { rows: number; cols: number; rowM: number; treeM: number } | null;
 };
 
 export type CostEntry = {
@@ -326,29 +275,24 @@ export const api = {
   devices: () => request<DeviceRow[]>("/devices"),
   decisionsToday: () => request<ZoneDecision[]>("/decisions/today"),
   conditions: () => request<BedConditions[]>("/conditions"),
-  telemetry: (zone: string, metrics: string[], hours: number) =>
-    request<TelemetrySeries>(`/telemetry/${encodeURIComponent(zone)}?${new URLSearchParams({ metrics: metrics.join(","), hours: String(hours), points: "240" })}`),
+  telemetry: (zone: string, metrics: string[], hours: number, points = 240) =>
+    request<TelemetrySeries>(`/telemetry/${encodeURIComponent(zone)}?${new URLSearchParams({ metrics: metrics.join(","), hours: String(hours), points: String(points) })}`),
   setups: (crop: string, areaM2?: number) =>
     request<SetupInfo[]>(`/setups?${new URLSearchParams({ crop, ...(areaM2 ? { area: String(areaM2) } : {}) })}`),
   symptoms: () => request<Symptom[]>("/diagnosis/symptoms"),
   diagnose: (zone: string, symptom: string) =>
     request<Correlation>(`/diagnosis?${new URLSearchParams({ zone, symptom })}`),
   checkPhoto,
-  cropPlan: (q: CropPlanQuery) => {
-    const qs = new URLSearchParams({ crop: q.crop, plants: String(q.plants), plantedOn: q.plantedOn });
-    if (q.efficiency !== undefined) qs.set("efficiency", String(q.efficiency));
-    if (q.rowCm && q.plantCm) { qs.set("rowCm", String(q.rowCm)); qs.set("plantCm", String(q.plantCm)); }
-    return request<CropPlan>(`/crop-plan?${qs}`);
-  },
-  // the rover runs for real on sample data too; only a survey of a real bed is saved
-  roverLive: () => fromServer<RoverLive>("/missions/live"),
-  roverFrame: (row: number, col: number) => fromServer<{ frame: string | null }>(`/missions/live/frames/${row}/${col}`),
-  roverEstop: (engaged: boolean) => fromServer<{ estop: boolean }>("/missions/estop", { method: "POST", body: JSON.stringify({ engaged }) }),
-  startSurvey: (body: SurveyInput) => fromServer<{ missionId: string }>("/missions", { method: "POST", body: JSON.stringify(body) }),
-  surveys: () => fromServer<SurveySummary[]>("/missions"),
-  survey: (id: string) => fromServer<SurveySummary & { cells: RoverCell[] }>(`/missions/${id}`),
-  cyclePlan: (id: string) => request<CropPlan>(`/cycles/${id}/plan`),
-  orchardCycle: (id: string, day?: number) => request<OrchardCycle>(`/cycles/${id}/orchard${day ? `?day=${day}` : ""}`),
+  // the rover: its real software, with simulated wheels, camera and probe until the hardware is built
+  roverLive: () => request<RoverLive>("/missions/live"),
+  roverFrame: (row: number, col: number) => request<{ frame: string | null }>(`/missions/live/frames/${row}/${col}`),
+  roverEstop: (engaged: boolean) => send<{ estop: boolean }>("POST", "/missions/estop", { engaged }),
+  startSurvey: (body: SurveyInput) => send<{ missionId: string }>("POST", "/missions", body),
+  surveys: () => request<SurveySummary[]>("/missions"),
+  survey: (id: string) => request<SurveySummary & { cells: RoverCell[] }>(`/missions/${id}`),
+  advice: () => request<Advice[]>("/advice"),
+  growth: (zone: string) => request<Growth>(`/advice/${zone}/growth`),
+  orchardCycle: (id: string) => request<OrchardCycle>(`/cycles/${id}/orchard`),
   orchardJobDone: (id: string, job: string) => send<OrchardCycle>("POST", `/cycles/${id}/orchard/jobs/${job}/done`, {}),
   orchardFruitSize: (id: string, mm: number) => send<OrchardCycle>("POST", `/cycles/${id}/orchard/fruit`, { mm }),
 
@@ -356,8 +300,6 @@ export const api = {
   settings: () => request<Settings>("/farm/settings"),
   saveSettings: (patch: Partial<Settings>) => send<Settings>("PUT", "/farm/settings", patch),
   crops: () => request<Crop[]>("/crops"),
-  addCrop: (b: { name: string; kc: { ini: number; mid: number; end: number }; stageDays: number[]; source?: string }) =>
-    send<Crop>("POST", "/crops", b),
   addBed: (b: { label: string; areaM2?: number }) => send<{ name: string; label: string }>("POST", "/zones", b),
 
   // cycles
@@ -377,8 +319,8 @@ export const api = {
   costs: (cycleId?: string) => request<CostEntry[]>(`/costs${cycleId ? `?cycle=${cycleId}` : ""}`),
   addCost: (b: CostInput) => send<CostEntry>("POST", "/costs", b),
   deleteCost: (id: string) => send<void>("DELETE", `/costs/${id}`),
-  costsCsvUrl: mockOn ? "#sample-data-has-no-export" : `${BASE}/export/costs.csv`,
-  copCsvUrl: mockOn ? "#sample-data-has-no-export" : `${BASE}/export/cop.csv`,
+  costsCsvUrl: `${BASE}/export/costs.csv`,
+  copCsvUrl: `${BASE}/export/cop.csv`,
 
   // stock
   stockItems: () => request<StockItem[]>("/stock/items"),

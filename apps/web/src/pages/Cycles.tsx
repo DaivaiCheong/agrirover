@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Calculator, Droplets, Pencil, Plus, Sprout, Square, X } from "lucide-react";
+import { Calculator, Pencil, Plus, Sprout, Square, X } from "lucide-react";
 import { Empty, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api, loadProblem, type Cycle } from "../lib/api";
 import { dayLabel, dayMonthYear, suggestedArea } from "../lib/format";
@@ -52,14 +52,12 @@ export default function Cycles() {
     }
   }
 
-  const planLink = (c: Cycle) =>
-    `/plan?${new URLSearchParams({ crop: c.crop, plants: String(c.plantCount ?? ""), date: c.plantedOn })}`;
   const rows = cycles.data ?? [];
 
   return (
     <>
       <PageHead icon={Sprout} title="My crops"
-                actions={<button className="btn btn-sm" onClick={() => setShowAdd(true)}><Plus size={16} aria-hidden />Add crop</button>} />
+                actions={<button className="btn btn-sm" onClick={() => setShowAdd(true)}><Plus size={16} aria-hidden />Start a cycle</button>} />
       <main className="main stack">
         {cycles.error && <Notice kind="alert">{loadProblem(cycles.error)}</Notice>}
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
@@ -69,13 +67,13 @@ export default function Cycles() {
             <p className="panel-pad muted">{cycles.error ? "Could not be loaded just now." : "Loading…"}</p>
           ) : rows.length === 0 ? (
             <Empty icon={Sprout}>
-              No crop yet.
-              <button className="btn btn-sm" onClick={() => setShowAdd(true)}><Plus size={16} aria-hidden />Add your first crop</button>
+              Nothing is growing yet.
+              <button className="btn btn-sm" onClick={() => setShowAdd(true)}><Plus size={16} aria-hidden />Start a guava cycle</button>
             </Empty>
           ) : (
             <div className="tablewrap">
               <table className="tbl crops fold">
-                <thead><tr><th>Bed</th><th>Crop</th><th className="nowrap">Planted</th><th>Status</th><th className="r nowrap">{rows.some((c) => c.perennial) ? "Trees" : "Plants"}</th>
+                <thead><tr><th>Bed</th><th>Crop</th><th className="nowrap">Cycle started</th><th>Status</th><th className="r nowrap">Trees</th>
                   <th className="r nowrap">Area m²</th><th /></tr></thead>
                 <tbody>
                   {rows.map((c) => (
@@ -83,12 +81,12 @@ export default function Cycles() {
                       <td><b>{c.bedLabel}</b>{c.trialArm && <> <Tag>{c.trialArm}</Tag></>}</td>
                       <td data-label="Crop">{c.cropName}{c.variety ? ` (${c.variety})` : ""}
                         {c.setupLabel && <div className="mono-sm muted">{c.setupLabel}</div>}</td>
-                      <td data-label="Planted" className="nowrap">{dayMonthYear(c.plantedOn)}</td>
+                      <td data-label="Started" className="nowrap">{dayMonthYear(c.plantedOn)}</td>
                       <td data-label="Status" className="nowrap">{c.status === "active" ? dayLabel(c) : <span className="muted">Closed {c.endedOn}</span>}</td>
-                      <td data-label="Plants" className="r nowrap">{editing === c.id
+                      <td data-label="Trees" className="r nowrap">{editing === c.id
                         ? <input className="cell-input" type="number" min={1} value={ePlants} autoFocus
-                                 onChange={(e) => plantsChanged(c, e.target.value)} aria-label="Plants" />
-                        : c.plantCount ?? <Tag kind="warn">Add plants</Tag>}</td>
+                                 onChange={(e) => plantsChanged(c, e.target.value)} aria-label="Trees" />
+                        : c.plantCount ?? <Tag kind="warn">Add trees</Tag>}</td>
                       <td data-label="Area m²" className="r nowrap">{editing === c.id
                         ? <input className="cell-input" type="number" min={0} step="any" value={eArea}
                                  onChange={(e) => { setEArea(e.target.value); setAreaTouched(true); }} aria-label="Area" />
@@ -102,9 +100,8 @@ export default function Cycles() {
                           </div>
                         ) : (
                           <RowMenu items={[
-                            { label: "Plants and area", icon: Pencil, onSelect: () => startEdit(c) },
-                            c.perennial ? { label: "Open this cycle", icon: Sprout, to: `/cycles/${c.id}/orchard` }
-                              : c.plantCount ? { label: "Water plan", icon: Droplets, to: planLink(c) } : null,
+                            { label: "Trees and area", icon: Pencil, onSelect: () => startEdit(c) },
+                            { label: "Open this cycle", icon: Sprout, to: `/cycles/${c.id}/orchard` },
                             { label: "Cost report", icon: Calculator, to: `/cycles/${c.id}` },
                             c.status === "active" && "separator",
                             c.status === "active" && { label: "End crop", icon: Square, danger: true, onSelect: () => end(c.id, c.bedLabel) },

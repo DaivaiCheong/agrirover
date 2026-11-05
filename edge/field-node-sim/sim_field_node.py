@@ -35,10 +35,9 @@ SCENARIOS = {
     "salty": ((60.0, 70.0), 0),
 }
 
-PROBES = ("basic", "7in1")
+PROBES = ("basic", "7in1", "rain")      # rain: only what stays fixed in the field once the rover carries the soil probe
 
-# 7-in-1 probe and air sensor: (low, high) per metric. A healthy tomato bed in its first weeks (the seeded beds
-# start at day 21: EC target 1.2-1.8); scenarios override what they are about.
+# 7-in-1 probe and air sensor: (low, high) per metric. Scenarios override what they are about.
 HEALTHY = {
     "soil_ph": (6.2, 6.6), "soil_ec": (1.5, 1.8), "soil_temperature": (23.0, 25.5),
     "nitrogen": (115, 145), "phosphorus": (70, 95), "potassium": (170, 235),
@@ -98,6 +97,9 @@ def build_payload(scenario: str, rng: random.Random, device: str = "ESP-FIELD-01
             m("supply_voltage", round(rng.uniform(4.9, 5.1), 2), "V"),
         ],
     }
+    if probe == "rain":
+        payload["fw"] = "sim-rain-1.0"
+        payload["measurements"] = [x for x in payload["measurements"] if x["metric"] != "soil_moisture"]
     if probe == "7in1":
         payload["fw"] = "sim-7in1-1.0"
         payload["zone"] = zone                                   # the spec's payload names its zone as well as the topic

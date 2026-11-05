@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BRAND } from "../lib/brand";
-import { exitMock, mockOn } from "../lib/mockMode";
 import {
   Bot, Calculator, Camera, ChartColumn, ClipboardList, Cpu, History, Info, Leaf, MapPin, Package, Receipt, Scale, Settings,
-  Sprout, Sun, Tractor, Wallet, Wheat, Wrench, type LucideIcon,
+  Sprout, Sun, Tractor, TrendingUp, Wallet, Wheat, Wrench, type LucideIcon,
 } from "lucide-react";
 
 type Tab = { to: string; label: string; icon: LucideIcon };
@@ -13,8 +12,9 @@ type Tab = { to: string; label: string; icon: LucideIcon };
 export const SECTIONS = {
   today:   { to: "/",         label: "Today",    icon: Sun,         title: "Today", tabs: [] as Tab[] },
   rover:   { to: "/rover",    label: "Rover",    icon: Bot,         title: "Rover",
-             tabs: [{ to: "/rover", label: "Survey", icon: Bot }, { to: "/rover/about", label: "What it does", icon: Info },
-                    { to: "/rover/sop", label: "SOP", icon: ClipboardList }, { to: "/rover/history", label: "History", icon: History }] },
+             tabs: [{ to: "/rover", label: "Daily round", icon: Bot }, { to: "/rover/about", label: "What it does", icon: Info },
+                    { to: "/rover/growth", label: "Growth", icon: TrendingUp }, { to: "/rover/sop", label: "SOP", icon: ClipboardList },
+                    { to: "/rover/history", label: "History", icon: History }] },
   crops:   { to: "/cycles",   label: "My crops", icon: Sprout,      title: "My crops", tabs: [] as Tab[] },
   money:   { to: "/costs",    label: "Money",    icon: Wallet,      title: "Money",
              tabs: [{ to: "/costs", label: "Costs", icon: Receipt }, { to: "/stock", label: "Stock", icon: Package },
@@ -36,7 +36,7 @@ export type SectionKey = keyof typeof SECTIONS;
 export function sectionOf(path: string): SectionKey {
   if (path === "/") return "today";
   if (/^\/cycles\/[^/]+$/.test(path)) return "results";
-  if (path.startsWith("/cycles") || path.startsWith("/plan")) return "crops";
+  if (path.startsWith("/cycles")) return "crops";
   for (const key of ["rover", "money", "results", "farm"] as const) {
     if (SECTIONS[key].tabs.some((t) => path === t.to || path.startsWith(`${t.to}/`))) return key;
   }
@@ -64,12 +64,6 @@ export default function Shell({ children }: { children: ReactNode }) {
         <p className="side-foot">No login yet: anyone with this address can change the data.</p>
       </aside>
       <div className="content">
-        {mockOn && (
-          <div className="sample-bar" role="status">
-            <b>Sample data</b> Guava. Nothing is saved.
-            <button type="button" className="linkbtn" onClick={exitMock}>Exit</button>
-          </div>
-        )}
         {children}
       </div>
       <nav className="bottomnav" aria-label="Main">

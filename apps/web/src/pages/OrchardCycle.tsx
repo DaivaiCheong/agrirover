@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Calculator, Sprout } from "lucide-react";
+import { ArrowLeft, Bot, Calculator, Sprout } from "lucide-react";
 import EnvRibbon from "../components/EnvRibbon";
 import { OrchardJobs, StageStrip } from "../components/Orchard";
 import { Kpis, More, Notice, PageHead, Panel, Tag } from "../components/ui";
@@ -8,8 +8,9 @@ import { api, type OrchardCycle as View } from "../lib/api";
 import { trim } from "../lib/conditions";
 import { dayMonth, dayMonthYear, litres, num, riel, usd } from "../lib/format";
 import { useData } from "../lib/useData";
+import { ago } from "../lib/usePoll";
 
-type TabId = "jobs" | "targets" | "feed" | "forecast" | "questions";
+type TabId = "jobs" | "trees" | "targets" | "feed" | "forecast" | "questions";
 
 const range = (r: [number, number] | null, unit = "") => (r ? `${trim(r[0])}${r[0] === r[1] ? "" : `–${trim(r[1])}`}${unit}` : "—");
 
@@ -55,21 +56,33 @@ function Targets({ v, go }: { v: View; go: () => void }) {
 }
 
 function Fertigation({ v }: { v: View }) {
-  const f = v.fertigation;
+  const f = v.fertigation, feed = v.advice?.feed;
+  const dose = feed?.plannedDose;
   return (
-    <Panel title={`Feed: ${f.aim.toLowerCase()}`} pad={false}>
-      <table className="tbl kv"><tbody>
-        <tr><th scope="row">Nitrogen</th><td>{f.nitrogen}</td></tr>
-        {f.tanks.length === 0 && <tr><th scope="row">Tanks</th><td className="muted">Nothing through the drip</td></tr>}
-        {f.tanks.map((t) => <tr key={t.name}><th scope="row">{t.name}</th><td>{t.products.join(" · ")}</td></tr>)}
-        {f.clash && <tr><th scope="row">Do not mix</th><td><Tag kind="warn">Clash</Tag> {f.clash}</td></tr>}
-        {f.phases.map((p, i) => <tr key={i}><th scope="row">Run {i + 1}</th><td><b>{p.pct} %</b> {p.label} <span className="muted">· {p.what}</span></td></tr>)}
-        {f.phases.length > 0 && <tr><th scope="row">Water pH</th><td>{f.waterPh}</td></tr>}
-        {f.soil && <tr><th scope="row">Soil</th><td>{f.soil}</td></tr>}
-        {f.foliar.map((x) => <tr key={x.text}><th scope="row">Foliar</th><td>{x.text} {x.confirm && <Tag>Ask an agronomist</Tag>}</td></tr>)}
-        {v.setup?.orchard && <tr><th scope="row">Yearly dose</th><td>{v.setup.orchard.npk}</td></tr>}
-      </tbody></table>
-    </Panel>
+    <div className="stack">
+      <Panel title={`Feed: ${f.aim.toLowerCase()}`} pad={false}>
+        <table className="tbl kv"><tbody>
+          {feed && <tr><th scope="row">Today</th><td><b>{feed.reason}</b></td></tr>}
+          {dose && <tr><th scope="row">One run, per tree</th><td>N {dose.perTree.n} g · P {dose.perTree.p} g · K {dose.perTree.k} g <span className="muted">· {dose.runs} runs this stage, 10 days apart</span> <Tag>Starting dose</Tag></td></tr>}
+          {feed?.notes.map((n) => <tr key={n}><th scope="row">Note</th><td><Tag kind="warn">Check</Tag> {n}</td></tr>)}
+          <tr><th scope="row">Nitrogen</th><td>{f.nitrogen}</td></tr>
+          {f.tanks.length === 0 && <tr><th scope="row">Tanks</th><td className="muted">Nothing through the drip</td></tr>}
+          {f.tanks.map((t) => <tr key={t.name}><th scope="row">{t.name}</th><td>{t.products.join(" · ")}</td></tr>)}
+          {f.clash && <tr><th scope="row">Do not mix</th><td><Tag kind="warn">Clash</Tag> {f.clash}</td></tr>}
+          {f.phases.map((p, i) => <tr key={i}><th scope="row">Run step {i + 1}</th><td><b>{p.pct} %</b> {p.label} <span className="muted">· {p.what}</span></td></tr>)}
+          {f.phases.length > 0 && <tr><th scope="row">Water pH</th><td>{f.waterPh}</td></tr>}
+          {f.soil && <tr><th scope="row">Soil</th><td>{f.soil}</td></tr>}
+          {f.foliar.map((x) => <tr key={x.text}><th scope="row">Foliar</th><td>{x.text} {x.confirm && <Tag>Ask an agronomist</Tag>}</td></tr>)}
+          {v.setup?.orchard && <tr><th scope="row">Yearly dose</th><td>{v.setup.orchard.npk}</td></tr>}
+        </tbody></table>
+      </Panel>
+      <Panel title="Leaf test ranges" pad={false} right={<span className="small muted">Bearing Paluma orchards, Brazil. A starting reference</span>}>
+        <div className="leaf-grid">
+          {v.leafRanges.map((l) => <div key={l.nutrient}><span className="small muted">{l.nutrient}</span><b>{l.range}</b></div>)}
+        </div>
+      </Panel>
+      <p className="small muted">The rover's N, P and K are a trend only. A low-cost probe cannot measure them well enough to set a dose. Too much of a feed shows first as high EC, which holds the next run; too little shows in a leaf test.</p>
+    </div>
   );
 }
 
@@ -97,46 +110,56 @@ function Forecast({ v, go }: { v: View; go: () => void }) {
   );
 }
 
+function Trees({ v }: { v: View }) {
+  const a = v.advice;
+  if (!a || !a.surveyed) return <Notice>No fresh round for this block. <Link to="/rover">Run a round</Link>.</Notice>;
+  return (
+    <Panel title={`Round ${a.surveyedAt ? ago(a.surveyedAt) : ""}${a.partial ? " · stopped early" : ""}`} pad={false}
+           right={<span className="small muted">Water {a.water.litres} L of {a.water.fullLitres} L full demand</span>}>
+      <div className="tablewrap">
+        <table className="tbl">
+          <thead><tr><th>Tree</th><th className="r">Water L</th><th>Note</th></tr></thead>
+          <tbody>{a.trees.map((t) => (
+            <tr key={`${t.row}-${t.col}`}><td className="nowrap"><b>R{t.row + 1} T{t.col + 1}</b></td><td className="r">{t.plant ? t.litres : "—"}</td><td className="small">{t.notes.join(" · ").replace(/: look/g, "")}</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
 export default function OrchardCycle() {
   const { id = "" } = useParams();
-  const [wanted, setWanted] = useState<number | undefined>(undefined);
   const [tab, setTab] = useState<TabId>("jobs");
-  const { data: v, error, reload } = useData(() => api.orchardCycle(id, wanted), [id, wanted]);
+  const { data: v, error, reload } = useData(() => api.orchardCycle(id), [id]);
 
-  const c = v?.cycle, p = c?.perennial;
-  const stress = v && p?.stress && v.stage.n === 1;
-  const walking = v && v.day !== v.actualDay;
-  const dateOf = (day: number) => { const d = new Date(`${c!.plantedOn}T00:00:00`); d.setDate(d.getDate() + day - 1); return d.toLocaleDateString("sv-SE"); };
+  const c = v?.cycle, p = c?.perennial, a = v?.advice;
+  const stress = a?.water.paused;
 
   async function done(job: string) { await api.orchardJobDone(id, job); reload(); }
   async function fruit(mm: number) { await api.orchardFruitSize(id, mm); reload(); }
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: "jobs", label: "Tasks" }, { id: "targets", label: "Targets" }, { id: "feed", label: "Fertigation" },
+    { id: "jobs", label: "Tasks" }, { id: "trees", label: "Trees" }, { id: "targets", label: "Targets" }, { id: "feed", label: "Fertilisation" },
     { id: "forecast", label: "Forecast" }, { id: "questions", label: `Open questions (${v?.docIssues.length ?? 0})` },
   ];
   const go = () => setTab("questions");
 
   return (
     <>
-      <PageHead icon={Sprout} title={c?.bedLabel ?? "Crop cycle"}
-                sub={c ? `${c.cropName}${c.variety ? ` (${c.variety})` : ""} · ${c.plantCount} trees · ${c.setupLabel ?? "no setup"}` : undefined}
-                actions={<Link className="btn btn-ghost btn-sm" to="/cycles"><ArrowLeft size={16} aria-hidden />My crops</Link>} />
+      <PageHead icon={Sprout} title={c?.bedLabel ?? "Guava cycle"}
+                sub={c ? `Guava${c.variety ? ` (${c.variety})` : ""} · ${c.plantCount} trees · ${c.setupLabel ?? "no setup"}` : undefined}
+                actions={<>
+                  <Link className="btn btn-ghost btn-sm" to="/rover"><Bot size={16} aria-hidden />Run a round</Link>
+                  <Link className="btn btn-ghost btn-sm" to="/cycles"><ArrowLeft size={16} aria-hidden />My crops</Link>
+                </>} />
       <main className="main stack">
         {error && <Notice kind="alert">{error}</Notice>}
         {v && c && p && (
           <>
-            <Panel title={`Day ${v.day} of ${v.stages[v.stages.length - 1].lastDay} · ${v.stage.title}`}
-                   right={<span className="small muted">{dayMonthYear(dateOf(v.day))}</span>}>
+            <Panel title={`Day ${v.day} of ${v.stages[v.stages.length - 1].lastDay} · ${v.stage.title}`}>
               <div className="stack">
                 <StageStrip stages={v.stages} day={v.day} />
-                {v.sample && (
-                  <div className="walk">
-                    <label className="small muted" htmlFor="walk-day">Walk the cycle (sample)</label>
-                    <input id="walk-day" type="range" min={1} max={180} value={v.day} onChange={(e) => setWanted(Number(e.target.value))} />
-                    {walking && <button type="button" className="linkbtn small" onClick={() => setWanted(undefined)}>Today (day {v.actualDay})</button>}
-                  </div>
-                )}
                 <Kpis items={[
                   { k: "Trees planted", v: dayMonthYear(p.treesPlantedOn) },
                   { k: "Tree age", v: `${p.treeAgeYears} years` },
@@ -148,21 +171,23 @@ export default function OrchardCycle() {
 
             <div className="grid g2">
               <EnvRibbon bed={v.conditions} />
-              <Panel title="Now" pad={false}>
+              <Panel title="Today" pad={false} right={a?.simulated ? <span className="small muted">Simulated round</span> : undefined}>
                 <table className="tbl kv"><tbody>
-                  {stress ? (
+                  {!a?.surveyed ? (
+                    <tr><th scope="row">Water</th><td><span className="muted">No fresh round.</span> <Link to="/rover">Run one</Link></td></tr>
+                  ) : stress ? (
                     <tr><th scope="row">Water</th><td><Tag>Paused for stress</Tag> until day {v.stage.lastDay}, then two priming irrigations</td></tr>
                   ) : (
                     <>
-                      <tr><th scope="row">Water plan</th><td><b>{litres(v.water.litresTotal)}</b> · {v.water.litresPerTree} L a tree. Skip if the soil is at target.</td></tr>
-                      {v.water.hoursPerRun > 0 && (
-                        <tr><th scope="row">Drip</th><td><b>{v.water.hoursPerRun} h</b> at {v.water.emitterLphPerTree} L/h a tree{" "}
-                          <Tag kind="warn">Node stops at {v.water.firmwareLimitSeconds} s</Tag></td></tr>
+                      <tr><th scope="row">Water</th><td><b>{litres(a.water.litres)}</b> to {a.treesWatered} of {a.treesSeen} trees <span className="muted">· full demand {litres(a.water.fullLitres)}</span></td></tr>
+                      {a.water.hours > 0 && (
+                        <tr><th scope="row">Drip</th><td>Up to <b>{a.water.hours} h</b> a tree at {a.water.emitterLph} L/h{" "}
+                          <Tag kind="warn">Node stops at {a.water.firmwareLimitSeconds} s</Tag></td></tr>
                       )}
                     </>
                   )}
-                  {!stress && <tr><th scope="row">Stage</th><td>{v.stage.water}</td></tr>}
-                  <tr><th scope="row">Feed</th><td>{v.stage.feed}</td></tr>
+                  {a && <tr><th scope="row">Feed</th><td>{a.feed.reason}</td></tr>}
+                  <tr><th scope="row">Stage</th><td>{v.stage.water}</td></tr>
                   <tr><th scope="row">Do</th><td>{v.stage.actions}</td></tr>
                 </tbody></table>
               </Panel>
@@ -176,11 +201,8 @@ export default function OrchardCycle() {
               ))}
             </div>
 
-            {tab === "jobs" && (
-              <Panel pad={false}>
-                <OrchardJobs jobs={v.jobs} fruitMm={v.fruitMm} onDone={walking ? undefined : done} onFruit={walking ? undefined : fruit} />
-              </Panel>
-            )}
+            {tab === "jobs" && <Panel pad={false}><OrchardJobs jobs={v.jobs} fruitMm={v.fruitMm} onDone={done} onFruit={fruit} /></Panel>}
+            {tab === "trees" && <Trees v={v} />}
             {tab === "targets" && <Targets v={v} go={go} />}
             {tab === "feed" && <Fertigation v={v} />}
             {tab === "forecast" && <Forecast v={v} go={go} />}

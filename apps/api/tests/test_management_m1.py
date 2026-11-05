@@ -1,4 +1,4 @@
-"""M1: farm settings, crops in the database (any crop), beds and crop cycles.
+"""M1: farm settings, beds and crop cycles.
 
 These go through the real API against a throwaway Postgres (skipped when none is reachable)."""
 import pgdb
@@ -34,31 +34,6 @@ async def test_settings_start_unconfirmed_and_are_saved(Session):
             assert (await c.put(f"{V1}/farm/settings", json=bad)).status_code == 422
 
 
-@pgdb.with_db("aaf_m1_crops")
-async def test_crops_live_in_the_database_and_any_crop_can_be_added(Session):
-    await seeded(Session)
-    chilli = {"name": "Chilli pepper", "kc": {"ini": 0.6, "mid": 1.05, "end": 0.9}, "stageDays": [20, 30, 40, 20]}
-    async with pgdb.api(Session) as c:
-        tomato = next(x for x in (await c.get(f"{V1}/crops")).json() if x["slug"] == "tomato")
-        assert tomato["name"] == "Tomato" and tomato["kc"] == {"ini": 0.6, "mid": 1.15, "end": 0.8}
-        assert tomato["stageDays"] == [30, 40, 40, 25] and "FAO" in tomato["source"]
-
-        r = await c.post(f"{V1}/crops", json=chilli)
-        assert r.status_code == 201 and r.json()["slug"] == "chilli-pepper"
-        assert "entered by the farmer" in r.json()["source"].lower()               # not presented as checked
-        assert (await c.post(f"{V1}/crops", json=chilli)).status_code == 409
-        assert (await c.post(f"{V1}/crops", json={**chilli, "kc": {"ini": 0, "mid": 1, "end": 1}})).status_code == 422
-        assert (await c.post(f"{V1}/crops", json={**chilli, "name": "Short", "stageDays": [0, 1, 1, 1]})).status_code == 422
-
-        # the crop plan uses the new crop's own numbers (and has no growing guide, which is said plainly)
-        p = (await c.get(f"{V1}/crop-plan", params={"crop": "chilli-pepper", "plants": 100,
-                                                      "plantedOn": "2026-11-15", "today": "2026-11-15"})).json()
-        assert p["cycleDays"] == 110 and p["hasGuide"] is False and "feed" not in p
-        assert [s["days"] for s in p["stages"]] == [20, 30, 40, 20]
-        assert (await c.get(f"{V1}/crop-plan", params={"crop": "unobtainium", "plants": 1,
-                                                         "plantedOn": "2026-11-15"})).status_code == 422
-
-
 @pgdb.with_db("aaf_m1_cycles")
 async def test_beds_and_cycles(Session):
     await seeded(Session)
@@ -67,24 +42,24 @@ async def test_beds_and_cycles(Session):
         assert bed.status_code == 201 and bed.json()["name"] == "chilli-bed-1"
         assert (await c.post(f"{V1}/zones", json={"label": "Chilli bed 1"})).status_code == 409   # same name twice
 
-        body = {"zone": "chilli-bed-1", "crop": "tomato", "plantedOn": "2026-10-15",
+        body = {"zone": "chilli-bed-1", "crop": "guava", "plantedOn": "2026-10-15",
                 "plantCount": 80, "areaM2": 40, "variety": "local"}
         r = await c.post(f"{V1}/cycles", json=body)
         assert r.status_code == 201
         cycle = r.json()
-        assert cycle["bedLabel"] == "Chilli bed 1" and cycle["cropName"] == "Tomato" and cycle["plantCount"] == 80
+        assert cycle["bedLabel"] == "Chilli bed 1" and cycle["cropName"] == "Guava" and cycle["plantCount"] == 80
         assert cycle["status"] == "active" and cycle["endedOn"] is None
 
         # one open cycle per bed
         assert (await c.post(f"{V1}/cycles", json=body)).status_code == 409
         assert (await c.post(f"{V1}/cycles", json={**body, "zone": "nope"})).status_code == 404
-        assert (await c.post(f"{V1}/cycles", json={**body, "zone": "zone-b", "crop": "nope"})).status_code == 404
-        assert (await c.post(f"{V1}/cycles", json={**body, "zone": "zone-b", "plantCount": 0})).status_code == 422
+        assert (await c.post(f"{V1}/cycles", json={**body, "zone": "g2", "crop": "nope"})).status_code == 404
+        assert (await c.post(f"{V1}/cycles", json={**body, "zone": "g2", "plantCount": 0})).status_code == 422
 
         rows = (await c.get(f"{V1}/cycles", params={"today": "2026-11-04"})).json()
         mine = next(x for x in rows if x["id"] == cycle["id"])
         assert mine["day"] == 21                                                    # the planting day is day 1
-        assert len(rows) == 3                                                       # the two seeded beds plus this one
+        assert len(rows) == 6                                                       # the five seeded cycles plus this one
 
         r = await c.patch(f"{V1}/cycles/{cycle['id']}", json={"plantCount": 90})
         assert r.status_code == 200 and r.json()["plantCount"] == 90

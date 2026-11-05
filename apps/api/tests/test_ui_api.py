@@ -52,7 +52,7 @@ def test_devices_route_shape(client, monkeypatch):
 
 def test_zones_route_shape(client, monkeypatch):
     async def fake(session, farm_name):
-        return [{"zone": "zone-a", "label": "Tomato bed A", "moisturePct": 20.0, "rain": False, "supplyVoltage": None,
+        return [{"zone": "g1", "label": "G1 Wide orchard", "moisturePct": 20.0, "rain": False, "supplyVoltage": None,
                  "waterPh": None, "recordedAt": "2026-11-04T06:00:00Z"}]
     monkeypatch.setattr(zones_router, "latest_by_zone", fake)
     assert client.get("/api/v1/zones").json()[0]["moisturePct"] == 20.0
@@ -118,7 +118,7 @@ def test_registry_and_zone_readings_come_from_stored_telemetry():
                 {"metric": "rain", "value": 1, "unit": "bool", "quality": "valid"},
                 {"metric": "supply_voltage", "value": 5.02, "unit": "V", "quality": "valid"}]}
             async with Session() as s:
-                await store_telemetry(s, "farm/farm-01/zone/zone-a/telemetry", payload, now=AT_6)
+                await store_telemetry(s, "farm/farm-01/zone/g1/telemetry", payload, now=AT_6)
 
             async with Session() as s:
                 devices = {d["code"]: d for d in await reg.list_devices(s, now=AT_6 + timedelta(seconds=30))}
@@ -128,10 +128,10 @@ def test_registry_and_zone_readings_come_from_stored_telemetry():
 
             async with Session() as s:
                 zones = {z["zone"]: z for z in await reg.latest_by_zone(s, "farm-01")}
-            assert zones["zone-a"]["moisturePct"] == 20.0 and zones["zone-a"]["rain"] is True
-            assert zones["zone-a"]["label"] == "Tomato bed A"
-            assert zones["zone-a"]["supplyVoltage"] == 5.02 and zones["zone-a"]["waterPh"] is None
-            assert zones["zone-b"]["moisturePct"] is None and zones["zone-b"]["recordedAt"] is None
+            assert zones["g1"]["moisturePct"] == 20.0 and zones["g1"]["rain"] is True
+            assert zones["g1"]["label"] == "G1 Wide orchard"
+            assert zones["g1"]["supplyVoltage"] == 5.02 and zones["g1"]["waterPh"] is None
+            assert zones["g2"]["moisturePct"] is None and zones["g2"]["recordedAt"] is None
         finally:
             await engine.dispose()
 

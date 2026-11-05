@@ -58,4 +58,4 @@ export const remember = {
 };
 
 export const cycleLabel = (c: Cycle) =>
-  `${c.bedLabel} · ${c.cropName} · planted ${c.plantedOn}${c.status === "closed" ? " (closed)" : ""}`;
+  `${c.bedLabel} · ${c.cropName} · from ${c.plantedOn}${c.status === "closed" ? " (closed)" : ""}`;

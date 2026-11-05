@@ -707,9 +707,6 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 /* ============================================================================
    Tree crops: the sample-data banner, the stage strip, the jobs table.
    ========================================================================== */
-.sample-bar{position:sticky;top:0;z-index:30;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;
-  padding:3px 16px;background:var(--surface-sunk);border-bottom:1px solid var(--line-strong);font-size:12.5px}
-
 .stagestrip{position:relative;display:flex;gap:1px;padding-top:6px}
 .ss-seg{flex:1 1 0;min-width:0;height:20px;display:grid;place-items:center;font-size:11px;font-weight:600;
   overflow:hidden;white-space:nowrap;background:var(--surface-sunk);color:var(--ink-muted)}
@@ -777,7 +774,15 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .rc-cam{display:grid;grid-template-columns:132px minmax(0,1fr);gap:10px;align-items:start}
 .rc-cam img,.rc-nophoto{width:132px;height:132px;border:1px solid var(--line);display:grid;place-items:center;image-rendering:auto}
 .rc-cam .tbl td,.rc-cam .tbl th{padding:3px 8px}
-.rc-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.rc-grid2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.rc-history{max-height:360px;overflow:auto}
+.rc-history th{position:sticky;top:0}
+.growth-chart{height:210px;padding:6px}
+.leaf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:1px;background:var(--line)}
+.leaf-grid>div{display:grid;gap:1px;padding:6px 10px;background:var(--surface);font-size:13px}
+.cc-sep{width:10px}
+.todo-t td{vertical-align:top}
+.todo-t .xp{display:inline-block;vertical-align:top}
 .rc-top{align-items:start}
 .rm-marks{pointer-events:none}
 .rc-list{max-height:320px;overflow:auto}

@@ -9,7 +9,7 @@ import { useData } from "../lib/useData";
 export const TREND_METRICS = ["soil_moisture", "soil_ph", "soil_ec", "soil_temperature", "nitrogen", "phosphorus",
   "potassium", "air_temperature", "air_humidity"];
 
-export const RANGES = [{ hours: 24, label: "24 hours" }, { hours: 72, label: "3 days" }, { hours: 168, label: "7 days" }] as const;
+export const RANGES = [{ hours: 24 * 14, label: "2 weeks" }, { hours: 24 * 30, label: "30 days" }, { hours: 24 * 90, label: "90 days" }] as const;
 
 const LINE = "#2563A8";          // the data blue, as on the Plan page's water chart
 const BAND = "#2E7D4F";          // the target band is "good": the status green
@@ -113,7 +113,7 @@ function Trend({ p, pts, hours, from, to }: { p: CondParam; pts: Pt[]; hours: nu
 /** Every reading of one bed over time: nine small charts that share one time window, with the same numbers as a table. */
 export default function BedTrends({ zone, params, hours }: { zone: string; params: CondParam[]; hours: number }) {
   const [view, setView] = useState<"chart" | "table">("chart");
-  const { data, error, loading } = useData(() => api.telemetry(zone, TREND_METRICS, hours), [zone, hours]);
+  const { data, error, loading } = useData(() => api.telemetry(zone, TREND_METRICS, hours, Math.round(hours / 24)), [zone, hours]);
   const byMetric = new Map(params.map((p) => [p.metric, p]));
 
   const from = data ? new Date(data.from).getTime() : 0;

@@ -55,28 +55,6 @@ async def put_settings(body: SettingsIn, farm: Farm = Depends(farm_dep), session
     return _settings_dict(row)
 
 
-class KcIn(BaseModel):
-    ini: float = Field(gt=0, le=2)
-    mid: float = Field(gt=0, le=2)
-    end: float = Field(gt=0, le=2)
-
-
-class CropIn(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-    name: str = Field(min_length=2, max_length=80)
-    kc: KcIn
-    stage_days: list[int] = Field(min_length=4, max_length=4)
-    source: str | None = Field(None, max_length=200)
-
-
 @router.get("/crops")
-async def list_crops(session: AsyncSession = Depends(get_db)):
-    rows = (await session.execute(select(CropProfile).order_by(CropProfile.common_name))).scalars().all()
-    return [crop_svc.crop_dict(r) for r in rows if r.slug]
-
-
-@router.post("/crops", status_code=201)
-async def add_crop(body: CropIn, session: AsyncSession = Depends(get_db)):
-    row = await crop_svc.create_crop(session, body.name, body.kc.model_dump(), body.stage_days, body.source)
-    return crop_svc.crop_dict(row)
+async def list_crops():
+    return [crop_svc.crop_dict()]

@@ -1,9 +1,9 @@
 import type { RoverCell } from "./api";
 
-/** The rover's limits, from edge/rover-agent/rover/config.py. They give the real-time estimate on screen. */
-export const ROVER = { cruiseMps: 0.2, turnDps: 45, photoS: 1, batteryStopV: 11.1, maxCells: 400, simSpeedup: 10 } as const;
+/** The rover's limits, from edge/rover-agent/rover/config.py. probeS is an estimate until the probe arm is built. */
+export const ROVER = { cruiseMps: 0.2, turnDps: 45, photoS: 1, probeS: 40, batteryStopV: 11.1, maxTrees: 400, simSpeedup: 40 } as const;
 
-/** Every cell once: along row 1, one step over, back along row 2. The same path as rover/planner.py. */
+/** Every tree once: along row 1, across, back along row 2. The same path as rover/planner.py. */
 export function serpentine(rows: number, cols: number): [number, number][] {
   const path: [number, number][] = [];
   for (let r = 0; r < rows; r++) {
@@ -20,39 +20,39 @@ export function headingAt(path: [number, number][], i: number): number {
   return c1 > c0 ? 0 : 180;
 }
 
-/** Distance and time on a real rover: the sum of its moves, turns and photos. Matches the rover's own report. */
-export function estimate(rows: number, cols: number, cellM: number) {
+/** Distance and time on a real rover: its moves, turns, photos and probe stops. */
+export function estimate(rows: number, cols: number, rowM: number, treeM: number) {
   const path = serpentine(rows, cols);
-  const distanceM = (path.length - 1) * cellM;
-  let turns = 0;
+  let distanceM = 0, turns = 0;
   for (let i = 1; i < path.length; i++) {
+    distanceM += path[i][0] !== path[i - 1][0] ? rowM : treeM;
     const before = i === 1 ? 0 : headingAt(path, i - 1);
     const delta = Math.abs(headingAt(path, i) - before);
     turns += Math.min(delta, 360 - delta);
   }
   return {
-    cells: path.length, areaM2: rows * cols * cellM * cellM, distanceM,
-    seconds: distanceM / ROVER.cruiseMps + turns / ROVER.turnDps + path.length * ROVER.photoS,
+    trees: path.length, distanceM, areaM2: rows * cols * rowM * treeM,
+    seconds: distanceM / ROVER.cruiseMps + turns / ROVER.turnDps + path.length * (ROVER.photoS + ROVER.probeS),
   };
 }
 
-export const minutes = (seconds: number) => (seconds < 90 ? `${Math.round(seconds)} s` : `${(seconds / 60).toFixed(1)} min`);
+export const minutes = (seconds: number) => (seconds < 90 ? `${Math.round(seconds)} s` : seconds < 5400 ? `${(seconds / 60).toFixed(0)} min` : `${(seconds / 3600).toFixed(1)} h`);
 
 export type CellKind = "pending" | "bare" | "ok" | "water";
-export const kindOf = (c?: RoverCell): CellKind => (!c ? "pending" : !c.plant ? "bare" : c.needs_water ? "water" : "ok");
+export const kindOf = (c?: RoverCell): CellKind => (!c ? "pending" : !c.plant ? "bare" : (c.advice?.litres ?? 0) > 0 ? "water" : "ok");
 
 export const STATUS_WORD: Record<string, [string | undefined, string]> = {
-  queued: ["wip", "Waiting for rover"], running: ["info", "Surveying"], completed: ["ok", "Completed"],
+  queued: ["wip", "Waiting for rover"], running: ["info", "On its round"], completed: ["ok", "Completed"],
   aborted: ["warn", "Stopped"], failed: ["alert", "Failed"], rejected: ["warn", "Refused"], lost: ["alert", "Rover lost"],
 };
 
 /** Why the rover stopped, and what the operator does next. Every reason the rover software can give. */
 export const STOPS: { key: string; label: string; does: string; next: string }[] = [
-  { key: "estop", label: "E-stop", does: "Stops before its next move.", next: "Check the bed. Release, then start again." },
-  { key: "rain", label: "Rain", does: "Stops. Wet soil compacts and the electronics must stay dry.", next: "Move it under cover. Survey when the soil has drained." },
-  { key: "battery_low", label: "Low battery", does: `Stops below ${ROVER.batteryStopV} V, before deep discharge.`, next: "Charge fully, then survey the bed again." },
+  { key: "estop", label: "E-stop", does: "Stops before its next move.", next: "Check the block. Release, then start again." },
+  { key: "rain", label: "Rain", does: "Stops. Wet soil compacts and the electronics must stay dry.", next: "Move it under cover. Run the round when the soil has drained." },
+  { key: "battery_low", label: "Low battery", does: `Stops below ${ROVER.batteryStopV} V, before deep discharge.`, next: "Charge fully, then run the round again." },
   { key: "link_lost", label: "Lost link", does: "Stops when it cannot reach the farm server.", next: "Check the Wi-Fi and the server. Fetch the report from the rover if needed." },
-  { key: "geofence", label: "Edge of bed", does: "Refuses any move that leaves the bed.", next: "Check the start corner and the grid size." },
+  { key: "geofence", label: "Edge of block", does: "Refuses any move that leaves the block.", next: "Check the start tree and the rows and spacing." },
   { key: "controller_bumper", label: "Bumper hit", does: "Motors cut at once, in the firmware.", next: "Clear the obstacle. Check the rover for damage." },
   { key: "controller_timeout", label: "Motor controller silent", does: "Stops. The firmware also stops by itself.", next: "Check the USB cable and the controller." },
 ];
@@ -63,10 +63,6 @@ export function stopInfo(reason: string | null | undefined) {
   return STOPS.find((s) => s.key === key) ?? { key: reason, label: reason.replace(/[_:]/g, " "), does: "", next: "Check the rover log before running it again." };
 }
 
-/** Cells someone should go and look at, in the order the rover found them. */
-export function toCheck(cells: RoverCell[]) {
-  return cells.filter((c) => c.needs_water || c.flagged);
-}
-
-export const litresToWater = (cells: RoverCell[]) => cells.reduce((s, c) => s + (c.needs_water ? c.suggested_ml ?? 0 : 0), 0) / 1000;
-export const cellName = (row: number, col: number) => `R${row + 1} C${col + 1}`;
+export const litresOf = (cells: RoverCell[]) => cells.reduce((s, c) => s + (c.advice?.litres ?? 0), 0);
+export const fullLitresOf = (cells: RoverCell[]) => cells.reduce((s, c) => s + (c.advice?.fullLitres ?? 0), 0);
+export const cellName = (row: number, col: number) => `R${row + 1} T${col + 1}`;

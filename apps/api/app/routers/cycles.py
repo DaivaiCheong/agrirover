@@ -12,7 +12,7 @@ from app.models.entities import CropProfile, Farm, Harvest, Planting, Sale, Zone
 from app.routers._deps import farm_dep
 from app.services import cost
 from app.services import crops as crop_svc
-from app.services import setups as setups_svc
+from app.services import guava
 from app.services.clock import farm_today
 from app.services.cop_report import build_cop
 from app.services.errors import Conflict, Invalid, NotFound
@@ -26,10 +26,20 @@ class _Camel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+METHOD_IDS = tuple(m["id"] for m in guava.METHODS)
+
+
+def _check_setup(setup_id: str | None) -> None:
+    if setup_id is not None and setup_id not in guava.SETUP_BY_ID:
+        raise Invalid(f"unknown setup {setup_id!r}; choose one of {', '.join(guava.SETUP_BY_ID)}")
+
+
 class CycleIn(_Camel):
     zone: str
-    crop: str
-    planted_on: date
+    crop: str = guava.SLUG
+    planted_on: date                                                               # the day this cycle starts
+    trees_planted_on: date | None = None
+    regulation: str | None = Field("pruning", max_length=16)
     plant_count: int | None = Field(None, gt=0, le=1_000_000)
     area_m2: float | None = Field(None, gt=0, le=1_000_000)
     variety: str | None = Field(None, max_length=80)
@@ -67,12 +77,15 @@ async def create_cycle(body: CycleIn, farm: Farm = Depends(farm_dep), session: A
     if zone is None:
         raise NotFound(f"unknown bed {body.zone!r}")
     crop = await crop_svc.get_crop(session, body.crop)
-    setups_svc.check(crop.slug, body.setup)
+    _check_setup(body.setup)
+    if body.regulation not in METHOD_IDS:
+        raise Invalid(f"unknown way to start a cycle {body.regulation!r}")
     if (await session.execute(select(Planting).where(Planting.zone_id == zone.id, Planting.ended_on.is_(None)))).first():
         raise Conflict(f"{zone.label or zone.name} already has an open cycle; close it first")
     p = Planting(zone_id=zone.id, crop_id=crop.id, planted_on=body.planted_on, plant_count=body.plant_count,
                  area_m2=body.area_m2, variety=body.variety, setup=body.setup,
-                 expected_price_usd_per_kg=body.expected_price_usd_per_kg)
+                 expected_price_usd_per_kg=body.expected_price_usd_per_kg, regulation=body.regulation,
+                 trees_planted_on=body.trees_planted_on or body.planted_on)
     session.add(p)
     if zone.crop_id is None:
         zone.crop_id = crop.id
@@ -84,7 +97,7 @@ async def create_cycle(body: CycleIn, farm: Farm = Depends(farm_dep), session: A
 async def update_cycle(cycle_id: str, body: CyclePatch, farm: Farm = Depends(farm_dep),
                        session: AsyncSession = Depends(get_db)):
     p, zone, crop = await load_cycle(session, farm, cycle_id)
-    setups_svc.check(crop.slug, body.setup)
+    _check_setup(body.setup)
     for name in body.model_fields_set:
         value = getattr(body, name)
         if value is not None:

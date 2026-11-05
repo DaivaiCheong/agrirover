@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Sprout } from "lucide-react";
-import { Modal, Notice, Panel, Tag, type FormMsg } from "../components/ui";
-import NewCropForm from "../components/NewCropForm";
+import { Notice, Panel, Tag, type FormMsg } from "../components/ui";
 import { api, type Settings as SettingsT, loadProblem } from "../lib/api";
 import { useData } from "../lib/useData";
 
@@ -15,10 +13,8 @@ const FIELDS: { key: keyof SettingsT; label: string; unit: string; hint: string 
 
 export default function Settings() {
   const { data, error, reload } = useData(api.settings);
-  const crops = useData(api.crops);
   const [form, setForm] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<FormMsg>(null);
-  const [showAddCrop, setShowAddCrop] = useState(false);
 
   useEffect(() => {
     if (!data) return;
@@ -71,32 +67,8 @@ export default function Settings() {
           </form>
         </Panel>
 
-        <Panel title="Crops" icon={Sprout} pad={false}
-               right={<button className="btn btn-sm btn-ghost" onClick={() => setShowAddCrop(true)}><Plus size={14} aria-hidden />Add crop</button>}>
-          <div className="tablewrap">
-            <table className="tbl">
-              <thead><tr><th>Crop</th><th className="r">Cycle days</th><th>Water data</th></tr></thead>
-              <tbody>
-                {(crops.data ?? []).map((c) => (
-                  <tr key={c.slug}>
-                    <td><b>{c.name}</b></td>
-                    <td className="r">{c.stageDays ? c.stageDays.reduce((a, b) => a + b, 0) : "—"}</td>
-                    <td><Tag kind={c.hasWaterData ? "ok" : undefined}>{c.hasWaterData ? "Ready" : "None"}</Tag></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
       </main>
 
-      {showAddCrop && (
-        <Modal title="Add crop" onClose={() => setShowAddCrop(false)} width={520}>
-          <div className="modal-body-erp"><div className="erp-section">
-            <NewCropForm onAdded={() => { crops.reload(); setShowAddCrop(false); }} />
-          </div></div>
-        </Modal>
-      )}
     </>
   );
 }

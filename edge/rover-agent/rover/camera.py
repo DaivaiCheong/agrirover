@@ -36,27 +36,48 @@ class CellTruth:
         return self.plant and self.moisture < DRY_BELOW
 
 
+# What the soil and air read when the server does not say. Moisture is on the probe's 0-100 scale.
+BASE_READINGS = {"soil_moisture": 62.0, "soil_ph": 6.3, "soil_ec": 1.6, "soil_temperature": 25.0, "nitrogen": 110.0,
+                 "phosphorus": 80.0, "potassium": 190.0, "air_temperature": 26.5, "air_humidity": 68.0}
+DECIMALS = {"soil_moisture": 1, "soil_ph": 2, "soil_ec": 2, "soil_temperature": 1, "nitrogen": 0, "phosphorus": 0,
+            "potassium": 0, "air_temperature": 1, "air_humidity": 1}
+
+
 class SimField:
-    """A synthetic bed. Moisture falls along each row, as it does on a drip
+    """A synthetic orchard block. Moisture falls along each row, as it does on a drip
     line losing pressure toward the far end, plus local variation."""
 
     def __init__(self, rows: int, cols: int, seed: int = 0,
-                 plant_rate: float = 0.8, sick_rate: float = 0.12):
+                 plant_rate: float = 0.95, sick_rate: float = 0.1,
+                 base: dict | None = None, moisture_spread: float = 12.0):
         rng = np.random.default_rng(seed)
         self.rows, self.cols, self.seed = rows, cols, seed
+        self.base = {**BASE_READINGS, **(base or {})}
+        self.moisture_spread = moisture_spread
         self.cells: dict[tuple[int, int], CellTruth] = {}
         for r in range(rows):
             for c in range(cols):
                 plant = bool(rng.random() < plant_rate)
                 gradient = 0.75 - 0.55 * (c / max(cols - 1, 1))
                 moisture = float(np.clip(gradient + rng.normal(0, 0.12), 0.0, 1.0))
-                canopy = float(rng.uniform(0.10, 0.35)) if plant else 0.0
+                canopy = float(rng.uniform(0.20, 0.45)) if plant else 0.0
                 sick = plant and rng.random() < sick_rate
                 chlorosis = float(rng.uniform(0.15, 0.30)) if sick else 0.0
                 self.cells[(r, c)] = CellTruth(plant, canopy, moisture, chlorosis)
 
     def truth(self, cell: Cell) -> CellTruth:
         return self.cells[(cell.row, cell.col)]
+
+    def readings(self, cell: Cell) -> dict:
+        """What the probe and air sensor read at this tree. The same tree always reads the same in one round."""
+        rng = np.random.default_rng([self.seed, cell.row, cell.col, 2])
+        out = {}
+        for metric, value in self.base.items():
+            out[metric] = round(float(value + rng.normal(0, 0.03 * max(1.0, abs(value)))), DECIMALS.get(metric, 2))
+        along = cell.col / max(self.cols - 1, 1) - 0.5
+        moisture = self.base["soil_moisture"] - along * self.moisture_spread + rng.normal(0, self.moisture_spread * 0.25)
+        out["soil_moisture"] = round(float(np.clip(moisture, 0, 100)), 1)
+        return out
 
 
 class SimCamera:

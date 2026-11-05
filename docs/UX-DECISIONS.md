@@ -50,12 +50,12 @@ Measured in a browser on the same guava sample, before and after (visible words;
 | Harvest | 108 to 41 | 3 to 0 | |
 | Settings | 195 to 98 | 4 to 0 | 1,325 to under one screen |
 
-Not yet done: the water plan page keeps its layout and long tomato guidance (only its colours and sizes changed).
 No farmer has used this version, so the claim is "less to read", not "faster to use".
 
 ## The rover screens (2026-11-05)
 
-* **The simulation is the real software.** Faking a rover in the browser would show nothing true. Only the wheels, camera and field are generated, and the screen says so.
+* **Today answers one question: what do I do?** The rover's round becomes one list across all blocks, most urgent first, each opening to its reason. The Watering rule table went: two answers to one question.
+* **The simulation is the real software.** Faking a rover in the browser would show nothing true. Only the wheels, camera, probe and orchard are generated, and the screen says so.
 * **The field map is the one place colour fills a box.** It is data, not a warning: blue for water, green for plants, tan for bare soil. Every state also has a mark (a dot, the millilitres, an outline and "!"), and the table under it holds the same findings.
 * **Start is locked until the checks pass.** Three are read live (online, e-stop, rain) and three are ticked by a person, again for each survey. A procedure the screen does not enforce gets skipped.
 * **E-stop is the one red button in the app, and always visible.**

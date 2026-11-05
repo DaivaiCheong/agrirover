@@ -1,6 +1,6 @@
 # AgriRover: what the system must remember (schema design)
 
-Built as migration `0002` (20 tables). Example crop: **tomato**. Example numbers are illustrations, not agronomy advice.
+Built as migration `0002` (20 tables). The crop is **guava** (tomato was removed on 2026-11-05). Example numbers are illustrations, not agronomy advice.
 
 ## Status: what uses each new table today
 
@@ -57,7 +57,7 @@ erDiagram
 `user_id`, `channel` (telegram), `address` (chat id), `language` (km | en), `verified`.
 
 **`planting`**: what is growing in a zone, and since when.
-`zone_id`, `crop_id`, `variety`, `planted_on`, `ended_on`. "Day 21 of tomato" is calculated from `planted_on`.
+`zone_id`, `crop_id`, `variety`, `planted_on`, `ended_on`. "Day 90 of the cycle" is calculated from `planted_on`, the day this cycle started; `trees_planted_on` is when the trees went in.
 
 **`sensor`**: one probe on a field node. The plan calls for probes at 2 depths, and today a reading does not say which probe it came from.
 `device_id`, `zone_id`, `kind`, `depth_cm`, `calibration_dry`, `calibration_wet`, `used_for_decision` (which depth the rule engine reads).
@@ -77,7 +77,7 @@ Unique on (`zone_id`, `decision_date`). The farmer's answer lives in `action_pro
 
 ## Changed tables (3)
 
-- **`zone`**: add `label` (what the farmer sees: "Tomato bed A", can be Khmer) and `trial_arm` (`guided` | `usual`). `name` stays as the short id used in MQTT topics.
+- **`zone`**: add `label` (what the farmer sees: "G1 Wide orchard", can be Khmer) and `trial_arm` (`guided` | `usual`). `name` stays as the short id used in MQTT topics.
 - **`sensor_reading`**: add `sensor_id` (empty for rain and supply voltage, which belong to the device).
 - **`users`**: no change. Language moves to `contact`.
 
@@ -92,7 +92,7 @@ Unique on (`zone_id`, `decision_date`). The farmer's answer lives in `action_pro
 
 Total after the change: 15 − 2 + 7 = **20 tables**.
 
-## Tomato example: one morning
+## Example from when the farm grew tomato (the tables are unchanged): one morning
 
 | Table | Row (illustration only) |
 |---|---|

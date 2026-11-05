@@ -3,10 +3,9 @@
 Source: the guava document pasted on 2026-11-05 ("Precision Pomology and Automated Production Management for Commercial Guava").
 The pasted text lists no sources, so its numbers are labelled "guava document, not checked".
 
-**Walk it:** open `http://localhost:5173/?mock=guava`. A banner marks sample data; **Exit** leaves it. It runs entirely in the browser
-(`apps/web/src/mock/`): no server call, no database, no sensors, and changes last until the page reloads.
+**Status 2026-11-05: guava runs on the real server, and tomato is gone.** Where a row below says Shown or Build, it was written when this was sample data: the rules, tasks, setups, fertigation and symptoms are now built on the server (`services/guava.py`, `services/advisor.py`). What remains open is the document's own questions at the end, and the rover hardware. Evidence: [GUAVA-RESEARCH.md](GUAVA-RESEARCH.md).
 
-Status: **Shown** = you can see it working on sample data. **Build** = what the real version still needs. **Left out** = on purpose.
+Status: **Shown** = you can see it working. **Build** = what was still needed when written. **Left out** = on purpose.
 
 ## Sensors and targets
 
@@ -73,15 +72,15 @@ advises against. Soil N, P and K are shown but not rated, because the document g
 
 These show on screen too, in the cycle page's **Open questions** tab.
 
-1. **Stress length.** Stage 1 is 45 days; the stress protocol says 60-90. The sample uses 45.
-2. **Bloom timing.** "Days 65-79 post-flush" lands around cycle day 111-125 (Stage 4), but flowering is Stage 3 (days 76-105). The sample uses Stage 3.
-3. **Yield tables.** Setup A: trees x yield gives 7-19 t/ha (document: 12-20). Setup C: 25-44 t/ha (document: 25-38), and 3 x 2 m is 1,667 trees/ha, not 2,000. B and D check out; `guava.test.ts` recomputes all four.
-4. **Year or cycle.** Yields are per year and a cycle is 180 days. The sample assumes one bearing cycle a year.
+1. **Stress length.** Stage 1 is 45 days; the stress protocol says 60-90. The app uses 45.
+2. **Bloom timing.** "Days 65-79 post-flush" lands around cycle day 111-125 (Stage 4), but flowering is Stage 3 (days 76-105). The app uses Stage 3.
+3. **Yield tables.** Setup A: trees x yield gives 7-19 t/ha (document: 12-20). Setup C: 25-44 t/ha (document: 25-38), and 3 x 2 m is 1,667 trees/ha, not 2,000. B and D check out; 
+4. **Year or cycle.** Yields are per year and a cycle is 180 days. The app assumes one bearing cycle a year.
 5. **Price.** 5,500 riel is $1.38 at 4,000 riel to the dollar, not $1.25.
 6. **Moisture scale.** 55-75 % is above what most mineral soils hold by volume. It fits a relative probe reading. Calibrate first.
 7. **No sources** in the pasted text.
 8. **Chemical doses** (NAA, 2,4-D, GA3, ethephon, urea defoliation, foliar mixes) are marked "confirm with an agronomist", and the growth regulators the document lists for deblossoming are not given as doses at all.
-9. **Stage 1 without stress.** The document gives no moisture target for bending, pruning or chemical methods; the sample uses the general 55-75 %.
+9. **Stage 1 without stress.** The document gives no moisture target for bending, pruning or chemical methods; the app uses the general 55-75 %.
 10. **Soil N, P, K.** No soil targets in the document (above).
 
-Choices made for the sample, also yours to change: EC below 0.8 is a warning although the document lists it under critical; the EC ceiling is 3.0 where the document says 2.78-3.0; humid air during stress is a warning rather than critical, because there is no fruit to rot yet.
+Choices made here, also yours to change: EC below 0.8 is a warning although the document lists it under critical; the EC ceiling is 3.0 where the document says 2.78-3.0; humid air during stress is a warning rather than critical, because there is no fruit to rot yet.

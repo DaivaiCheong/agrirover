@@ -32,7 +32,7 @@ class SimDrive:
     def __init__(self, limits: DriveLimits, start: Pose,
                  fence: tuple[float, float] | None = None,
                  battery_v: float = 12.6,
-                 drain_v_per_m: float = 0.02,
+                 drain_v_per_m: float = 0.005,   # invented: the real drain is unknown until the chassis runs
                  drain_v_per_90deg: float = 0.002,
                  sleep: Callable[[float], None] | None = None):
         self.limits = limits
