@@ -2,19 +2,21 @@ import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BRAND } from "../lib/brand";
 import {
-  Bot, Calculator, Camera, ChartColumn, ClipboardList, Cpu, History, Info, Leaf, MapPin, Package, Receipt, Scale, Settings,
+  Bot, Calculator, Camera, ChartColumn, ClipboardList, Cpu, History, Images, Info, Leaf, MapPin, Package, Receipt, Scale, Settings,
   Sprout, Sun, Tractor, TrendingUp, Wallet, Wheat, Wrench, type LucideIcon,
 } from "lucide-react";
 
 type Tab = { to: string; label: string; icon: LucideIcon };
 
-/** The six places a farmer goes. Everything else is a tab inside one of them. */
+/** The seven places a farmer goes. Everything else is a tab inside one of them. */
 export const SECTIONS = {
   today:   { to: "/",         label: "Today",    icon: Sun,         title: "Today", tabs: [] as Tab[] },
   rover:   { to: "/rover",    label: "Rover",    icon: Bot,         title: "Rover",
              tabs: [{ to: "/rover", label: "Daily round", icon: Bot }, { to: "/rover/about", label: "What it does", icon: Info },
                     { to: "/rover/growth", label: "Growth", icon: TrendingUp }, { to: "/rover/sop", label: "SOP", icon: ClipboardList },
                     { to: "/rover/history", label: "History", icon: History }] },
+  health:  { to: "/crop",     label: "Health",   icon: Camera,      title: "Plant health",
+             tabs: [{ to: "/crop", label: "Check a photo", icon: Camera }, { to: "/photos", label: "Photo library", icon: Images }] },
   crops:   { to: "/cycles",   label: "My crops", icon: Sprout,      title: "My crops", tabs: [] as Tab[] },
   money:   { to: "/costs",    label: "Money",    icon: Wallet,      title: "Money",
              tabs: [{ to: "/costs", label: "Costs", icon: Receipt }, { to: "/stock", label: "Stock", icon: Package },
@@ -26,8 +28,7 @@ export const SECTIONS = {
   farm:    { to: "/beds",     label: "Farm",     icon: Tractor,     title: "Farm",
              tabs: [{ to: "/beds", label: "Beds & Land", icon: MapPin },
                     { to: "/settings", label: "Settings", icon: Settings },
-                    { to: "/devices", label: "Devices", icon: Cpu },
-                    { to: "/crop", label: "Disease check", icon: Camera }] },
+                    { to: "/devices", label: "Devices", icon: Cpu }] },
 } as const;
 
 export type SectionKey = keyof typeof SECTIONS;
@@ -37,7 +38,7 @@ export function sectionOf(path: string): SectionKey {
   if (path === "/") return "today";
   if (/^\/cycles\/[^/]+$/.test(path)) return "results";
   if (path.startsWith("/cycles")) return "crops";
-  for (const key of ["rover", "money", "results", "farm"] as const) {
+  for (const key of ["rover", "health", "money", "results", "farm"] as const) {
     if (SECTIONS[key].tabs.some((t) => path === t.to || path.startsWith(`${t.to}/`))) return key;
   }
   return "today";

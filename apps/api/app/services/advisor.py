@@ -199,7 +199,7 @@ def todo(*, trees: Sequence[dict], water_litres: float, feed: dict, stage: Stage
                     "detail": "What follows covers only the trees it reached. Run the round again before acting on the rest."})
     for a in alerts:
         if a["severity"] == "critical":
-            out.append({"kind": "alert", "severity": "critical", "text": a["title"], "detail": a["message"]})
+            out.append({"kind": "alert", "id": a.get("id"), "severity": "critical", "text": a["title"], "detail": a["message"]})
     living = [t for t in trees if t["plant"]]
     wet = [t for t in living if t["litres"] > 0]
     if stress and stage.n == 1:

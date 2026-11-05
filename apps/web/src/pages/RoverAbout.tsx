@@ -12,7 +12,7 @@ const DOES: Row[] = [
   { job: "Photographs the tree", how: "Side camera on the mast: leaf cover, yellow leaves", status: TO_BUILD },
   { job: "Tracks growth", how: "Leaf cover round after round, set against what the stage should do", status: SIM },
   { job: "Says what to do", how: "The server turns the round into water per tree, feed, and trees to look at", status: SIM },
-  { job: "Names the disease", how: "Leaf model on flagged trees only, reported at 90 % confidence or above", status: [undefined, "Model not installed"] },
+  { job: "Names the disease", how: "Not yet. A person's photo gets healthy or problem; a person names it. No model has passed on this farm's photos", status: [undefined, "No tested model"] },
   { job: "Stops itself", how: "E-stop, rain, low battery, lost link, bumper, edge of block", status: ["ok", "Tested in code; not on a chassis"] },
 ];
 

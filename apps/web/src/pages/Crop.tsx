@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Activity, Camera, ScanSearch } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import CorrelationCard from "../components/CorrelationCard";
-import { Empty, Field, Notice, Panel, Tag, Toolbar } from "../components/ui";
+import { EF, Empty, Field, FormModal, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
 import { api, type Correlation, type PhotoResult } from "../lib/api";
 import { useData } from "../lib/useData";
 
@@ -9,8 +10,19 @@ export default function Crop() {
   const zones = useData(api.zones);
   const cycles = useData(api.cycles);
   const symptoms = useData(api.symptoms);
+  const labels = useData(api.photoLabels);
+  const [search] = useSearchParams();
 
-  const [zone, setZone] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [row, setRow] = useState("");
+  const [col, setCol] = useState("");
+  const [part, setPart] = useState("leaf");
+  const [label, setLabel] = useState("");
+  const [note, setNote] = useState("");
+  const [saveMsg, setSaveMsg] = useState<FormMsg>(null);
+
+  const [zone, setZone] = useState(search.get("zone") ?? "");
   const [symptom, setSymptom] = useState("");
   const [corr, setCorr] = useState<Correlation | null>(null);
   const [corrError, setCorrError] = useState<string | null>(null);
@@ -65,6 +77,19 @@ export default function Crop() {
     }
   }
 
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (!file || !bed) return;
+    if ((row === "") !== (col === "")) { setSaveMsg({ kind: "alert", text: "Give both the row and the tree, or neither." }); return; }
+    try {
+      await api.savePhoto(file, {
+        zone: bed, part, row: row === "" ? undefined : Number(row) - 1, col: col === "" ? undefined : Number(col) - 1,
+        label, note, modelLabel: result?.label, modelSeen: result?.seen,
+      });
+      setSaving(false); setSaved(true); setNote(""); setLabel("");
+    } catch (err) { setSaveMsg({ kind: "alert", text: (err as Error).message }); }
+  }
+
   function changeBed(z: string) {
     setZone(z);
     setCorr(null);                                      // a verdict about one bed must not sit under another bed's name
@@ -85,18 +110,23 @@ export default function Crop() {
         <div className="grid g2">
           <Panel title="Photo" icon={Camera}>
             <input type="file" accept="image/jpeg,image/png" capture="environment"
-                   onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setError(null); }} />
+                   onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setError(null); setSaved(false); }} />
             {preview && (
               <img src={preview} alt="selected plant" style={{
                 display: "block", marginTop: 14, maxWidth: "100%", maxHeight: 320, border: "1px solid var(--line)",
               }} />
             )}
-            <div style={{ marginTop: 14 }}>
+            <div className="head-actions" style={{ marginTop: 14 }}>
               <button className="btn btn-sm" disabled={!file || busy} onClick={check}>
                 {busy ? "Checking…" : "Check photo"}
               </button>
+              <button className="btn btn-sm btn-ghost" disabled={!file || !bed || saved} onClick={() => { setSaveMsg(null); setSaving(true); }}>
+                {saved ? "Saved" : "Save to library"}
+              </button>
             </div>
-            <p className="small muted" style={{ marginTop: 10 }}>Sent to your farm server, not stored.</p>
+            {saved
+              ? <p className="small muted" style={{ marginTop: 10 }}>Saved. An expert can confirm it in the <Link to="/photos">Photo library</Link>.</p>
+              : <p className="small muted" style={{ marginTop: 10 }}>Stays on your farm server. Not kept unless you save it.</p>}
           </Panel>
 
           <Panel title="Result" icon={ScanSearch}>
@@ -157,6 +187,27 @@ export default function Crop() {
           )}
         </Panel>
       </main>
+
+      {saving && (
+        <FormModal title="Save this photo" submit="Save" onClose={() => setSaving(false)} onSubmit={save} msg={saveMsg}>
+          <div className="erp-grid-2">
+            <EF label="Row"><input className="erp-input" type="number" min={1} value={row} onChange={(e) => setRow(e.target.value)} /></EF>
+            <EF label="Tree"><input className="erp-input" type="number" min={1} value={col} onChange={(e) => setCol(e.target.value)} /></EF>
+          </div>
+          <EF label="Part of the tree">
+            <select className="erp-select" value={part} onChange={(e) => setPart(e.target.value)}>
+              {(labels.data?.parts ?? ["leaf"]).map((p) => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
+            </select>
+          </EF>
+          <EF label="What you think it is" hint="Your guess is kept apart from the expert's answer">
+            <select className="erp-select" value={label} onChange={(e) => setLabel(e.target.value)}>
+              <option value="">Not sure</option>
+              {(labels.data?.labels ?? []).map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+            </select>
+          </EF>
+          <EF label="Note"><input className="erp-input" value={note} onChange={(e) => setNote(e.target.value)} /></EF>
+        </FormModal>
+      )}
     </>
   );
 }

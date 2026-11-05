@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # Photo check. A local Ollama: photos stay on the farm's machine. No model named means the check is off.
     ollama_url: str = "http://localhost:11434"
     ollama_model: str | None = None
+    photo_dir: str = "farm-photos"             # saved plant photos: back this folder up with the database
 
     # Stage 1 runs one farm; the topic segment farm/{name}/... must match it.
     farm_name: str = "farm-01"

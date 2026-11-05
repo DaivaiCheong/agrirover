@@ -124,6 +124,10 @@ Everything the soil probe measures is filed under the bed's deciding probe, like
 
 **Downgrading `0005` deletes** every reading of the eight new metrics (Postgres cannot drop a value from an enum, so the type is rebuilt).
 
+## Saved plant photos (migration `0008`)
+
+**`plant_photo`**: one row per saved photo. The image is a file in `farm-photos/`, so back that folder up with the database. It keeps the block, tree, crop day, and the soil and air when it was taken, marked if those were simulated. `farmer_label`, `model_label` and `expert_label` are kept apart: only `expert_label` may train or test a model ([PHOTO-LABELLING.md](PHOTO-LABELLING.md)). The older `crop_image` and `disease_detection` tables are not used for this.
+
 ## Decisions I need from you
 
 1. Build the schema as above, or smaller?

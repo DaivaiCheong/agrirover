@@ -36,6 +36,9 @@ models/checkpoints/
 # --- rover outputs ---
 reports/
 
+# --- saved plant photos ---
+farm-photos/
+
 # --- os / editor ---
 .DS_Store
 Thumbs.db

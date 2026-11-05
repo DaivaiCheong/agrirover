@@ -24,7 +24,7 @@ const PHASES: { phase: string; steps: Step[] }[] = [
     { what: "Hand-check three trees it marked dry", pass: "Soil feels dry. If not, recalibrate before trusting it" },
     { what: "Give the water on Today", pass: "A person decides. The rover never waters" },
     { what: "Feed only if Today says feed", pass: "If it says hold, do not feed: EC is already high" },
-    { what: "Go and look at each marked tree", pass: "Use Disease check. A flag is not a diagnosis" },
+    { what: "Go and look at each marked tree", pass: "Use Check a photo. A flag is not a diagnosis" },
     { what: "Note the minutes spent", pass: "Compare with walking the rows: that is the proof" },
     { what: "Clean, charge, store dry", pass: "Ready for tomorrow" },
   ] },

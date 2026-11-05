@@ -41,7 +41,7 @@
 | 12 | Hand-check three trees it marked dry | Soil feels dry. If not, recalibrate before trusting it |
 | 13 | Give the water on Today | A person decides. The rover never waters |
 | 14 | Feed only if Today says feed | If it says hold, do not feed: EC is already high |
-| 15 | Go and look at each marked tree | Use Disease check. A flag is not a diagnosis |
+| 15 | Go and look at each marked tree | Use Check a photo. A flag is not a diagnosis |
 | 16 | Note the minutes spent | Compare with walking the rows: that is the proof it saves time |
 | 17 | Clean, charge, store dry | Ready for tomorrow |
 

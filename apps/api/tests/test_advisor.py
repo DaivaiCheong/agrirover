@@ -193,9 +193,10 @@ class TestTodo:
         assert water["text"] == "Water 2 of 3 trees: 50 L"
         assert "R1 T2" in water["detail"] and "90 s" in water["detail"]
 
-    def test_critical_alerts_come_first(self):
-        alert = {"severity": "critical", "title": "Salt stress", "message": "x"}
-        assert self.base(alerts=[alert])[0]["text"] == "Salt stress"
+    def test_critical_alerts_come_first_and_keep_their_id(self):
+        alert = {"id": "salinity", "severity": "critical", "title": "Salt stress", "message": "x"}
+        first = self.base(alerts=[alert])[0]
+        assert first["text"] == "Salt stress" and first["id"] == "salinity"
 
     def test_trees_to_look_at_are_one_line_per_kind(self):
         trees = advise_trees(ctx(), [tree(0, 72, flagged=True), tree(1, 72, flagged=True), tree(2, 72)])

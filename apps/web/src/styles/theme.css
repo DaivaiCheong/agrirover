@@ -200,7 +200,7 @@ a.btn{text-decoration:none}
     border-bottom:1px solid var(--line)}
   .brandmark{padding:0}
   .side-nav,.side-foot{display:none}
-  .bottomnav{display:grid;grid-template-columns:repeat(6,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;
+  .bottomnav{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:20;
     background:var(--surface);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
   .bn{display:grid;justify-items:center;gap:3px;padding:6px 2px;font-size:11.5px;font-weight:600;color:var(--ink-muted);
     text-decoration:none;border-radius:12px}
@@ -723,6 +723,9 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .xp-body{margin-top:3px;font-size:12.5px;color:var(--ink-muted);line-height:1.4}
 .flaglist{padding-left:16px;font-size:12.5px;line-height:1.5}
 
+.photo-t td{vertical-align:top}
+.photo-thumb{display:block;width:64px;height:64px;object-fit:cover;border:1px solid var(--line);border-radius:4px;background:var(--surface-sunk)}
+.photo-big{display:block;max-width:100%;max-height:300px;margin:0 auto 10px;border:1px solid var(--line)}
 .jobs-t td{vertical-align:top}
 .jobs-t .jr-job{min-width:150px}
 .jr-later td,.jr-past td{color:var(--ink-muted)}

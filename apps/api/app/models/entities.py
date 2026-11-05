@@ -184,6 +184,30 @@ class OrchardJobDone(Base):
     done_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PlantPhoto(Base):
+    """A saved photo of a tree. Only expert_label may train or test a model: the farmer's and the model's are guesses."""
+    __tablename__ = "plant_photo"
+    id: Mapped[uuid.UUID] = _pk()
+    zone_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("zone.id", ondelete="SET NULL"))
+    planting_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("planting.id", ondelete="SET NULL"))
+    crop_day: Mapped[int | None] = mapped_column(Integer)
+    tree_row: Mapped[int | None] = mapped_column(SmallInteger)
+    tree_col: Mapped[int | None] = mapped_column(SmallInteger)
+    part: Mapped[str] = mapped_column(String(8), nullable=False)
+    filename: Mapped[str] = mapped_column(String(64), nullable=False)
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    readings: Mapped[dict | None] = mapped_column(JSONB)                # the soil and air when it was taken, and whether simulated
+    model_name: Mapped[str | None] = mapped_column(String(48))
+    model_label: Mapped[str | None] = mapped_column(String(32))
+    model_seen: Mapped[str | None] = mapped_column(Text)
+    farmer_label: Mapped[str | None] = mapped_column(String(32))
+    note: Mapped[str | None] = mapped_column(Text)
+    expert_label: Mapped[str | None] = mapped_column(String(32))
+    expert_name: Mapped[str | None] = mapped_column(String(80))
+    expert_note: Mapped[str | None] = mapped_column(Text)
+    expert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Sensor(Base):
     """One probe on a field node. Two depths per zone: a reading says which probe it came from."""
     __tablename__ = "sensor"

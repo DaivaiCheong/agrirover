@@ -448,7 +448,7 @@ ALKALINE_PH = 7.2
 
 def why_yellow(stage: Stage, stress: bool, readings: Mapping[str, float]) -> dict:
     """Why a tree's leaves may be yellow, from the soil under it and the crop's stage. A likely reason, not a diagnosis:
-    a colour count cannot see spots, so every answer still leaves the Disease check open."""
+    a colour count cannot see spots, so every answer still leaves the photo check open."""
     moisture, ec, ph = readings.get("soil_moisture"), readings.get("soil_ec"), readings.get("soil_ph")
     if moisture is not None and moisture > WET_SOIL:
         return {"cause": "wet", "note": "Yellow leaves: wet soil", "severity": "warn", "text": "soil too wet",

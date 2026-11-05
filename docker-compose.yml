@@ -30,12 +30,13 @@ services:
       # Photo check: Ollama on this machine, so photos stay here. An empty OLLAMA_MODEL turns the check off.
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL-gemma4}
+      PHOTO_DIR: /farm-photos
     extra_hosts: [ "host.docker.internal:host-gateway" ]
     depends_on:
       db: { condition: service_healthy }
       broker: { condition: service_started }
     ports: [ "8000:8000" ]
-    volumes: [ "./apps/api:/srv" ]
+    volumes: [ "./apps/api:/srv", "./farm-photos:/farm-photos" ]
     command: >
       sh -c "until alembic upgrade head; do echo 'waiting for db...'; sleep 2; done && python -m app.services.seed &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"

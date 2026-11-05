@@ -5,6 +5,7 @@ import { JobRow, JobsHead, StageStrip } from "../components/Orchard";
 import { Empty, Kpis, More, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api, loadProblem, type Advice, type BedConditions, type Cycle, type OrchardCycle } from "../lib/api";
 import { litres, longToday } from "../lib/format";
+import { mergeToday } from "../lib/today";
 import { useData } from "../lib/useData";
 import { ago, usePoll } from "../lib/usePoll";
 
@@ -20,13 +21,18 @@ function waterText(a: Advice) {
   return <><b>{litres(a.water.litres)}</b> <span className="muted">{a.treesWatered} of {a.treesSeen} trees</span></>;
 }
 
-/** The day's instructions, one row per thing to do. The sentence behind each opens from it. */
+const BlockLink = ({ id, label }: { id: string; label: string }) => <Link to={`/cycles/${id}/orchard`}><b>{label}</b></Link>;
+
+/** What the rover's round says to do, as a row of the day's list. The sentence behind it opens from it. */
 function TodoRow({ a, t }: { a: Advice; t: Advice["todo"][number] }) {
   const mark = t.severity === "critical" ? "alert" : t.severity === "warn" ? "warn" : undefined;
   return (
-    <tr>
-      <td className="nowrap"><Link to={`/cycles/${a.cycleId}/orchard`}><b>{a.label}</b></Link></td>
-      <td>{mark && <><Tag kind={mark}>{t.severity === "critical" ? "Now" : "Check"}</Tag> </>}{t.detail ? <More label={t.text}>{t.detail}</More> : t.text}</td>
+    <tr className="jr">
+      <td className="nowrap jr-bed"><BlockLink id={a.cycleId} label={a.label} /></td>
+      <td className="jr-job">{t.detail ? <More label={t.text}>{t.detail}</More> : t.text}</td>
+      <td className="jr-when" />
+      <td className="nowrap jr-state">{mark && <Tag kind={mark}>{t.severity === "critical" ? "Now" : "Check"}</Tag>}</td>
+      <td className="act jr-act">{t.kind === "look" && <Link className="btn btn-sm btn-ghost job-btn" to={`/crop?zone=${a.zone}`}>Check a photo</Link>}</td>
     </tr>
   );
 }
@@ -70,10 +76,7 @@ export default function Dashboard() {
   async function jobDone(c: Cycle, job: string) { await api.orchardJobDone(c.id, job); load.reload(); advice.data; }
   async function fruit(c: Cycle, mm: number) { await api.orchardFruitSize(c.id, mm); load.reload(); }
 
-  const work = active.flatMap((c) => (load.data?.get(c.id)?.jobs ?? []).filter((j) => j.state === "due" || j.state === "overdue").map((j) => ({ c, j })));
-  const todo = all.flatMap((a) => a.todo.map((t) => ({ a, t })));
-  const order = { critical: 0, warn: 1, info: 2 } as const;
-  todo.sort((x, y) => order[x.t.severity] - order[y.t.severity]);
+  const today = mergeToday(all, active.map((c) => ({ c, jobs: load.data?.get(c.id)?.jobs ?? [] })));
   const beds = active.map((c) => load.data?.get(c.id)?.conditions ?? condOf.get(c.zone)).filter((b): b is BedConditions => Boolean(b));
   const alerts = beds.flatMap((b) => b.alerts);
   const critical = alerts.filter((a) => a.severity === "critical").length;
@@ -111,24 +114,16 @@ export default function Dashboard() {
             {simulated && <p className="small muted">From simulated rover rounds. Starting rules, not field results. Nothing here opens a valve.</p>}
             {missing.length > 0 && <Notice kind="warn">No fresh round for {missing.map((a) => a.label).join(", ")}. <Link to="/rover">Run a round</Link> before acting on these.</Notice>}
 
-            {todo.length > 0 && (
+            {today.length > 0 && (
               <Panel title="What to do today" pad={false}>
-                <div className="tablewrap">
-                  <table className="tbl todo-t"><tbody>{todo.map(({ a, t }, i) => <TodoRow key={`${a.zone}-${i}`} a={a} t={t} />)}</tbody></table>
-                </div>
-              </Panel>
-            )}
-
-            {work.length > 0 && (
-              <Panel title="Today's tasks" pad={false}>
                 <div className="tablewrap">
                   <table className="tbl jobs-t">
                     <JobsHead bed />
                     <tbody>
-                      {work.map(({ c, j }) => (
-                        <JobRow key={`${c.id}-${j.id}`} j={j} bed={c.bedLabel} fruitMm={load.data?.get(c.id)?.fruitMm ?? null}
-                                onDone={(id) => jobDone(c, id)} onFruit={(mm) => fruit(c, mm)} />
-                      ))}
+                      {today.map((item) => item.kind === "todo"
+                        ? <TodoRow key={item.key} a={item.a} t={item.t} />
+                        : <JobRow key={item.key} j={item.j} urgent={item.urgent} bed={<BlockLink id={item.c.id} label={item.c.bedLabel} />}
+                                  fruitMm={load.data?.get(item.c.id)?.fruitMm ?? null} onDone={(id) => jobDone(item.c, id)} onFruit={(mm) => fruit(item.c, mm)} />)}
                     </tbody>
                   </table>
                 </div>

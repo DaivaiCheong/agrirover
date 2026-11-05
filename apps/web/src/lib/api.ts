@@ -172,7 +172,7 @@ export type Advice = {
   zone: string; label: string; cycleId: string; day: number; stage: { n: number; short: string; title: string };
   surveyed: boolean; surveyedAt: string | null; simulated: boolean; partial: boolean; treesSeen: number; treesWatered: number;
   water: { litres: number; fullLitres: number; savedLitres: number; hours: number; emitterLph: number; firmwareLimitSeconds: number; raining: boolean; paused: boolean; et0: number };
-  feed: FeedAdvice; trees: TreeAdvice[]; todo: { kind: string; severity: "critical" | "warn" | "info"; text: string; detail: string | null }[]; source: string;
+  feed: FeedAdvice; trees: TreeAdvice[]; todo: { kind: string; id?: string | null; severity: "critical" | "warn" | "info"; text: string; detail: string | null }[]; source: string;
 };
 export type Growth = {
   zone: string; label: string; stage: string; rounds: { at: string; canopy: number; yellow: number; simulated: boolean }[];
@@ -206,6 +206,34 @@ async function checkPhoto(file: File, zone?: string): Promise<PhotoResult> {
     throw new ApiError(readableDetail(detail, `${res.status} ${res.statusText}`));
   }
   return res.json() as Promise<PhotoResult>;
+}
+
+export type SavedPhoto = {
+  id: string; shortId: string; zone: string | null; zoneLabel: string | null; tree: string | null; part: string; takenAt: string; takenOn: string; cropDay: number | null;
+  readings: { values: Record<string, number>; simulated: boolean } | null; modelName: string | null; modelLabel: string | null; modelSeen: string | null;
+  farmerLabel: string | null; note: string | null; expertLabel: string | null; expertName: string | null; expertNote: string | null; expertAt: string | null;
+};
+export type PhotoLibrary = {
+  photos: SavedPhoto[]; saved: number; toConfirm: number; confirmed: number; targetPhotos: number; targetDays: number;
+  progress: { label: string; title: string; photos: number; days: number; ready: boolean }[];
+};
+export type PhotoLabels = { labels: { id: string; title: string }[]; parts: string[] };
+export type SavePhotoInput = { zone: string; part: string; row?: number; col?: number; label?: string; note?: string; modelLabel?: string | null; modelSeen?: string | null };
+
+export const photoImageUrl = (id: string) => `${BASE}/photos/${id}/image`;
+export const photoExportUrl = (status: "confirmed" | "to_confirm") => `${BASE}/photos/export.zip?status=${status}`;
+
+async function savePhoto(file: File, input: SavePhotoInput): Promise<SavedPhoto> {
+  const body = new FormData();
+  body.append("photo", file);
+  for (const [k, v] of Object.entries(input)) if (v !== undefined && v !== null && v !== "") body.append(k, String(v));
+  const res = await fetch(`${BASE}/photos`, { method: "POST", body });
+  if (!res.ok) {
+    let detail: unknown;
+    try { detail = (await res.json()).detail; } catch { /* keep status */ }
+    throw new ApiError(readableDetail(detail, `${res.status} ${res.statusText}`));
+  }
+  return res.json() as Promise<SavedPhoto>;
 }
 
 // ------------------------------------------------------------------ manage
@@ -283,6 +311,11 @@ export const api = {
   diagnose: (zone: string, symptom: string) =>
     request<Correlation>(`/diagnosis?${new URLSearchParams({ zone, symptom })}`),
   checkPhoto,
+  savePhoto,
+  photos: (status: string) => request<PhotoLibrary>(`/photos?${new URLSearchParams({ status })}`),
+  photoLabels: () => request<PhotoLabels>("/photos/labels"),
+  confirmPhoto: (id: string, body: { label: string; name: string; note: string | null }) => send<SavedPhoto>("PUT", `/photos/${id}/confirm`, body),
+  deletePhoto: (id: string) => send<void>("DELETE", `/photos/${id}`),
   // the rover: its real software, with simulated wheels, camera and probe until the hardware is built
   roverLive: () => request<RoverLive>("/missions/live"),
   roverFrame: (row: number, col: number) => request<{ frame: string | null }>(`/missions/live/frames/${row}/${col}`),

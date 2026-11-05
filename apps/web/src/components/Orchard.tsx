@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { More, Tag } from "./ui";
 import type { OrchardJob, OrchardStage } from "../lib/api";
 
@@ -26,8 +26,8 @@ const STATE: Record<OrchardJob["state"], [string | undefined, string]> = {
 };
 
 /** One thing to do, as a table row: the sentence opens from its title, and a dose always says who to ask first. */
-export function JobRow({ j, bed, fruitMm, onDone, onFruit }:
-  { j: OrchardJob; bed?: string; fruitMm: number | null; onDone?: (id: string) => void; onFruit?: (mm: number) => void }) {
+export function JobRow({ j, bed, urgent, fruitMm, onDone, onFruit }:
+  { j: OrchardJob; bed?: ReactNode; urgent?: boolean; fruitMm: number | null; onDone?: (id: string) => void; onFruit?: (mm: number) => void }) {
   const [mm, setMm] = useState("");
   const open = j.state === "due" || j.state === "overdue";
   const [kind, word] = STATE[j.state];
@@ -49,7 +49,7 @@ export function JobRow({ j, bed, fruitMm, onDone, onFruit }:
         )}
       </td>
       <td className="r nowrap muted jr-when">{j.firstDay === j.lastDay ? `Day ${j.firstDay}` : `Days ${j.firstDay}–${j.lastDay}`}</td>
-      <td className="nowrap jr-state">{j.state === "later" || j.state === "past" ? word : <Tag kind={kind}>{j.ongoing && j.state === "due" ? "Ongoing" : word}</Tag>}</td>
+      <td className="nowrap jr-state">{urgent ? <Tag kind="alert">Now</Tag> : j.state === "later" || j.state === "past" ? word : <Tag kind={kind}>{j.ongoing && j.state === "due" ? "Ongoing" : word}</Tag>}</td>
       <td className="act jr-act">
         {open && onDone && !j.ongoing && (
           <button type="button" className="btn btn-sm btn-ghost job-btn" onClick={() => onDone(j.id)}>{j.measure ? "Bags on" : "Done"}</button>
