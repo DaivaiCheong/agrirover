@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Activity, Camera, ScanSearch } from "lucide-react";
 import CorrelationCard from "../components/CorrelationCard";
-import { Empty, Field, Notice, PageIntro, Panel, Tag } from "../components/ui";
+import { Empty, Field, Notice, Panel, Tag, Toolbar } from "../components/ui";
 import { api, type Correlation, type PhotoResult } from "../lib/api";
 import { useData } from "../lib/useData";
 
@@ -73,19 +73,13 @@ export default function Crop() {
 
   return (
     <>
-      <PageIntro
-        actions={beds.length > 0 && (
-          <label className="rowflex small" style={{ gap: 8 }}>
-            <span className="lbl lbl-ink">Bed</span>
-            <select className="erp-select" style={{ width: 200 }} value={bed} onChange={(e) => changeBed(e.target.value)}>
-              {beds.map((b) => <option key={b.zone} value={b.zone}>{b.label ?? b.zone}</option>)}
-            </select>
-          </label>
-        )}
-      >
-        Photograph one leaf, or pick the symptom you see, and check it against this bed's live soil and air readings.
-        A first look, not a diagnosis.
-      </PageIntro>
+      {beds.length > 0 && (
+        <Toolbar>
+          <select className="erp-select toolbar-select" aria-label="Bed" value={bed} onChange={(e) => changeBed(e.target.value)}>
+            {beds.map((b) => <option key={b.zone} value={b.zone}>{b.label ?? b.zone}</option>)}
+          </select>
+        </Toolbar>
+      )}
 
       <main className="main stack">
         <div className="grid g2">
@@ -102,17 +96,15 @@ export default function Crop() {
                 {busy ? "Checking…" : "Check photo"}
               </button>
             </div>
-            <p className="mono-sm" style={{ color: "var(--ink-muted)", marginTop: 14 }}>
-              The photo is sent to your farm server for the check and is not stored.
-            </p>
+            <p className="small muted" style={{ marginTop: 10 }}>Sent to your farm server, not stored.</p>
           </Panel>
 
           <Panel title="Result" icon={ScanSearch}>
-            {!result && !error && <p className="mono-sm">Choose a photo and press Check.</p>}
+            {!result && !error && <p className="small muted">No photo checked yet.</p>}
             {error && (
               <Notice kind="warn">
                 {error === "disease model not installed"
-                  ? "The disease model is not installed on this farm server yet, so a photo cannot be read. You can still pick the symptom below."
+                  ? "Disease model not installed. Pick the symptom below."
                   : `Could not check the photo: ${error}`}
               </Notice>
             )}
@@ -120,7 +112,7 @@ export default function Crop() {
               <>
                 {result.status === "ok" ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <Tag kind="info">{result.label}</Tag>
+                    <Tag>{result.label}</Tag>
                     <span className="mono-sm">confidence <b>{Math.round((result.confidence ?? 0) * 100)}%</b></span>
                   </div>
                 ) : (
@@ -137,25 +129,25 @@ export default function Crop() {
           </Panel>
         </div>
 
-        <Panel title="Check against the sensors" icon={Activity}>
+        <Panel title="Check against the sensors" icon={Activity} right={<span className="small muted">Triage, not a diagnosis</span>}>
           {beds.length === 0 ? (
-            <Empty icon={Activity}>No beds yet. Add a bed on the Beds tab to check a symptom against its sensors.</Empty>
+            <Empty icon={Activity}>No beds yet.</Empty>
           ) : (
             <div className="stack">
               <div className="pick-row">
-                <Field label="Symptom you see">
+                <Field label="Symptom">
                   <select value={symptom} onChange={(e) => { setSymptom(e.target.value); setCorr(null); setCorrError(null); }}>
                     <option value="">Choose a symptom</option>
                     {(symptoms.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
                   </select>
                 </Field>
-                <button className="btn" disabled={!symptom || crossing} onClick={crossCheck}>
+                <button className="btn btn-sm" disabled={!symptom || crossing} onClick={crossCheck}>
                   {crossing ? "Checking…" : "Cross-check"}
                 </button>
               </div>
               {corrError && <Notice kind="alert">{corrError}</Notice>}
               {corr && corr.zone === bed ? <CorrelationCard c={corr} /> : (
-                !corrError && <p className="mono-sm muted">Pick a symptom to see whether this bed's soil and air readings explain it.</p>
+                !corrError && <p className="small muted">No symptom checked yet.</p>
               )}
             </div>
           )}

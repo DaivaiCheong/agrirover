@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { CircleCheck, Clock, TriangleAlert } from "lucide-react";
-import { Notice, Tag } from "./ui";
-import type { DocIssue, OrchardJob, OrchardStage } from "../lib/api";
+import { More, Tag } from "./ui";
+import type { OrchardJob, OrchardStage } from "../lib/api";
 
-/** The whole cycle at a glance: one block per stage, sized by its days, with a line at today. */
+/** The whole cycle at a glance: one block per stage, sized by its days, with a mark at today. */
 export function StageStrip({ stages, day }: { stages: OrchardStage[]; day: number }) {
   const total = stages[stages.length - 1].lastDay;
   const current = stages.find((s) => day >= s.firstDay && day <= s.lastDay);
@@ -22,52 +21,56 @@ export function StageStrip({ stages, day }: { stages: OrchardStage[]; day: numbe
   );
 }
 
-const CONFIRM = "Confirm with an agronomist";
+const STATE: Record<OrchardJob["state"], [string | undefined, string]> = {
+  due: ["info", "Due"], overdue: ["alert", "Overdue"], done: ["ok", "Done"], later: [undefined, "Later"], past: [undefined, "Past"],
+};
 
-/** One thing to do: when, what, and whether it is done. A dose always says who to ask first. */
-function Job({ j, fruitMm, onDone, onFruit }: { j: OrchardJob; fruitMm: number | null; onDone?: (id: string) => void; onFruit?: (mm: number) => void }) {
+/** One thing to do, as a table row: the sentence opens from its title, and a dose always says who to ask first. */
+export function JobRow({ j, bed, fruitMm, onDone, onFruit }:
+  { j: OrchardJob; bed?: string; fruitMm: number | null; onDone?: (id: string) => void; onFruit?: (mm: number) => void }) {
   const [mm, setMm] = useState("");
   const open = j.state === "due" || j.state === "overdue";
+  const [kind, word] = STATE[j.state];
+  const label = <>{j.title}{j.confirm && <> <Tag>Ask an agronomist</Tag></>}</>;
   return (
-    <li className={`job job-${j.state}`}>
-      {j.state === "done" ? <CircleCheck size={18} aria-hidden /> : j.state === "overdue" ? <TriangleAlert size={18} aria-hidden /> : <Clock size={18} aria-hidden />}
-      <div className="job-body">
-        <div className="job-head">
-          <b>{j.title}</b>
-          {j.state === "overdue" && <Tag kind="alert">Overdue</Tag>}
-          {j.state === "done" && <Tag kind="ok">Done</Tag>}
-          {j.confirm && <Tag kind="warn">{CONFIRM}</Tag>}
-        </div>
-        <div className="small muted">
-          {j.firstDay === j.lastDay ? `Day ${j.firstDay}` : `Days ${j.firstDay}-${j.lastDay}`}. {j.detail}
-        </div>
+    <tr className={`jr jr-${j.state}`}>
+      {bed !== undefined && <td className="nowrap jr-bed"><b>{bed}</b></td>}
+      <td className="jr-job">
+        {j.detail ? <More label={label}>{j.detail}</More> : label}
         {j.measure && open && onFruit && (
           <form className="job-measure" onSubmit={(e) => { e.preventDefault(); if (Number(mm) > 0) { onFruit(Number(mm)); setMm(""); } }}>
-            <label className="small" htmlFor={`fruit-${j.id}`}>Fruit size{fruitMm !== null ? ` (last: ${fruitMm} mm)` : ""}</label>
-            <div className="erp-input-group" style={{ width: 120 }}>
+            <label className="small" htmlFor={`fruit-${j.id}`}>Fruit size{fruitMm !== null ? ` (last ${fruitMm} mm)` : ""}</label>
+            <div className="erp-input-group" style={{ width: 110 }}>
               <input id={`fruit-${j.id}`} className="erp-input" type="number" min={1} max={150} value={mm} onChange={(e) => setMm(e.target.value)} />
               <span className="erp-input-addon">mm</span>
             </div>
             <button className="btn btn-sm btn-ghost" disabled={!mm}>Save</button>
           </form>
         )}
-      </div>
-      {open && onDone && !j.ongoing && (
-        <button type="button" className="btn btn-sm btn-ghost job-btn" onClick={() => onDone(j.id)}>
-          {j.measure ? "Bags are on" : "Done"}
-        </button>
-      )}
-    </li>
+      </td>
+      <td className="r nowrap muted jr-when">{j.firstDay === j.lastDay ? `Day ${j.firstDay}` : `Days ${j.firstDay}–${j.lastDay}`}</td>
+      <td className="nowrap jr-state">{j.state === "later" || j.state === "past" ? word : <Tag kind={kind}>{j.ongoing && j.state === "due" ? "Ongoing" : word}</Tag>}</td>
+      <td className="act jr-act">
+        {open && onDone && !j.ongoing && (
+          <button type="button" className="btn btn-sm btn-ghost job-btn" onClick={() => onDone(j.id)}>{j.measure ? "Bags on" : "Done"}</button>
+        )}
+      </td>
+    </tr>
   );
+}
+
+export function JobsHead({ bed }: { bed?: boolean }) {
+  return <thead><tr>{bed && <th>Bed</th>}<th>Job</th><th className="r">When</th><th>Status</th><th /></tr></thead>;
 }
 
 export function OrchardJobs({ jobs, fruitMm, onDone, onFruit }:
   { jobs: OrchardJob[]; fruitMm: number | null; onDone?: (id: string) => void; onFruit?: (mm: number) => void }) {
-  return <ul className="jobs">{jobs.map((j) => <Job key={j.id} j={j} fruitMm={fruitMm} onDone={onDone} onFruit={onFruit} />)}</ul>;
-}
-
-/** The document's own open questions, on the screen they affect. */
-export function DocFlag({ issues, n }: { issues: DocIssue[]; n: number }) {
-  const i = issues.find((x) => x.n === n);
-  return i ? <Notice kind="warn"><b>To settle: {i.title.charAt(0).toLowerCase()}{i.title.slice(1)}.</b> {i.detail}</Notice> : null;
+  return (
+    <div className="tablewrap">
+      <table className="tbl jobs-t">
+        <JobsHead />
+        <tbody>{jobs.map((j) => <JobRow key={j.id} j={j} fruitMm={fruitMm} onDone={onDone} onFruit={onFruit} />)}</tbody>
+      </table>
+    </div>
+  );
 }

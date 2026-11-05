@@ -24,11 +24,11 @@ export default function CycleCop() {
         {cop && (
           <>
             <div className="grid g4">
-              <div className="panel panel-pad">
-                <div className="lbl">Cost of production per kg</div>
-                <div className="big" style={{ marginTop: 10 }}>{cop.copPerKg === null ? "—" : usd(cop.copPerKg)}</div>
-                <div className="mono-sm" style={{ marginTop: 8, color: "var(--ink-muted)" }}>
-                  {cop.copPerKg === null ? "No harvest yet" : `${riel(cop.copPerKg, cop.khrPerUsd)} · also the break-even price`}
+              <div className="panel panel-pad metric">
+                <div className="lbl">Cost per kg</div>
+                <div className="v" style={{ marginTop: 10 }}>{cop.copPerKg === null ? "—" : usd(cop.copPerKg)}</div>
+                <div className="d">
+                  {cop.copPerKg === null ? "No harvest yet" : `${riel(cop.copPerKg, cop.khrPerUsd)} · break-even`}
                 </div>
               </div>
               <Metric label="Total cost" value={usd(cop.totalCostUsd)} note={`${cop.days} days${cop.open ? " so far" : ""}`} />
@@ -70,7 +70,7 @@ export default function CycleCop() {
                         <td className="r">
                           {cop.costPerKgIfBenchmark
                             ? <><b>{usd(cop.costPerKgIfBenchmark.atHighYield)}–{usd(cop.costPerKgIfBenchmark.atLowYield)}</b>
-                                <div className="mono-sm muted">if the benchmark is reached, at the costs so far</div></>
+                                <div className="mono-sm muted">at the benchmark, costs so far</div></>
                             : <span className="muted">Needs a recorded cost</span>}
                         </td>
                         <td className="r"><b>{cop.copPerKg === null ? "—" : usd(cop.copPerKg)}</b></td>
@@ -89,7 +89,7 @@ export default function CycleCop() {
                     <tbody>
                       {cop.lines.map((l) => (
                         <tr key={l.category}>
-                          <td>{l.label}{l.estimate && <> <Tag kind="warn">Estimate</Tag></>}</td>
+                          <td>{l.label}{l.estimate && <> <Tag>Estimate</Tag></>}</td>
                           <td className="r"><b>{usd(l.amountUsd)}</b></td>
                           <td><div className="share"><div className="bar"><i style={{ width: `${Math.min(100, l.sharePct)}%` }} /></div>
                             <span className="mono-sm">{num(l.sharePct, 0)}%</span></div></td>
@@ -102,7 +102,7 @@ export default function CycleCop() {
               </Panel>
 
               <div className="stack">
-                <Panel title="Per unit">
+                <Panel title="Per unit" pad={false}>
                   <table className="tbl"><tbody>
                     <tr><td>Cost per {c?.perennial ? "tree" : "plant"}</td><td className="r"><b>{cop.costPerPlant === null ? "—" : usd(cop.costPerPlant, 3)}</b></td></tr>
                     {c?.perennial && (
@@ -114,8 +114,8 @@ export default function CycleCop() {
                   </tbody></table>
                 </Panel>
                 {cop.flags.length > 0 && (
-                  <Panel title="Read this before using the number">
-                    <ul style={{ paddingLeft: 18, lineHeight: 1.7 }}>
+                  <Panel title="Not counted in this number">
+                    <ul className="flaglist">
                       {cop.flags.map((f) => <li key={f}>{f.charAt(0).toUpperCase() + f.slice(1)}.</li>)}
                     </ul>
                   </Panel>

@@ -59,32 +59,32 @@ export default function Cycles() {
   return (
     <>
       <PageHead icon={Sprout} title="My crops"
-                actions={<button className="btn" onClick={() => setShowAdd(true)}><Plus size={18} aria-hidden />Add crop</button>} />
+                actions={<button className="btn btn-sm" onClick={() => setShowAdd(true)}><Plus size={16} aria-hidden />Add crop</button>} />
       <main className="main stack">
         {cycles.error && <Notice kind="alert">{loadProblem(cycles.error)}</Notice>}
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
 
-        <Panel title="Crops" icon={Sprout} pad={false}>
+        <Panel pad={false}>
           {cycles.data === null ? (
-            <p className="panel-pad muted">{cycles.error ? "Your crops are safe on the server; they could not be loaded just now." : "Loading…"}</p>
+            <p className="panel-pad muted">{cycles.error ? "Could not be loaded just now." : "Loading…"}</p>
           ) : rows.length === 0 ? (
             <Empty icon={Sprout}>
               No crop yet.
-              <button className="btn" onClick={() => setShowAdd(true)} style={{ marginTop: 6 }}><Plus size={18} aria-hidden />Add your first crop</button>
+              <button className="btn btn-sm" onClick={() => setShowAdd(true)}><Plus size={16} aria-hidden />Add your first crop</button>
             </Empty>
           ) : (
             <div className="tablewrap">
-              <table className="tbl crops">
+              <table className="tbl crops fold">
                 <thead><tr><th>Bed</th><th>Crop</th><th className="nowrap">Planted</th><th>Status</th><th className="r nowrap">{rows.some((c) => c.perennial) ? "Trees" : "Plants"}</th>
                   <th className="r nowrap">Area m²</th><th /></tr></thead>
                 <tbody>
                   {rows.map((c) => (
                     <tr key={c.id}>
-                      <td><b>{c.bedLabel}</b>{c.trialArm && <> <Tag kind="info">{c.trialArm}</Tag></>}</td>
+                      <td><b>{c.bedLabel}</b>{c.trialArm && <> <Tag>{c.trialArm}</Tag></>}</td>
                       <td data-label="Crop">{c.cropName}{c.variety ? ` (${c.variety})` : ""}
                         {c.setupLabel && <div className="mono-sm muted">{c.setupLabel}</div>}</td>
                       <td data-label="Planted" className="nowrap">{dayMonthYear(c.plantedOn)}</td>
-                      <td data-label="Status" className="nowrap">{c.status === "active" ? <Tag kind="ok">{dayLabel(c)}</Tag> : <Tag>Closed {c.endedOn}</Tag>}</td>
+                      <td data-label="Status" className="nowrap">{c.status === "active" ? dayLabel(c) : <span className="muted">Closed {c.endedOn}</span>}</td>
                       <td data-label="Plants" className="r nowrap">{editing === c.id
                         ? <input className="cell-input" type="number" min={1} value={ePlants} autoFocus
                                  onChange={(e) => plantsChanged(c, e.target.value)} aria-label="Plants" />

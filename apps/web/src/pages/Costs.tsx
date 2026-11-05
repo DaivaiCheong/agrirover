@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Empty, Field, Notice, PageIntro, Panel, Tag } from "../components/ui";
+import { Plus } from "lucide-react";
+import { EF, Empty, FormModal, Kpis, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
 import { api, type CostInput } from "../lib/api";
 import { CATEGORY_LABELS, ENTRY_CATEGORIES, cycleLabel, remember, todayIso, usd } from "../lib/format";
 import { useData } from "../lib/useData";
@@ -11,6 +12,7 @@ export default function Costs() {
   const [filter, setFilter] = useState("");
   const costs = useData(() => api.costs(filter || undefined), [filter]);
 
+  const [adding, setAdding] = useState(false);
   const [cycle, setCycle] = useState<string | null>(null);
   const [category, setCategory] = useState(remember.get("category") ?? "seed");
   const [date, setDate] = useState(todayIso());
@@ -20,7 +22,8 @@ export default function Costs() {
   const [price, setPrice] = useState("");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState<"USD" | "KHR">((remember.get("currency") as "USD" | "KHR") ?? "USD");
-  const [msg, setMsg] = useState<{ kind: "ok" | "alert"; text: string } | null>(null);
+  const [msg, setMsg] = useState<FormMsg>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   // default to the last cycle used, else the first open one
   useEffect(() => {
@@ -31,18 +34,18 @@ export default function Costs() {
   }, [cycles.data, cycle]);
 
   const byId = new Map((cycles.data ?? []).map((c) => [c.id, c]));
-  const num = (v: string) => (v === "" ? undefined : Number(v));
+  const n = (v: string) => (v === "" ? undefined : Number(v));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const body: CostInput = {
       plantingId: cycle || null, date, category, description: description || undefined,
-      qty: num(qty), unit: unit || undefined, unitPrice: num(price), amount: num(amount), currency,
+      qty: n(qty), unit: unit || undefined, unitPrice: n(price), amount: n(amount), currency,
     };
     try {
       const made = await api.addCost(body);
       remember.set("category", category); remember.set("currency", currency); remember.set("cycle", cycle ?? FARM_LEVEL);
-      setMsg({ kind: "ok", text: `Saved ${usd(made.amountUsd)}${made.currency === "KHR" ? ` (${made.amount.toLocaleString()} riel)` : ""}. Add another.` });
+      setMsg({ kind: "ok", text: `Saved ${usd(made.amountUsd)}${made.currency === "KHR" ? ` (${made.amount.toLocaleString()} riel)` : ""}.` });
       setDescription(""); setQty(""); setPrice(""); setAmount("");
       costs.reload();
     } catch (err) {
@@ -52,83 +55,95 @@ export default function Costs() {
 
   async function remove(id: string) {
     if (!window.confirm("Delete this cost? It is hidden, not erased.")) return;
-    try { await api.deleteCost(id); costs.reload(); } catch (err) { setMsg({ kind: "alert", text: (err as Error).message }); }
+    try { await api.deleteCost(id); costs.reload(); } catch (err) { setListError((err as Error).message); }
   }
 
   const rows = costs.data ?? [];
   const total = rows.reduce((s, r) => s + r.amountUsd, 0);
+  const byKind = new Map<string, number>();
+  rows.forEach((r) => byKind.set(r.category, (byKind.get(r.category) ?? 0) + r.amountUsd));
+  const top = [...byKind.entries()].sort((a, b) => b[1] - a[1])[0];
 
   return (
     <>
-      <PageIntro actions={<a className="btn btn-ghost btn-sm" href={api.costsCsvUrl}>Download CSV</a>}>Every dollar or riel you spend, in one list. Add it as soon as you spend it.</PageIntro>
+      <Toolbar>
+        <a className="btn btn-ghost btn-sm" href={api.costsCsvUrl}>Download CSV</a>
+        <button className="btn btn-sm" onClick={() => { setMsg(null); setAdding(true); }}><Plus size={16} aria-hidden />Add cost</button>
+      </Toolbar>
       <main className="main stack">
-        <Panel title="Add a cost">
-          <form className="form" onSubmit={save}>
-            <div className="row2">
-              <Field label="For">
-                <select value={cycle ?? FARM_LEVEL} onChange={(e) => setCycle(e.target.value)}>
-                  {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}</option>)}
-                  <option value={FARM_LEVEL}>Whole farm (shared overhead)</option>
-                </select>
-              </Field>
-              <Field label="What kind">
-                <select value={category} onChange={(e) => setCategory(e.target.value)}>
-                  {ENTRY_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
-                </select>
-              </Field>
-            </div>
-            <Field label="Description (optional)"><input value={description} maxLength={160} onChange={(e) => setDescription(e.target.value)} /></Field>
-            <div className="row3">
-              <Field label="Quantity"><input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
-              <Field label="Unit (kg, day, L…)"><input value={unit} maxLength={16} onChange={(e) => setUnit(e.target.value)} /></Field>
-              <Field label="Price per unit"><input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></Field>
-            </div>
-            <div className="row3">
-              <Field label="Or the whole amount" hint="Fill the amount, or quantity and price.">
-                <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              </Field>
-              <Field label="Currency">
-                <select value={currency} onChange={(e) => setCurrency(e.target.value as "USD" | "KHR")}>
-                  <option value="USD">US dollar</option><option value="KHR">Riel</option>
-                </select>
-              </Field>
-              <Field label="Date"><input type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-            </div>
-            {category === "labour_family" && (
-              <Notice>Family labour: enter the days. The price per day comes from the family wage in Settings.</Notice>
-            )}
-            <div><button className="btn">Save cost</button></div>
-          </form>
-          {msg && <div style={{ marginTop: 12 }}><Notice kind={msg.kind}>{msg.text}</Notice></div>}
-        </Panel>
+        {costs.error && <Notice kind="alert">{costs.error}</Notice>}
+        {listError && <Notice kind="alert">{listError}</Notice>}
 
-        <Panel title={`Cost list · ${usd(total)} in this list`} pad={false}
+        <Kpis items={[
+          { k: "Total", v: usd(total) },
+          { k: "Entries", v: rows.length },
+          { k: "Largest kind", v: top ? CATEGORY_LABELS[top[0]] ?? top[0] : "—" },
+          { k: "Largest amount", v: top ? usd(top[1]) : "—" },
+        ]} />
+
+        <Panel title="Costs" pad={false}
                right={
                  <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Show costs for">
                    <option value="">All cycles</option>
                    {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}</option>)}
                  </select>}>
-          {costs.error && <Notice kind="alert">{costs.error}</Notice>}
-          {rows.length === 0 ? <Empty>No costs yet. Add the first one above.</Empty> : (
-            <table className="tbl">
-              <thead><tr><th>Date</th><th>For</th><th>Kind</th><th>Description</th><th className="r">Amount</th><th className="r">USD</th><th /></tr></thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.date}</td>
-                    <td>{r.plantingId ? byId.get(r.plantingId)?.bedLabel ?? "—" : "Whole farm"}</td>
-                    <td>{CATEGORY_LABELS[r.category] ?? r.category}{r.source === "stock_use" && <> <Tag>Stock</Tag></>}</td>
-                    <td>{r.description ?? ""}</td>
-                    <td className="r">{r.currency === "KHR" ? `${r.amount.toLocaleString()} ៛` : usd(r.amount)}</td>
-                    <td className="r"><b>{usd(r.amountUsd)}</b></td>
-                    <td className="act">{r.source === "manual" && <button className="linkbtn linkbtn-alert" onClick={() => remove(r.id)}>Delete</button>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {rows.length === 0 ? <Empty>No costs yet.</Empty> : (
+            <div className="tablewrap">
+              <table className="tbl fold costs-t">
+                <thead><tr><th>Date</th><th>For</th><th>Kind</th><th>Description</th><th className="r">Amount</th><th className="r">USD</th><th /></tr></thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id}>
+                      <td className="nowrap"><b>{r.date}</b></td>
+                      <td data-label="For">{r.plantingId ? byId.get(r.plantingId)?.bedLabel ?? "—" : "Whole farm"}</td>
+                      <td data-label="Kind">{CATEGORY_LABELS[r.category] ?? r.category}{r.source === "stock_use" && <> <Tag>Stock</Tag></>}</td>
+                      <td data-label="Description">{r.description ?? "—"}</td>
+                      <td data-label="Amount" className={`r nowrap${r.currency === "KHR" ? "" : " hide-sm"}`}>{r.currency === "KHR" ? `${r.amount.toLocaleString()} ៛` : usd(r.amount)}</td>
+                      <td data-label="USD" className="r"><b>{usd(r.amountUsd)}</b></td>
+                      <td className="act">{r.source === "manual" && <button className="linkbtn linkbtn-alert" onClick={() => remove(r.id)}>Delete</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Panel>
       </main>
+
+      {adding && (
+        <FormModal title="Add cost" submit="Save cost" msg={msg} onClose={() => setAdding(false)} onSubmit={save}>
+          <div className="erp-form">
+            <div className="erp-grid-2">
+              <EF label="For" req>
+                <select className="erp-select" value={cycle ?? FARM_LEVEL} onChange={(e) => setCycle(e.target.value)}>
+                  {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}</option>)}
+                  <option value={FARM_LEVEL}>Whole farm (overhead)</option>
+                </select>
+              </EF>
+              <EF label="Kind" req hint={category === "labour_family" ? "Enter days. The price comes from Settings." : undefined}>
+                <select className="erp-select" value={category} onChange={(e) => setCategory(e.target.value)}>
+                  {ENTRY_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+                </select>
+              </EF>
+            </div>
+            <div className="erp-grid-3">
+              <EF label="Quantity"><input className="erp-input" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} /></EF>
+              <EF label="Unit"><input className="erp-input" placeholder="kg, day, L" value={unit} maxLength={16} onChange={(e) => setUnit(e.target.value)} /></EF>
+              <EF label="Price per unit"><input className="erp-input" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></EF>
+            </div>
+            <div className="erp-grid-3">
+              <EF label="Or whole amount"><input className="erp-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></EF>
+              <EF label="Currency">
+                <select className="erp-select" value={currency} onChange={(e) => setCurrency(e.target.value as "USD" | "KHR")}>
+                  <option value="USD">US dollar</option><option value="KHR">Riel</option>
+                </select>
+              </EF>
+              <EF label="Date" req><input className="erp-input" type="date" required value={date} onChange={(e) => setDate(e.target.value)} /></EF>
+            </div>
+            <EF label="Description"><input className="erp-input" value={description} maxLength={160} onChange={(e) => setDescription(e.target.value)} /></EF>
+          </div>
+        </FormModal>
+      )}
     </>
   );
 }

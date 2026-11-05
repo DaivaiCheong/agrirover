@@ -26,7 +26,8 @@ export function litres(v: number): string {
 /** $12.34, or $0.0738 for small unit prices. */
 export function usd(v: number | null | undefined, digits = 2): string {
   if (v === null || v === undefined) return "—";
-  return `$${v.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+  const text = Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return `${v < 0 ? "-" : ""}$${text}`;
 }
 
 /** The same amount in riel, rounded to the nearest 100. */

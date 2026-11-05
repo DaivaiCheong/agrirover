@@ -1,4 +1,4 @@
-import { Notice, PageIntro, Panel, Led } from "../components/ui";
+import { Notice, Panel, Led } from "../components/ui";
 import { api, loadProblem, type DeviceRow } from "../lib/api";
 import { ago, usePoll } from "../lib/usePoll";
 
@@ -14,12 +14,10 @@ export default function Devices() {
 
   return (
     <>
-      <PageIntro>The sensors and the rover on your farm, and when each last reported.</PageIntro>
-
-      <main className="main">
+      <main className="main stack" style={{ paddingTop: 12 }}>
         {error && <Notice kind="alert">{loadProblem(error)}</Notice>}
-        <Panel title="Devices" pad={false}>
-          <table className="tbl">
+        <Panel title="Devices" pad={false} right={<span className="small muted">Silent after 3 missed reports</span>}>
+          <div className="tablewrap"><table className="tbl">
             <thead>
               <tr><th>Code</th><th>Kind</th><th>Zone</th><th>Status</th><th>Last seen</th><th>Firmware</th></tr>
             </thead>
@@ -39,12 +37,8 @@ export default function Devices() {
               })}
               {data?.length === 0 && <tr><td colSpan={6}>No devices registered.</td></tr>}
             </tbody>
-          </table>
+          </table></div>
         </Panel>
-        <p className="mono-sm" style={{ color: "var(--ink-muted)", marginTop: 14 }}>
-          A device is "silent" after 3 missed reports. The rover shows as not commissioned until the
-          physical rover is in service.
-        </p>
       </main>
     </>
   );

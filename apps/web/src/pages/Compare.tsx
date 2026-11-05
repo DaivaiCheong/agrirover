@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Empty, Field, Notice, PageIntro, Panel } from "../components/ui";
+import { Empty, Field, Notice, Panel } from "../components/ui";
 import { api, type Cop } from "../lib/api";
 import { cycleLabel, num, usd } from "../lib/format";
 import { useData } from "../lib/useData";
@@ -38,9 +38,8 @@ export default function Compare() {
 
   return (
     <>
-      <PageIntro>Put two crops side by side: what each cost, what it gave, and how much water it used.</PageIntro>
-      <main className="main stack">
-        {(cycles.data ?? []).length < 2 ? <Empty>Compare needs at least two crop cycles.</Empty> : (
+      <main className="main stack" style={{ paddingTop: 12 }}>
+        {(cycles.data ?? []).length < 2 ? <Empty>Needs at least two crops.</Empty> : (
           <>
             <div className="row2">
               <Field label="First"><select value={a} onChange={(e) => setA(e.target.value)}>
@@ -48,10 +47,10 @@ export default function Compare() {
               <Field label="Second"><select value={b} onChange={(e) => setB(e.target.value)}>
                 {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}{c.trialArm ? ` · ${c.trialArm}` : ""}</option>)}</select></Field>
             </div>
-            {!both && <Notice kind="warn">Choose two different cycles.</Notice>}
+            {!both && <Notice>Choose two different crops.</Notice>}
             {cmp.error && <Notice kind="alert">{cmp.error}</Notice>}
             {r && (
-              <Panel title="Result" pad={false}>
+              <Panel title="Result" pad={false} right={<span className="small muted">Records, not causes</span>}>
                 <table className="tbl">
                   <thead><tr><th /><th className="r">{r.a.cycle.bedLabel}</th><th className="r">{r.b.cycle.bedLabel}</th><th className="r">First − second</th></tr></thead>
                   <tbody>
@@ -68,16 +67,12 @@ export default function Compare() {
                 </table>
               </Panel>
             )}
-            <Notice>
-              This shows what was recorded for each bed. It does not prove why they differ: soil, sun, variety and
-              how carefully costs were entered can differ too.
-            </Notice>
             {r && [r.a, r.b].some((c) => c.flags.length > 0) && (
-              <Panel title="What each number leaves out">
+              <Panel title="Not counted">
                 {[r.a, r.b].map((c) => (
                   <div key={c.cycle.id} style={{ marginBottom: 10 }}>
                     <b>{c.cycle.bedLabel}</b>
-                    <ul style={{ paddingLeft: 18, lineHeight: 1.7 }}>{c.flags.map((f) => <li key={f}>{f}</li>)}</ul>
+                    <ul className="flaglist">{c.flags.map((f) => <li key={f}>{f}</li>)}</ul>
                   </div>
                 ))}
               </Panel>

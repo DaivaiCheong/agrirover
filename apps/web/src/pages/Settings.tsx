@@ -1,25 +1,24 @@
 import { useEffect, useState } from "react";
-import { Plus, Sprout, X } from "lucide-react";
-import { Field, Notice, PageIntro, Panel, Tag } from "../components/ui";
+import { Plus, Sprout } from "lucide-react";
+import { Modal, Notice, Panel, Tag, type FormMsg } from "../components/ui";
 import NewCropForm from "../components/NewCropForm";
 import { api, type Settings as SettingsT, loadProblem } from "../lib/api";
 import { useData } from "../lib/useData";
 
-const FIELDS: { key: keyof SettingsT; label: string; hint: string }[] = [
-  { key: "khrPerUsd", label: "Riel per US dollar", hint: "Used to turn riel into dollars. Each entry keeps the rate of the day it was made." },
-  { key: "familyWageUsdPerDay", label: "Family labour wage (USD per day)", hint: "What one day of your own or family work is worth. Counted in the cost, like hired labour." },
-  { key: "waterCostPerM3Usd", label: "Water cost (USD per m³)", hint: "Pump fuel or electricity, or bought water, per cubic metre. Leave empty if you will enter water costs yourself." },
-  { key: "landRentUsdPerHaYear", label: "Land rent (USD per hectare per year)", hint: "Rent paid, or what the land could be rented for if you own it. Leave empty to leave land out." },
-  { key: "irrigationEfficiency", label: "Irrigation efficiency (0 to 1)", hint: "Share of the water that reaches the roots. Drip about 0.9, sprinkler 0.75, hand watering 0.6 (typical)." },
+const FIELDS: { key: keyof SettingsT; label: string; unit: string; hint: string }[] = [
+  { key: "khrPerUsd", label: "Exchange rate", unit: "riel / USD", hint: "Each entry keeps the rate of its day." },
+  { key: "familyWageUsdPerDay", label: "Family labour wage", unit: "USD / day", hint: "Counted in the cost, like hired labour." },
+  { key: "waterCostPerM3Usd", label: "Water cost", unit: "USD / m³", hint: "Pump fuel, power or bought water." },
+  { key: "landRentUsdPerHaYear", label: "Land rent", unit: "USD / ha / year", hint: "Paid, or what it could rent for." },
+  { key: "irrigationEfficiency", label: "Irrigation efficiency", unit: "0 to 1", hint: "Drip 0.9, sprinkler 0.75, hand 0.6 (typical)." },
 ];
 
 export default function Settings() {
   const { data, error, reload } = useData(api.settings);
   const crops = useData(api.crops);
   const [form, setForm] = useState<Record<string, string>>({});
-  const [msg, setMsg] = useState<{ kind: "ok" | "alert"; text: string } | null>(null);
+  const [msg, setMsg] = useState<FormMsg>(null);
   const [showAddCrop, setShowAddCrop] = useState(false);
-  const [cropMsg, setCropMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -41,91 +40,63 @@ export default function Settings() {
 
   return (
     <>
-      <PageIntro>Numbers the whole farm uses. Leave a number empty if you do not know it; the app will say what is missing.</PageIntro>
-      <main className="main stack">
+      <main className="main stack" style={{ paddingTop: 12 }}>
         {error && <Notice kind="alert">{loadProblem(error)}</Notice>}
-        {data && !data.rateConfirmed && (
-          <Notice kind="warn">
-            The exchange rate ({data.khrPerUsd.toLocaleString()} riel per dollar) is a placeholder. Check today's rate
-            and press Save so riel amounts are converted correctly.
-          </Notice>
-        )}
-        <Panel title="Settings">
-          <form className="form" onSubmit={save} style={{ maxWidth: 560 }}>
-            {FIELDS.map((f) => (
-              <Field key={f.key} label={f.label} hint={f.hint}>
-                <input type="number" step="any" value={form[f.key] ?? ""}
-                       onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
-              </Field>
-            ))}
-            <div><button className="btn">Save</button></div>
-          </form>
-          {msg && <div style={{ marginTop: 12 }}><Notice kind={msg.kind}>{msg.text}</Notice></div>}
-        </Panel>
 
-        <Panel
-          title="Crops"
-          icon={Sprout}
-          right={!showAddCrop ? (
-            <button className="btn btn-sm" onClick={() => setShowAddCrop(true)}>
-              <Plus size={16} aria-hidden />Add crop
-            </button>
-          ) : undefined}
-        >
-          {cropMsg && <div style={{ marginBottom: 14 }}><Notice kind="ok">{cropMsg}</Notice></div>}
-
-          <div style={{ display: "grid", gap: 8 }}>
-            {(crops.data ?? []).map((c) => (
-              <div
-                key={c.slug}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "12px 14px",
-                  background: "var(--surface-alt)",
-                  borderRadius: "var(--r-sm)",
-                  border: "1px solid var(--line)",
-                }}
-              >
-                <div>
-                  <b style={{ fontSize: 15 }}>{c.name}</b>
-                  {c.stageDays && (
-                    <span className="small muted" style={{ marginLeft: 10 }}>
-                      {c.stageDays.reduce((a, b) => a + b, 0)} cycle days
-                    </span>
-                  )}
-                </div>
-                <Tag kind={c.hasWaterData ? "ok" : "idle"}>
-                  {c.hasWaterData ? "Water data ready" : "No water data"}
-                </Tag>
-              </div>
-            ))}
-          </div>
-
-          {showAddCrop && (
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <b style={{ fontSize: 16 }}>New crop profile</b>
-                <button className="linkbtn" onClick={() => setShowAddCrop(false)}>
-                  <X size={16} aria-hidden style={{ verticalAlign: -2 }} /> Cancel
-                </button>
-              </div>
-              <NewCropForm
-                onAdded={() => {
-                  crops.reload();
-                  setShowAddCrop(false);
-                  setCropMsg("New crop added to farm.");
-                }}
-              />
+        <Panel title="Farm numbers" pad={false} right={<span className="small muted">Empty means not set, never guessed</span>}>
+          <form onSubmit={save}>
+            <div className="tablewrap">
+              <table className="tbl kv settings-t"><tbody>
+                {FIELDS.map((f) => (
+                  <tr key={f.key}>
+                    <th scope="row"><label htmlFor={`set-${f.key}`}>{f.label}</label></th>
+                    <td className="settings-in">
+                      <div className="erp-input-group">
+                        <input id={`set-${f.key}`} className="erp-input" type="number" step="any" value={form[f.key] ?? ""}
+                               onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
+                        <span className="erp-input-addon">{f.unit}</span>
+                      </div>
+                    </td>
+                    <td className="small muted">
+                      {f.key === "khrPerUsd" && data && !data.rateConfirmed ? <Tag kind="warn">Placeholder: check today's rate</Tag> : f.hint}
+                    </td>
+                  </tr>
+                ))}
+              </tbody></table>
             </div>
-          )}
+            <div className="panel-foot">
+              {msg && <span className={`erp-msg erp-msg-${msg.kind}`} role="status">{msg.text}</span>}
+              <button className="btn btn-sm">Save</button>
+            </div>
+          </form>
         </Panel>
 
-        <Notice>
-          Empty means not set. A missing number is never guessed: the cost report says what is left out.
-        </Notice>
+        <Panel title="Crops" icon={Sprout} pad={false}
+               right={<button className="btn btn-sm btn-ghost" onClick={() => setShowAddCrop(true)}><Plus size={14} aria-hidden />Add crop</button>}>
+          <div className="tablewrap">
+            <table className="tbl">
+              <thead><tr><th>Crop</th><th className="r">Cycle days</th><th>Water data</th></tr></thead>
+              <tbody>
+                {(crops.data ?? []).map((c) => (
+                  <tr key={c.slug}>
+                    <td><b>{c.name}</b></td>
+                    <td className="r">{c.stageDays ? c.stageDays.reduce((a, b) => a + b, 0) : "—"}</td>
+                    <td><Tag kind={c.hasWaterData ? "ok" : undefined}>{c.hasWaterData ? "Ready" : "None"}</Tag></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
       </main>
+
+      {showAddCrop && (
+        <Modal title="Add crop" onClose={() => setShowAddCrop(false)} width={520}>
+          <div className="modal-body-erp"><div className="erp-section">
+            <NewCropForm onAdded={() => { crops.reload(); setShowAddCrop(false); }} />
+          </div></div>
+        </Modal>
+      )}
     </>
   );
 }

@@ -144,7 +144,7 @@ export default function Plan() {
       <PageHead
         icon={Droplets}
         title={`${plan ? plan.crop : "Crop"} Water Plan`}
-        actions={<Link className="btn btn-ghost" to="/cycles"><ArrowLeft size={18} aria-hidden />Back to My crops</Link>}
+        actions={<Link className="btn btn-ghost btn-sm" to="/cycles"><ArrowLeft size={16} aria-hidden />My crops</Link>}
       />
       <main className="main plan-grid">
         <aside className="plan-form">
@@ -393,7 +393,7 @@ export default function Plan() {
                         <Tooltip formatter={(v: number) => [`${Math.round(v)} L`, "water for all plants"]} labelFormatter={(d) => `Day ${d}`} />
                         <Area type="monotone" dataKey="litersTotalGross" stroke="#2563A8" strokeWidth={2} fill="#2563A8" fillOpacity={0.14}
                               isAnimationActive={false} />
-                        {growing && <ReferenceLine x={growing.day} stroke="var(--alert)" label={{ value: "today", fontSize: 12, fill: "var(--alert)", position: "insideTopRight" }} />}
+                        {growing && <ReferenceLine x={growing.day} stroke="var(--ink)" label={{ value: "today", fontSize: 12, fill: "var(--ink)", position: "insideTopRight" }} />}
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
