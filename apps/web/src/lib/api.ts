@@ -1,7 +1,13 @@
+import { mockOn } from "./mockMode";
+
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000/api/v1";
 
 /** An error from the API with the message a farmer can read. */
 export class ApiError extends Error {}
+
+/** What to tell the farmer when a page could not load: the network and the server fail differently. */
+export const loadProblem = (error: string) =>
+  error === "Failed to fetch" ? "Cannot reach the farm server. Check that it is running." : `The farm server had a problem: ${error}`;
 
 function readableDetail(detail: unknown, fallback: string): string {
   if (typeof detail === "string") return detail;
@@ -14,6 +20,10 @@ function readableDetail(detail: unknown, fallback: string): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (mockOn) {                                      // sample data: answered in the browser, the server is never called
+    const { mockRequest } = await import("../mock/server");
+    return mockRequest<T>(path, init);
+  }
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -45,7 +55,7 @@ export type CondParam = {
   metric: string; label: string; short: string; unit: string; decimals: number; value: number | null;
   recordedAt: string | null; status: RatingStatus; direction: "low" | "high" | null; target: [number, number] | null;
 };
-export type CondAlert = { id: string; severity: "critical"; title: string; message: string; metrics: string[] };
+export type CondAlert = { id: string; severity: "critical" | "warning"; title: string; message: string; metrics: string[] };
 export type CondStage = {
   n: number; key: string; title: string; firstDay: number; lastDay: number; day: number; extended: boolean;
   moisture: [number, number]; ec: [number, number]; focus: string;
@@ -68,6 +78,54 @@ export type SetupInfo = {
   density: [number, number]; kgPerPlant: [number, number]; referenceBedM2: number;
   plantsPerReferenceBed: [number, number]; kgPerReferenceBed: [number, number];
   rowCm: number; plantCm: number; spacingPlantsPerM2: number; basis: string; spacingBasis: string;
+  orchard?: OrchardPreset;                           // tree crops only
+};
+
+/** What an orchard setup adds. Yields are per tree per YEAR, not per cycle. */
+export type OrchardPreset = {
+  letter: string; cultivars: string; treesPerHa: [number, number]; firstBearing: string; tPerHa: [number, number];
+  kgPer50m2: [number, number]; npk: string; drip: string; emitterLphPerTree: number; priceUsd: [number, number];
+  docIssue: string | null;                           // where the document's own table does not add up
+};
+
+/** A tree crop's cycle: the tree outlives the cycle, so its age and the cycle's day are separate things. */
+export type Perennial = {
+  treesPlantedOn: string; treeAgeYears: number; regulation: string; regulationLabel: string; stress: boolean;
+  harvestFrom: string; harvestTo: string; rainyHarvest: boolean;
+};
+
+export type OrchardStage = {
+  n: number; key: string; short: string; title: string; firstDay: number; lastDay: number;
+  moisture: [number, number]; ec: [number, number]; kc: number | null; etcPct: [number, number] | null;
+  water: string; feed: string; actions: string;
+};
+
+export type OrchardJob = {
+  id: string; title: string; detail: string; firstDay: number; lastDay: number; stageN: number;
+  state: "due" | "done" | "overdue" | "later" | "past";
+  confirm: boolean;                                  // a chemical dose: confirm with an agronomist before using it
+  measure: boolean;                                  // needs a fruit size typed in
+  ongoing: boolean;                                  // lasts its whole window: nothing to tick off
+};
+
+export type FertigationPlan = {
+  stageN: number; aim: string; nitrogen: string;
+  tanks: { name: string; products: string[] }[];
+  clash: string | null;                              // products that must not share a tank
+  phases: { label: string; pct: number; what: string }[];
+  foliar: { text: string; confirm: boolean }[];
+  soil: string | null; waterPh: string;
+};
+
+export type DocIssue = { n: number; title: string; detail: string };
+export type OrchardParamRule = { label: string; target: string; critical: string; note: string };
+
+/** Everything the cycle page needs, for any day of the cycle. The contract for the real endpoint. */
+export type OrchardCycle = {
+  cycle: Cycle; day: number; actualDay: number; sample: boolean; stages: OrchardStage[]; stage: OrchardStage;
+  conditions: BedConditions; jobs: OrchardJob[]; fertigation: FertigationPlan; rules: OrchardParamRule[];
+  water: { litresPerTree: number; litresTotal: number; hoursPerRun: number; emitterLphPerTree: number; firmwareLimitSeconds: number };
+  fruitMm: number | null; bagged: boolean; setup: SetupInfo | null; docIssues: DocIssue[];
 };
 export type Forecast = {
   setup: string; label: string; plants: number; kgLow: number; kgHigh: number; kgMid: number;
@@ -83,7 +141,8 @@ export type Evidence = {
 };
 export type Correlation = {
   symptom: string; title: string; verdict: "supported" | "not_supported" | "no_data"; evidence: Evidence[];
-  explanation: string | null; basis: "spec" | "practice" | null; caveat: string | null;
+  explanation: string | null; basis: "spec" | "practice" | "guava_doc" | null; caveat: string | null;
+  looksLike?: string | null;                         // the visual signs to compare with the plant
   stage: { key: string; title: string; day: number } | null; zone: string; label: string | null;
   source: "named" | "photo";
 };
@@ -164,6 +223,7 @@ export type PhotoResult = {
 };
 
 async function checkPhoto(file: File, zone?: string): Promise<PhotoResult> {
+  if (mockOn) throw new ApiError("disease model not installed");   // the same answer the real server gives today
   const body = new FormData();
   body.append("photo", file);                       // multipart: the browser sets the content type
   const res = await fetch(`${BASE}/photos/check${zone ? `?${new URLSearchParams({ zone })}` : ""}`, { method: "POST", body });
@@ -185,6 +245,10 @@ export type Settings = {
 export type Crop = {
   slug: string; name: string; hasWaterData: boolean; defaultAreaPerPlantM2: number; kc: { ini: number; mid: number; end: number } | null;
   stageDays: number[] | null; source: string | null;
+  perennial?: boolean;                               // a tree: planted once, cycles repeat
+  regulationMethods?: { id: string; label: string; note: string }[];
+  harvestDays?: [number, number];                    // cycle days when picking happens
+  rainyMonths?: number[];
 };
 
 export type Cycle = {
@@ -192,6 +256,7 @@ export type Cycle = {
   variety: string | null; plantedOn: string; endedOn: string | null; status: "active" | "closed";
   day: number | null; stage: string | null; stageTitle: string | null; plantCount: number | null; areaM2: number | null;
   setup: string | null; setupLabel: string | null; expectedPriceUsdPerKg: number | null; forecast: Forecast | null;
+  perennial?: Perennial | null;
 };
 
 export type CostEntry = {
@@ -251,6 +316,9 @@ export const api = {
     return request<CropPlan>(`/crop-plan?${qs}`);
   },
   cyclePlan: (id: string) => request<CropPlan>(`/cycles/${id}/plan`),
+  orchardCycle: (id: string, day?: number) => request<OrchardCycle>(`/cycles/${id}/orchard${day ? `?day=${day}` : ""}`),
+  orchardJobDone: (id: string, job: string) => send<OrchardCycle>("POST", `/cycles/${id}/orchard/jobs/${job}/done`, {}),
+  orchardFruitSize: (id: string, mm: number) => send<OrchardCycle>("POST", `/cycles/${id}/orchard/fruit`, { mm }),
 
   // farm
   settings: () => request<Settings>("/farm/settings"),
@@ -263,7 +331,7 @@ export const api = {
   // cycles
   cycles: () => request<Cycle[]>("/cycles"),
   addCycle: (b: { zone: string; crop: string; plantedOn: string; plantCount?: number; areaM2?: number; variety?: string;
-                  setup?: string; expectedPriceUsdPerKg?: number }) =>
+                  setup?: string; expectedPriceUsdPerKg?: number; treesPlantedOn?: string; regulation?: string }) =>
     send<Cycle>("POST", "/cycles", b),
   updateCycle: (id: string, b: { plantCount?: number; areaM2?: number; variety?: string; plantedOn?: string;
                                  setup?: string; expectedPriceUsdPerKg?: number }) =>
@@ -277,8 +345,8 @@ export const api = {
   costs: (cycleId?: string) => request<CostEntry[]>(`/costs${cycleId ? `?cycle=${cycleId}` : ""}`),
   addCost: (b: CostInput) => send<CostEntry>("POST", "/costs", b),
   deleteCost: (id: string) => send<void>("DELETE", `/costs/${id}`),
-  costsCsvUrl: `${BASE}/export/costs.csv`,
-  copCsvUrl: `${BASE}/export/cop.csv`,
+  costsCsvUrl: mockOn ? "#sample-data-has-no-export" : `${BASE}/export/costs.csv`,
+  copCsvUrl: mockOn ? "#sample-data-has-no-export" : `${BASE}/export/cop.csv`,
 
   // stock
   stockItems: () => request<StockItem[]>("/stock/items"),

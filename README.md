@@ -92,6 +92,8 @@ docker compose logs -f field-sim   # simulated field node; SIM_SCENARIO=dry|wet|
                                    # SIM_PROBE=basic|7in1 in .env (7in1 adds the soil probe and air sensor)
 ```
 
+Guava on sample data (no server, nothing saved): open `http://localhost:5173/?mock=guava`. See [docs/GUAVA-REQUIREMENTS.md](docs/GUAVA-REQUIREMENTS.md).
+
 Platform tests: `cd apps/api && pip install -r requirements.txt && python -m pytest`
 · Firmware protocol test: `cd edge/rover-motor-controller/test && g++ -std=c++11 -I.. test_drive_protocol.cpp -o t && ./t`
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Calculator, Droplets, Pencil, Plus, Sprout, Square, X } from "lucide-react";
 import { Empty, Notice, PageHead, Panel, Tag } from "../components/ui";
-import { api, type Cycle } from "../lib/api";
+import { api, loadProblem, type Cycle } from "../lib/api";
 import { dayLabel, dayMonthYear, suggestedArea } from "../lib/format";
 import { useData } from "../lib/useData";
 import RowMenu from "../components/RowMenu";
@@ -61,11 +61,13 @@ export default function Cycles() {
       <PageHead icon={Sprout} title="My crops"
                 actions={<button className="btn" onClick={() => setShowAdd(true)}><Plus size={18} aria-hidden />Add crop</button>} />
       <main className="main stack">
-        {cycles.error && <Notice kind="alert">Cannot reach the farm server ({cycles.error}).</Notice>}
+        {cycles.error && <Notice kind="alert">{loadProblem(cycles.error)}</Notice>}
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
 
         <Panel title="Crops" icon={Sprout} pad={false}>
-          {rows.length === 0 ? (
+          {cycles.data === null ? (
+            <p className="panel-pad muted">{cycles.error ? "Your crops are safe on the server; they could not be loaded just now." : "Loading…"}</p>
+          ) : rows.length === 0 ? (
             <Empty icon={Sprout}>
               No crop yet.
               <button className="btn" onClick={() => setShowAdd(true)} style={{ marginTop: 6 }}><Plus size={18} aria-hidden />Add your first crop</button>
@@ -73,7 +75,7 @@ export default function Cycles() {
           ) : (
             <div className="tablewrap">
               <table className="tbl crops">
-                <thead><tr><th>Bed</th><th>Crop</th><th className="nowrap">Planted</th><th>Status</th><th className="r nowrap">Plants</th>
+                <thead><tr><th>Bed</th><th>Crop</th><th className="nowrap">Planted</th><th>Status</th><th className="r nowrap">{rows.some((c) => c.perennial) ? "Trees" : "Plants"}</th>
                   <th className="r nowrap">Area m²</th><th /></tr></thead>
                 <tbody>
                   {rows.map((c) => (
@@ -101,7 +103,8 @@ export default function Cycles() {
                         ) : (
                           <RowMenu items={[
                             { label: "Plants and area", icon: Pencil, onSelect: () => startEdit(c) },
-                            c.plantCount ? { label: "Water plan", icon: Droplets, to: planLink(c) } : null,
+                            c.perennial ? { label: "Open this cycle", icon: Sprout, to: `/cycles/${c.id}/orchard` }
+                              : c.plantCount ? { label: "Water plan", icon: Droplets, to: planLink(c) } : null,
                             { label: "Cost report", icon: Calculator, to: `/cycles/${c.id}` },
                             c.status === "active" && "separator",
                             c.status === "active" && { label: "End crop", icon: Square, danger: true, onSelect: () => end(c.id, c.bedLabel) },

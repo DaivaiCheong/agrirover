@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, ArrowDown, ArrowUp, ChevronDown, ChevronRight, Clock, Layers, MapPin, Plus, Sprout, X } from "lucide-react";
 import { Empty, Notice, PageIntro, Panel, Tag } from "../components/ui";
-import { api, type BedConditions, type CondParam } from "../lib/api";
+import { api, loadProblem, type BedConditions, type CondParam } from "../lib/api";
 import { RIBBON_CELLS, cls, explain, fmtValue, rangeText } from "../lib/conditions";
 import { num } from "../lib/format";
 import { useData } from "../lib/useData";
@@ -107,7 +107,7 @@ export default function Beds() {
       </PageIntro>
 
       <main className="main stack">
-        {zones.error && <Notice kind="alert">Cannot reach farm server ({zones.error}).</Notice>}
+        {zones.error && <Notice kind="alert">{loadProblem(zones.error)}</Notice>}
         {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
 
         {/* Land Summary Metrics */}
@@ -211,7 +211,9 @@ export default function Beds() {
 
         {/* Beds Table */}
         <Panel title="Production Beds" icon={Layers} pad={false}>
-          {rows.length === 0 ? (
+          {zones.data === null ? (
+            <p className="panel-pad muted">{zones.error ? "Your beds are safe on the server; they could not be loaded just now." : "Loading…"}</p>
+          ) : rows.length === 0 ? (
             <Empty icon={MapPin}>
               No beds registered yet.
               <button
@@ -299,7 +301,7 @@ export default function Beds() {
                    ))}
                  </div>
                }>
-          {conditions.error && <div className="panel-pad"><Notice kind="alert">Cannot load telemetry ({conditions.error}).</Notice></div>}
+          {conditions.error && <div className="panel-pad"><Notice kind="alert">{loadProblem(conditions.error)}</Notice></div>}
           {(conditions.data ?? []).length === 0 && !conditions.error ? (
             <Empty icon={Activity}>No beds to show yet.</Empty>
           ) : (

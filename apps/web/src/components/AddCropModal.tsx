@@ -51,6 +51,8 @@ export default function AddCropModal({
   const [plantCm, setPlantCm] = useState("");
   const [setupId, setSetupId] = useState("");
   const [price, setPrice] = useState("");
+  const [treesPlanted, setTreesPlanted] = useState(todayIso());
+  const [regulation, setRegulation] = useState("pruning");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +77,11 @@ export default function AddCropModal({
       setCrop(availableCrops[0].slug);
     }
   }, [availableCrops, crop]);
+
+  // a tree crop starts from a handful of trees, not a hundred plants
+  useEffect(() => {
+    if ((crops.data ?? []).find((c) => c.slug === crop)?.perennial) setPlants((p) => (p === "100" ? "5" : p));
+  }, [crop, crops.data]);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -108,8 +115,12 @@ export default function AddCropModal({
   // Live calculations
   const selectedCrop = (crops.data ?? []).find((c) => c.slug === crop);
   const defaultPerPlant = selectedCrop?.defaultAreaPerPlantM2 ?? 0.5;
-  const rCm = Number(rowCm);
-  const pCm = Number(plantCm);
+  // a tree crop is spaced in metres, a bed crop in centimetres; the plan always gets centimetres
+  const perennial = Boolean(selectedCrop?.perennial);
+  const noun = perennial ? "Trees" : "Plants";
+  const toCm = perennial ? 100 : 1;
+  const rCm = Number(rowCm) * toCm;
+  const pCm = Number(plantCm) * toCm;
   const areaPerPlant = rCm > 0 && pCm > 0 ? (rCm * pCm) / 10000 : defaultPerPlant;
   const plantCountNum = Number(plants) || 0;
   const projectedArea = plantCountNum > 0 ? plantCountNum * areaPerPlant : 0;
@@ -121,22 +132,33 @@ export default function AddCropModal({
   const round1 = (v: number) => Math.round(v * 10) / 10;
   const kgLow = setup ? round1(plantCountNum * setup.kgPerPlant[0]) : 0;
   const kgHigh = setup ? round1(plantCountNum * setup.kgPerPlant[1]) : 0;
-  const outsideDensity = setup && density > 0 && (density < setup.density[0] - 0.05 || density > setup.density[1] + 0.05);
+  const densityRoom = setup ? setup.density[1] * 0.02 : 0;
+  const outsideDensity = setup && density > 0 && (density < setup.density[0] - densityRoom || density > setup.density[1] + densityRoom);
+  const showDensity = (d: number) => (perennial ? `${Math.round(d * 10000).toLocaleString()} / ha` : `${d.toFixed(1)} / m²`);
+
+  // when the picking falls, from the cycle's start date
+  const addDays = (s: string, n: number) => { const d = new Date(`${s}T00:00:00`); d.setDate(d.getDate() + n); return d; };
+  const harvest = selectedCrop?.harvestDays ? [addDays(plantedOn, selectedCrop.harvestDays[0] - 1), addDays(plantedOn, selectedCrop.harvestDays[1] - 1)] : null;
+  // judged by the middle of the picking: a few days into May is not a rainy-season crop
+  const harvestMid = harvest ? new Date((harvest[0].getTime() + harvest[1].getTime()) / 2) : null;
+  const rainyHarvest = Boolean(harvestMid && selectedCrop?.rainyMonths?.includes(harvestMid.getMonth() + 1));
+  const shortDate = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
   function pickSetup(id: string) {
     setSetupId(id);
     const s = setupList.find((x) => x.id === id);
     if (!s) return;
-    setRowCm(String(s.rowCm));                          // the setup's own spacing
-    setPlantCm(String(s.plantCm));
+    setRowCm(String(s.rowCm / toCm));                   // the setup's own spacing
+    setPlantCm(String(s.plantCm / toCm));
     if (s.plantsForArea) setPlants(String(s.plantsForArea));   // a bed of known size takes this many
+    if (s.orchard) setPrice(String(s.orchard.priceUsd[0]));    // the document's price for this setup
   }
 
   async function submit(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const n = Number(plants);
     if (!Number.isInteger(n) || n < 1) {
-      setError("Please enter a valid positive plant count.");
+      setError(`Please enter a valid number of ${noun.toLowerCase()}.`);
       return;
     }
     setLoading(true);
@@ -147,8 +169,8 @@ export default function AddCropModal({
         plants: n,
         plantedOn,
         efficiency: activeMethod.efficiency,
-        rowCm: Number(rowCm) || undefined,
-        plantCm: Number(plantCm) || undefined,
+        rowCm: rCm || undefined,
+        plantCm: pCm || undefined,
       });
 
       let zone = bedChoice;
@@ -171,6 +193,7 @@ export default function AddCropModal({
         variety: variety.trim() || undefined,
         setup: setupId || undefined,
         expectedPriceUsdPerKg: setupId && priceNum > 0 ? priceNum : undefined,
+        ...(perennial ? { treesPlantedOn: treesPlanted, regulation } : {}),
       });
 
       setResult({ zone, bedLabel, plan, cycle });
@@ -234,7 +257,7 @@ export default function AddCropModal({
                     </span>
                   </div>
                   <div className="erp-receipt-row">
-                    <span className="label">Plants</span>
+                    <span className="label">{noun}</span>
                     <span className="val">{result.plan.plants.toLocaleString()}</span>
                   </div>
                   {result.cycle.forecast && (
@@ -254,7 +277,7 @@ export default function AddCropModal({
                     <span className="val">{num(result.plan.areaM2, 1)} m²</span>
                   </div>
                   <div className="erp-receipt-row">
-                    <span className="label">Planted</span>
+                    <span className="label">{perennial ? "Cycle starts" : "Planted"}</span>
                     <span className="val">{result.plan.plantedOn}</span>
                   </div>
                   <div className="erp-receipt-row">
@@ -300,14 +323,14 @@ export default function AddCropModal({
                 </button>
                 <Link
                   className="btn btn-sm"
-                  to={`/plan?${new URLSearchParams({
-                    crop: result.plan.crop,
+                  to={result.cycle.perennial ? `/cycles/${result.cycle.id}/orchard` : `/plan?${new URLSearchParams({
+                    crop: result.plan.slug,
                     plants: String(result.plan.plants),
                     date: result.plan.plantedOn,
                   })}`}
                 >
                   <Droplets size={15} aria-hidden />
-                  Water Plan
+                  {result.cycle.perennial ? "Open this cycle" : "Water Plan"}
                 </Link>
               </div>
             </div>
@@ -359,7 +382,7 @@ export default function AddCropModal({
                       type="text"
                       className="erp-input"
                       value={variety}
-                      placeholder="e.g. Roma VF"
+                      placeholder={perennial ? "e.g. Kimju" : "e.g. Roma VF"}
                       maxLength={80}
                       onChange={(e) => setVariety(e.target.value)}
                       disabled={loading}
@@ -459,10 +482,11 @@ export default function AddCropModal({
                               onChange={(e) => pickSetup(e.target.value)} disabled={loading}>
                         <option value="">Not chosen: set spacing myself</option>
                         {setupList.map((s) => (
-                          <option key={s.id} value={s.id}>{s.label} · {s.density[0]}–{s.density[1]}/m²</option>
+                          <option key={s.id} value={s.id}>{s.orchard ? s.label : `${s.label} · ${s.density[0]}–${s.density[1]}/m²`}</option>
                         ))}
                       </select>
                       {setup?.method && <span className="erp-hint">{setup.method}</span>}
+                      {setup?.orchard && <span className="erp-hint">{setup.orchard.cultivars}. First harvest {setup.orchard.firstBearing.toLowerCase()}.</span>}
                     </div>
                     <div className="erp-field">
                       <label className="erp-label" htmlFor="price-input">Expected price</label>
@@ -477,16 +501,20 @@ export default function AddCropModal({
                   {setup && plantCountNum > 0 && (
                     <div className="erp-summary-banner erp-forecast" aria-label="Expected harvest">
                       <div className="erp-summary-item">
-                        <span className="k">Expected harvest</span>
+                        <span className="k">Expected harvest{perennial ? " a year" : ""}</span>
                         <span className="v">{num(kgLow, 0)}–{num(kgHigh, 0)} kg</span>
                       </div>
                       <div className="erp-summary-item">
-                        <span className="k">Per plant</span>
+                        <span className="k">Per {perennial ? "tree" : "plant"}</span>
                         <span className="v">{setup.kgPerPlant[0]}–{setup.kgPerPlant[1]} kg</span>
                       </div>
                       <div className="erp-summary-item">
                         <span className="k">Setup density</span>
-                        <span className="v">{setup.density[0]}–{setup.density[1]} / m²</span>
+                        <span className="v">{perennial
+                          ? (setup.density[0] === setup.density[1]
+                              ? showDensity(setup.density[0])
+                              : `${Math.round(setup.density[0] * 10000).toLocaleString()}–${Math.round(setup.density[1] * 10000).toLocaleString()} / ha`)
+                          : `${setup.density[0]}–${setup.density[1]} / m²`}</span>
                       </div>
                       <div className="erp-summary-item">
                         <span className="k">Revenue</span>
@@ -494,12 +522,18 @@ export default function AddCropModal({
                       </div>
                     </div>
                   )}
+                  {setup?.orchard?.docIssue && (
+                    <div className="erp-flag">
+                      <TriangleAlert size={14} aria-hidden />
+                      <span><b>To settle:</b> {setup.orchard.docIssue}</span>
+                    </div>
+                  )}
                   {setup && outsideDensity && (
                     <div className="erp-flag">
                       <TriangleAlert size={14} aria-hidden />
                       <span>
-                        {density.toFixed(1)} plants/m² is {density < setup.density[0] ? "below" : "above"} this setup's
-                        {" "}{setup.density[0]}–{setup.density[1]}. The yield figures may not hold.
+                        {showDensity(density)} is {density < setup.density[0] ? "below" : "above"} this setup's
+                        {" "}{showDensity(setup.density[0])} to {showDensity(setup.density[1])}. The yield figures may not hold.
                       </span>
                     </div>
                   )}
@@ -515,7 +549,7 @@ export default function AddCropModal({
                 <div className="erp-grid-2">
                   <div className="erp-field">
                     <label className="erp-label" htmlFor="plant-count">
-                      Plants <span className="req">*</span>
+                      {noun} <span className="req">*</span>
                     </label>
                     <div className="erp-input-group">
                       <input
@@ -532,14 +566,14 @@ export default function AddCropModal({
                         disabled={loading}
                         placeholder="100"
                       />
-                      <span className="erp-input-addon">plants</span>
+                      <span className="erp-input-addon">{noun.toLowerCase()}</span>
                     </div>
                   </div>
 
                   <div className="erp-field">
                     <div className="erp-label-row">
                       <label className="erp-label" htmlFor="planting-date">
-                        Planting Date <span className="req">*</span>
+                        {perennial ? "This Cycle Starts" : "Planting Date"} <span className="req">*</span>
                       </label>
                       <div className="erp-quick-actions">
                         <button
@@ -573,6 +607,38 @@ export default function AddCropModal({
                   </div>
                 </div>
               </div>
+
+              {/* A tree outlives its cycle: its age and how the cycle is started are separate questions */}
+              {perennial && selectedCrop?.regulationMethods && (
+                <div className="erp-section">
+                  <div className="erp-section-header">
+                    <span className="erp-section-title">Orchard</span>
+                  </div>
+                  <div className="erp-grid-2">
+                    <div className="erp-field">
+                      <label className="erp-label" htmlFor="trees-planted">Trees Planted</label>
+                      <input id="trees-planted" type="date" className="erp-input" value={treesPlanted}
+                             onChange={(e) => setTreesPlanted(e.target.value)} disabled={loading} />
+                    </div>
+                    <div className="erp-field">
+                      <label className="erp-label" htmlFor="regulation">How This Cycle Starts</label>
+                      <select id="regulation" className="erp-select" value={regulation} onChange={(e) => setRegulation(e.target.value)} disabled={loading}>
+                        {selectedCrop.regulationMethods.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </select>
+                      <span className="erp-hint">{selectedCrop.regulationMethods.find((m) => m.id === regulation)?.note}</span>
+                    </div>
+                  </div>
+                  {harvest && (
+                    <p className="erp-hint" style={{ marginTop: 8 }}>Harvest about {shortDate(harvest[0])} to {shortDate(harvest[1])}.</p>
+                  )}
+                  {rainyHarvest && (
+                    <div className="erp-flag">
+                      <TriangleAlert size={14} aria-hidden />
+                      <span>This harvest falls in the rainy months: expect watery fruit, lower sugar and more fruit flies.</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Section 3: Irrigation & Spacing */}
               <div className="erp-section">
@@ -611,14 +677,15 @@ export default function AddCropModal({
                         id="row-spacing"
                         type="number"
                         className="erp-input"
-                        min={10}
-                        max={500}
-                        placeholder="50"
+                        min={perennial ? 0.5 : 10}
+                        max={perennial ? 20 : 500}
+                        step="any"
+                        placeholder={perennial ? "3" : "50"}
                         value={rowCm}
                         onChange={(e) => setRowCm(e.target.value)}
                         disabled={loading}
                       />
-                      <span className="erp-input-addon">cm</span>
+                      <span className="erp-input-addon">{perennial ? "m" : "cm"}</span>
                     </div>
                   </div>
 
@@ -631,14 +698,15 @@ export default function AddCropModal({
                         id="plant-spacing"
                         type="number"
                         className="erp-input"
-                        min={5}
-                        max={500}
-                        placeholder="70"
+                        min={perennial ? 0.3 : 5}
+                        max={perennial ? 20 : 500}
+                        step="any"
+                        placeholder={perennial ? "3.5" : "70"}
                         value={plantCm}
                         onChange={(e) => setPlantCm(e.target.value)}
                         disabled={loading}
                       />
-                      <span className="erp-input-addon">cm</span>
+                      <span className="erp-input-addon">{perennial ? "m" : "cm"}</span>
                     </div>
                   </div>
                 </div>
@@ -647,7 +715,7 @@ export default function AddCropModal({
               {/* Projection Ribbon */}
               <div className="erp-summary-banner">
                 <div className="erp-summary-item">
-                  <span className="k">Plants</span>
+                  <span className="k">{noun}</span>
                   <span className="v">
                     {plantCountNum > 0 ? `${plantCountNum.toLocaleString()}` : "0"}
                   </span>
@@ -661,7 +729,7 @@ export default function AddCropModal({
                 <div className="erp-summary-item">
                   <span className="k">Density</span>
                   <span className="v">
-                    {density > 0 ? `${density.toFixed(1)} / m²` : "—"}
+                    {density > 0 ? showDensity(density) : "—"}
                   </span>
                 </div>
                 <div className="erp-summary-item">

@@ -84,7 +84,10 @@ export default function EnvRibbon({ bed }: { bed: BedConditions }) {
       {bed.alerts.length > 0 && (
         <ul className="rb-alerts">
           {bed.alerts.map((a) => (
-            <li key={a.id}><CircleAlert size={14} aria-hidden /><span><b>{a.title}</b><br />{a.message}</span></li>
+            <li key={a.id} className={a.severity === "warning" ? "rb-alert-warn" : undefined}>
+              {a.severity === "warning" ? <TriangleAlert size={14} aria-hidden /> : <CircleAlert size={14} aria-hidden />}
+              <span><b>{a.title}</b><br />{a.message}</span>
+            </li>
           ))}
         </ul>
       )}

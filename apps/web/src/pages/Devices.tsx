@@ -1,5 +1,5 @@
 import { Notice, PageIntro, Panel, Led } from "../components/ui";
-import { api, type DeviceRow } from "../lib/api";
+import { api, loadProblem, type DeviceRow } from "../lib/api";
 import { ago, usePoll } from "../lib/usePoll";
 
 const STATUS: Record<DeviceRow["status"], ["ok" | "warn" | "alert" | "idle", string]> = {
@@ -17,7 +17,7 @@ export default function Devices() {
       <PageIntro>The sensors and the rover on your farm, and when each last reported.</PageIntro>
 
       <main className="main">
-        {error && <Notice kind="alert">Cannot reach the farm server ({error}).</Notice>}
+        {error && <Notice kind="alert">{loadProblem(error)}</Notice>}
         <Panel title="Devices" pad={false}>
           <table className="tbl">
             <thead>

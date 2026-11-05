@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,6 +30,19 @@ app = FastAPI(
     description="Smart irrigation, water treatment and crop monitoring for a small vegetable plot.",
     lifespan=lifespan,
 )
+
+
+# Runs inside CORS (middleware added later wraps middleware added earlier). Without this a crash in a route
+# leaves as a bare 500 with no CORS header, which a browser reports as "Failed to fetch": the screen then says
+# the server cannot be reached when it is up and failing.
+@app.middleware("http")
+async def _server_errors(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception:                                    # noqa: BLE001: the last line of defence
+        logging.getLogger("api").exception("%s %s failed", request.method, request.url.path)
+        return JSONResponse({"detail": "the farm server had an error; see its log"}, status_code=500)
+
 
 app.add_middleware(
     CORSMiddleware,

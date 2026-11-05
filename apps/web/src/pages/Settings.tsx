@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Sprout, X } from "lucide-react";
 import { Field, Notice, PageIntro, Panel, Tag } from "../components/ui";
 import NewCropForm from "../components/NewCropForm";
-import { api, type Settings as SettingsT } from "../lib/api";
+import { api, type Settings as SettingsT, loadProblem } from "../lib/api";
 import { useData } from "../lib/useData";
 
 const FIELDS: { key: keyof SettingsT; label: string; hint: string }[] = [
@@ -43,7 +43,7 @@ export default function Settings() {
     <>
       <PageIntro>Numbers the whole farm uses. Leave a number empty if you do not know it; the app will say what is missing.</PageIntro>
       <main className="main stack">
-        {error && <Notice kind="alert">Cannot reach the farm server ({error}).</Notice>}
+        {error && <Notice kind="alert">{loadProblem(error)}</Notice>}
         {data && !data.rateConfirmed && (
           <Notice kind="warn">
             The exchange rate ({data.khrPerUsd.toLocaleString()} riel per dollar) is a placeholder. Check today's rate

@@ -13,6 +13,7 @@ import Dashboard from "./pages/Dashboard";
 import Devices from "./pages/Devices";
 import Equipment from "./pages/Equipment";
 import Harvest from "./pages/Harvest";
+import OrchardCycle from "./pages/OrchardCycle";
 import Plan from "./pages/Plan";
 import Settings from "./pages/Settings";
 import Stock from "./pages/Stock";
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/plan" element={<Plan />} />
         <Route path="/cycles" element={<Cycles />} />
         <Route path="/cycles/:id" element={<CycleCop />} />
+        <Route path="/cycles/:id/orchard" element={<OrchardCycle />} />
         <Route path="/costs" element={money(<Costs />)} />
         <Route path="/stock" element={money(<Stock />)} />
         <Route path="/equipment" element={money(<Equipment />)} />

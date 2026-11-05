@@ -16,7 +16,7 @@ const NOTHING: Record<Correlation["verdict"], string> = {
   no_data: "This bed has sent no reading in the last 30 minutes. Check that its field node is online on the Devices tab.",
 };
 
-const BASIS = { spec: "Farm rule", practice: "Standard practice" } as const;
+const BASIS = { spec: "Farm rule", practice: "Standard practice", guava_doc: "Guava document, not checked" } as const;
 
 const seen = (s: number | null) => (s === null ? "" : ago(new Date(Date.now() - s * 1000).toISOString()));
 
@@ -53,6 +53,8 @@ export default function CorrelationCard({ c }: { c: Correlation }) {
         {c.label ?? c.zone}{c.stage ? ` · day ${c.stage.day} · ${c.stage.title}` : " · no crop planted"}
         {" · "}{c.source === "photo" ? "symptom from your photo" : "symptom you chose"}
       </div>
+
+      {c.looksLike && <p className="small"><b>What to look for:</b> {c.looksLike}</p>}
 
       <table className="ev">
         <tbody>{c.evidence.map((e) => <Row key={e.metric} e={e} />)}</tbody>

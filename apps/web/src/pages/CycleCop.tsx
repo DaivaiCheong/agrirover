@@ -13,7 +13,7 @@ export default function CycleCop() {
   return (
     <>
       <PageHead icon={Calculator} title={c ? c.bedLabel : "Cost report"}
-                sub={c ? `${c.cropName} · planted ${c.plantedOn}${c.status === "closed" ? `, closed ${c.endedOn}` : `, day ${c.day}`}` : undefined}
+                sub={c ? `${c.cropName} · ${c.perennial ? "cycle started" : "planted"} ${c.plantedOn}${c.status === "closed" ? `, closed ${c.endedOn}` : `, day ${c.day}`}` : undefined}
                 actions={<>
                   <Link className="btn btn-ghost btn-sm" to="/cop"><ChevronLeft size={16} aria-hidden />All crops</Link>
                   <Link className="btn btn-ghost btn-sm" to="/costs">Add a cost</Link>
@@ -40,7 +40,7 @@ export default function CycleCop() {
 
             {c?.forecast && (
               <Panel title="Expected harvest" icon={Wheat} pad={false}
-                     right={<span className="small muted">{c.setupLabel} · {c.forecast.plants.toLocaleString()} plants</span>}>
+                     right={<span className="small muted">{c.setupLabel} · {c.forecast.plants.toLocaleString()} {c.perennial ? "trees" : "plants"}{c.perennial ? " · per year" : ""}</span>}>
                 <div className="tablewrap">
                   <table className="tbl">
                     <thead>
@@ -104,7 +104,10 @@ export default function CycleCop() {
               <div className="stack">
                 <Panel title="Per unit">
                   <table className="tbl"><tbody>
-                    <tr><td>Cost per plant</td><td className="r"><b>{cop.costPerPlant === null ? "—" : usd(cop.costPerPlant, 3)}</b></td></tr>
+                    <tr><td>Cost per {c?.perennial ? "tree" : "plant"}</td><td className="r"><b>{cop.costPerPlant === null ? "—" : usd(cop.costPerPlant, 3)}</b></td></tr>
+                    {c?.perennial && (
+                      <tr><td>Labour share of cost</td><td className="r"><b>{num(cop.lines.filter((l) => l.category.startsWith("labour")).reduce((s, l) => s + l.sharePct, 0), 0)} %</b></td></tr>
+                    )}
                     <tr><td>Cost per m²</td><td className="r"><b>{cop.costPerM2 === null ? "—" : usd(cop.costPerM2, 3)}</b></td></tr>
                     <tr><td>Water used (planner estimate)</td><td className="r"><b>{cop.waterM3 === null ? "—" : `${num(cop.waterM3, 2)} m³`}</b></td></tr>
                     <tr><td>Kg per m³ of water</td><td className="r"><b>{cop.kgPerM3Water === null ? "—" : num(cop.kgPerM3Water, 1)}</b></td></tr>

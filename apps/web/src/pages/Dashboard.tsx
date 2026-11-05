@@ -2,8 +2,9 @@ import { useState } from "react";
 import { ArrowRight, Cloud, CloudRain, Droplets, Gauge, Plus, Sprout, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 import EnvRibbon from "../components/EnvRibbon";
+import { OrchardJobs, StageStrip } from "../components/Orchard";
 import { Empty, Field, Led, Notice, PageHead, Panel, Tag } from "../components/ui";
-import { api, type BedConditions, type Cycle, type ZoneDecision, type ZoneNow } from "../lib/api";
+import { api, loadProblem, type BedConditions, type Cycle, type ZoneDecision, type ZoneNow } from "../lib/api";
 import { trim } from "../lib/conditions";
 import { dayMonthYear, litres, longToday, suggestedArea } from "../lib/format";
 import { useData } from "../lib/useData";
@@ -44,8 +45,19 @@ function CropCard({ c, areaPerPlant, cond, decision, onChanged }:
     catch (err) { setSaveError((err as Error).message); }
   }
 
+  // a tree crop: stage strip, jobs that can be ticked off, and a pause on purpose during stress
+  const orchard = useData(() => (c.perennial ? api.orchardCycle(c.id) : Promise.resolve(null)), [c.id]);
+  const o = orchard.data;
+  const trees = Boolean(c.perennial);
+  const stress = Boolean(o && c.perennial?.stress && o.stage.n === 1);
+  const jobsNow = o?.jobs.filter((j) => j.state === "due" || j.state === "overdue") ?? [];
+  const jobNext = o?.jobs.find((j) => j.state === "later");
+  const shownBed = o?.conditions ?? cond;
+  async function jobDone(job: string) { await api.orchardJobDone(c.id, job); orchard.reload(); }
+  async function fruit(mm: number) { await api.orchardFruitSize(c.id, mm); orchard.reload(); }
+
   const now = plan?.now.state === "growing" ? plan.now : null;
-  const planLink = `/plan?${new URLSearchParams({ crop: c.crop, plants: String(c.plantCount ?? ""), date: c.plantedOn })}`;
+  const planLink = trees ? `/cycles/${c.id}/orchard` : `/plan?${new URLSearchParams({ crop: c.crop, plants: String(c.plantCount ?? ""), date: c.plantedOn })}`;
 
   return (
     <section className="panel panel-pad cropcard">
@@ -55,20 +67,26 @@ function CropCard({ c, areaPerPlant, cond, decision, onChanged }:
           <div className="cc-title">{c.bedLabel}</div>
           <div className="small muted">
             {c.cropName}{c.variety ? ` (${c.variety})` : ""} · {c.day !== null && c.day > 0 ? `day ${c.day}${plan ? ` of ${plan.cycleDays}` : ""}` : `planting ${dayMonthYear(c.plantedOn)}`}
-            {c.plantCount ? ` · ${c.plantCount.toLocaleString()} plants` : ""}
+            {c.plantCount ? ` · ${c.plantCount.toLocaleString()} ${trees ? "trees" : "plants"}` : ""}
           </div>
         </div>
-        {now?.stageTitle && <span style={{ marginLeft: "auto" }}><Tag kind="ok">{now.stageTitle}</Tag></span>}
+        {now?.stageTitle && !trees && <span style={{ marginLeft: "auto" }}><Tag kind="ok">{now.stageTitle}</Tag></span>}
       </div>
 
-      {plan && (
+      {o && <StageStrip stages={o.stages} day={o.day} />}
+
+      {plan && !trees && (
         <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={plan.cycleDays} aria-valuenow={Math.max(0, c.day ?? 0)}
              aria-label="How far through the crop">
           <i style={{ width: `${Math.min(100, (Math.max(0, c.day ?? 0) / plan.cycleDays) * 100)}%` }} />
         </div>
       )}
 
-      {cond && <EnvRibbon bed={cond} />}
+      {shownBed && <EnvRibbon bed={shownBed} />}
+
+      {stress && o && (
+        <Notice kind="info"><b>Watering is paused on purpose.</b> Dry soil is the goal until day {o.stage.lastDay}, then two priming irrigations start the flush.</Notice>
+      )}
 
       {c.trialArm === "guided" && decision && (
         <div className="rowflex small" style={{ gap: 8 }}>
@@ -84,7 +102,28 @@ function CropCard({ c, areaPerPlant, cond, decision, onChanged }:
         </div>
       )}
 
-      {now ? (
+      {trees && o ? (
+        <>
+          {!stress && now && (
+            <div className="cc-water">
+              <Droplets size={26} aria-hidden style={{ color: "var(--water)", alignSelf: "center" }} />
+              <span className="big">{litres(now.litersToday)}</span>
+              <span className="muted">of water today · {now.litersPerPlant.toFixed(1)} L a tree · about {o.water.hoursPerRun} h of drip</span>
+            </div>
+          )}
+          {!stress && now && <p className="small muted">A planning amount. If the soil is already at its target, skip.</p>}
+          {jobsNow.length > 0 && (
+            <div>
+              <div className="lbl lbl-ink" style={{ marginBottom: 6 }}>Jobs for now</div>
+              <OrchardJobs jobs={jobsNow} fruitMm={o.fruitMm} onDone={jobDone} onFruit={fruit} />
+            </div>
+          )}
+          {jobNext && (
+            <p className="small muted"><ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px" }} />{" "}
+              On day {jobNext.firstDay}: {jobNext.title.toLowerCase()}</p>
+          )}
+        </>
+      ) : now ? (
         <>
           <div>
             <div className="cc-water">
@@ -138,7 +177,7 @@ function CropCard({ c, areaPerPlant, cond, decision, onChanged }:
         <Notice kind="alert">{error}</Notice>
       ) : loading ? <p className="muted">Working out today's water…</p> : null}
 
-      {c.plantCount && <div><Link className="linkbtn" to={planLink}>See the full plan <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px" }} /></Link></div>}
+      {c.plantCount && <div><Link className="linkbtn" to={planLink}>{trees ? "Open this cycle" : "See the full plan"} <ArrowRight size={14} aria-hidden style={{ verticalAlign: "-2px" }} /></Link></div>}
     </section>
   );
 }
@@ -159,7 +198,7 @@ export default function Dashboard() {
       <PageHead icon={Sun} title="Today" sub={longToday()}
                 actions={<Link className="btn" to="/cycles?add=true"><Plus size={18} aria-hidden />Add crop</Link>} />
       <main className="main stack">
-        {error && <Notice kind="alert">Cannot reach the farm server ({error}). Showing the last data received, if any.</Notice>}
+        {error && <Notice kind="alert">{loadProblem(error)} Showing the last data received, if any.</Notice>}
 
         {cycles.data !== null && active.length === 0 && (
           <Panel><Empty icon={Sprout}>

@@ -136,3 +136,22 @@ def test_registry_and_zone_readings_come_from_stored_telemetry():
             await engine.dispose()
 
     asyncio.run(go())
+
+
+# ------------------------------------------------------------ server errors
+
+def test_a_crash_in_a_route_is_a_readable_500_with_cors_so_the_browser_can_show_it():
+    """A bare 500 has no CORS header; the browser then says "Failed to fetch", which reads as "server down"."""
+    async def broken_db():
+        raise RuntimeError("column planting.setup does not exist")
+        yield
+
+    app.dependency_overrides[get_db] = broken_db
+    try:
+        r = TestClient(app).get("/api/v1/cycles", headers={"Origin": "http://localhost:5173"})
+    finally:
+        app.dependency_overrides.clear()
+    assert r.status_code == 500
+    assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "farm server had an error" in r.json()["detail"]
+    assert "column" not in r.text                       # the detail stays in the log, not on the screen

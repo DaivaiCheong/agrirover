@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BRAND } from "../lib/brand";
+import { exitMock, mockOn } from "../lib/mockMode";
 import {
   Calculator, Camera, ChartColumn, Cpu, Leaf, MapPin, Package, Receipt, Scale, Settings, Sprout, Sun, Tractor, Wallet, Wheat,
   Wrench, type LucideIcon,
@@ -34,7 +35,7 @@ export type SectionKey = keyof typeof SECTIONS;
 /** Which of the five places a path belongs to. A crop's cost report belongs to Results. */
 export function sectionOf(path: string): SectionKey {
   if (path === "/") return "today";
-  if (/^\/cycles\/[^/]+/.test(path)) return "results";
+  if (/^\/cycles\/[^/]+$/.test(path)) return "results";
   if (path.startsWith("/cycles") || path.startsWith("/plan")) return "crops";
   for (const key of ["money", "results", "farm"] as const) {
     if (SECTIONS[key].tabs.some((t) => path === t.to || path.startsWith(`${t.to}/`))) return key;
@@ -62,7 +63,15 @@ export default function Shell({ children }: { children: ReactNode }) {
         </nav>
         <p className="side-foot">One farm. No login yet: anyone with this address can see and change the data.</p>
       </aside>
-      <div className="content">{children}</div>
+      <div className="content">
+        {mockOn && (
+          <div className="sample-bar" role="status">
+            <b>Sample data:</b> guava, nothing is saved, no sensors.
+            <button type="button" className="linkbtn" onClick={exitMock}>Exit</button>
+          </div>
+        )}
+        {children}
+      </div>
       <nav className="bottomnav" aria-label="Main">
         {items.map(([key, s]) => (
           <Link key={key} to={s.to} className={`bn${here === key ? " bn-on" : ""}`}

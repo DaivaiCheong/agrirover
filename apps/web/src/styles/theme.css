@@ -252,6 +252,7 @@ details.more > summary::-webkit-details-marker{display:none}
 .notice-info{background:var(--info-soft);border-color:#BFD3EC} .notice-info svg{color:var(--info)}
 .empty{display:grid;justify-items:center;gap:10px;padding:34px 16px;color:var(--ink-muted);font-size:15px;text-align:center}
 .empty svg{color:var(--ink-faint)}
+.empty-body{display:grid;justify-items:center;gap:10px}
 
 /* ---------- plan page and crop cards ---------- */
 .hero{background:linear-gradient(135deg,var(--brand) 0%,#3C9A63 100%);color:#fff;border-radius:var(--r);
@@ -703,3 +704,42 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .erp-flag{margin-top:8px;padding:7px 10px;border-radius:5px;background:var(--warn-soft);border:1px solid #EAD39B;
   font-size:12.5px;display:flex;gap:8px;align-items:flex-start}
 .erp-flag svg{color:var(--warn);flex:0 0 14px;margin-top:2px}
+
+/* ============================================================================
+   Tree crops: the sample-data banner, the stage strip, jobs that can be ticked off, the fertigation run.
+   ========================================================================== */
+.sample-bar{position:sticky;top:0;z-index:30;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;
+  padding:7px 16px;background:var(--warn-soft);border-bottom:1px solid #EAD39B;font-size:13.5px}
+.rb-alerts li.rb-alert-warn{background:var(--warn-soft);border-top-color:#EAD39B}
+.rb-alerts li.rb-alert-warn svg{color:var(--warn)}
+
+.stagestrip{position:relative;display:flex;gap:2px;padding-top:8px}
+.ss-seg{flex:1 1 0;min-width:0;height:28px;display:grid;place-items:center;font-size:11.5px;font-weight:600;border-radius:4px;
+  overflow:hidden;white-space:nowrap;background:var(--surface-sunk);color:var(--ink-muted)}
+.ss-past{background:var(--brand-soft);color:var(--brand-deep)}
+.ss-on{background:var(--brand);color:#fff}
+.ss-mark{position:absolute;top:0;margin-left:-6px;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--ink)}
+
+.jobs{list-style:none;display:grid}
+.job{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-top:1px solid var(--line)}
+.job:first-child{border-top:0}
+.job > svg{flex:0 0 18px;margin-top:2px;color:var(--ink-faint)}
+.job-due > svg{color:var(--brand)} .job-overdue > svg{color:var(--alert)} .job-done > svg{color:var(--ok)}
+.job-done .job-body,.job-later .job-body,.job-past .job-body{opacity:.65}
+.job-body{flex:1;min-width:0;display:grid;gap:3px}
+.job-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px}
+.job-btn{flex:0 0 auto}
+.job-measure{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.cropcard .jobs{border:1px solid var(--line);border-radius:8px}
+
+.grid > .ribbon{align-self:start}
+.walk{display:grid;gap:4px}
+.walk input[type=range]{width:100%;accent-color:var(--brand)}
+.walk .linkbtn{justify-self:start}
+.tabs.tabs-in{flex-wrap:wrap}
+.tanks{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.tank{border:1px solid var(--line-strong);border-radius:8px;padding:10px 12px;display:grid;gap:3px}
+.phases{display:flex;gap:2px;flex-wrap:wrap}
+.phase{flex:1 1 90px;padding:8px 10px;border-radius:4px;font-size:13px}
+.phase-water{background:var(--water-soft)}
+.phase-feed{background:var(--brand-soft)}

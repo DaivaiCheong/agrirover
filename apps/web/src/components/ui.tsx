@@ -74,5 +74,5 @@ export const Notice = ({ kind = "info", children }: { kind?: "info" | "ok" | "wa
 };
 
 export const Empty = ({ children, icon: Icon }: { children: ReactNode; icon?: LucideIcon }) => (
-  <div className="empty">{Icon && <Icon size={34} aria-hidden />}<p>{children}</p></div>
+  <div className="empty">{Icon && <Icon size={34} aria-hidden />}<div className="empty-body">{children}</div></div>
 );
