@@ -190,9 +190,12 @@ def growth(rounds: Sequence[dict], stage: Stage) -> dict | None:
 
 
 def todo(*, trees: Sequence[dict], water_litres: float, feed: dict, stage: Stage, stress: bool, raining: bool, alerts: Sequence[dict], hours: float,
-         firmware_limit_s: int) -> list[dict]:
-    """The day's plain instructions for this bed, most urgent first."""
+         firmware_limit_s: int, unseen: int = 0) -> list[dict]:
+    """The day's plain instructions for this bed, most urgent first. `unseen` trees were not reached by a round that stopped early."""
     out: list[dict] = []
+    if unseen:
+        out.append({"kind": "round", "severity": "warn", "text": f"Round stopped early: {unseen} trees not reached",
+                    "detail": "What follows covers only the trees it reached. Run the round again before acting on the rest."})
     for a in alerts:
         if a["severity"] == "critical":
             out.append({"kind": "alert", "severity": "critical", "text": a["title"], "detail": a["message"]})
@@ -208,6 +211,8 @@ def todo(*, trees: Sequence[dict], water_litres: float, feed: dict, stage: Stage
         names = ", ".join(_cell(t) for t in wet[:6]) + (f" and {len(wet) - 6} more" if len(wet) > 6 else "")
         out.append({"kind": "water", "severity": "info", "text": f"Water {len(wet)} of {len(living)} trees: {water_litres:.0f} L",
                     "detail": f"{names}. About {hours:g} h of drip at most." + (f" The field node stops a run at {firmware_limit_s} s." if hours > 0 else "")})
+    elif unseen:
+        out.append({"kind": "water", "severity": "info", "text": "No water for the trees it reached", "detail": None})
     else:
         out.append({"kind": "water", "severity": "info", "text": "No water today: soil is in the upper half of its target", "detail": None})
     verb = {"feed": "Feed today", "hold": "Hold the feed", "flush": "Flush, do not feed"}.get(feed["action"])

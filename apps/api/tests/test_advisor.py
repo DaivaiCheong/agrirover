@@ -179,6 +179,13 @@ class TestTodo:
         assert [t["text"] for t in look] == ["Look at 2 trees with yellow leaves"]
         assert look[0]["detail"] == "R1 T1, R1 T2"
 
+    def test_a_round_that_stopped_early_says_so_first_and_does_not_claim_the_block_is_fine(self):
+        trees = advise_trees(ctx(), [tree(0, 72)])
+        out = self.base(trees=trees, water_litres=0.0, unseen=9)
+        assert out[0]["text"] == "Round stopped early: 9 trees not reached"
+        assert any(t["text"] == "No water for the trees it reached" for t in out)
+        assert not any("upper half" in t["text"] for t in out)
+
     def test_stress_and_rain_say_why_there_is_no_water(self):
         assert "stress" in self.base(stress=True, stage=STRESS)[0]["text"]
         assert "raining" in self.base(raining=True)[0]["text"]

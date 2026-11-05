@@ -71,7 +71,8 @@ def advise_bed(snap: BedSnapshot, today: date, efficiency: float, raining: bool,
                   "paused": ctx.stress and ctx.stage.n == 1, "et0": ctx.et0},
         "feed": feed, "trees": rows,
         "todo": advisor.todo(trees=rows, water_litres=given, feed=feed, stage=ctx.stage, stress=ctx.stress, raining=raining,
-                             alerts=assessment["alerts"], hours=hours, firmware_limit_s=guava.FIRMWARE_LIMIT_S) if surveyed else [],
+                             alerts=assessment["alerts"], hours=hours, firmware_limit_s=guava.FIRMWARE_LIMIT_S,
+                             unseen=max(0, (p.plant_count or 0) - len(trees)) if mission and mission.status != "completed" else 0) if surveyed else [],
         "source": advisor.SOURCE,
     }
 
