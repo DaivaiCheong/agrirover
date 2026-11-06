@@ -10,21 +10,23 @@ Photos: `farm-photos\demo\` (1-healthy-leaf, 2-yellow-leaf, 3-mealybug). They co
 2. **Wi-Fi works.** The photo check uses Ollama's online service. Check one photo once to warm it up (the first can take 20-30 s).
 3. **Fresh rounds:** Today's first figure should read **"Rover today: 5 of 5 blocks"**. If not, open Rover and run a round on each missing block (tick the three checks, Start round, about 30 s each).
 4. Close other tabs. Browser zoom 110-125 % so the back row can read it.
-5. Open these tabs in order: **Today**, **Rover**, **Health**, **Finance**.
+5. Open these tabs in order: **Today**, **Health**, **Rover**, **Finance**. On Health, check the 3D farm shows and you can turn it.
 
 ## The 5 minutes
 
 | Time | Screen | Do | Say |
 |---|---|---|---|
-| 0:00 | **Today** | Point at the four figures, then the first rows of "What to do today" | "Guava farmers decide water and feed by feel. Too little water at bloom drops the flowers; feeding blind wastes money or starves the tree. This is the farmer's morning: what to do, block by block, worked out from this morning's rover round." |
-| 0:45 | **Rover** › Daily round | Point at Found today, then the block map. Choose **G2 Commercial block**. | "The rover stops at every tree, pushes a probe into the soil, and reads moisture, EC and pH. Each square is a tree. The **!** marks a tree with yellow leaves." |
-| 1:30 | Rover map | Tap the tree with **!**: **R2 T1** (second row from the bottom, first tree) | "This is R2 T1. The rover can't take photos yet, so for now the farmer is the camera." |
-| 2:00 | At this tree | **Photo of R2 T1** → choose `2-yellow-leaf.jpg` → **Check photo** (wait about 10 s) | "The AI reads the photo: yellow between the veins, **feed or soil, not a disease**. Then the important part: **this tree's soil**. Its EC is low, so it's likely hungry. Feed on schedule and take a leaf test. No fungicide. A wrong spray costs money and does nothing." |
-| 3:00 | At this tree | **Save to R2 T1**. Point at the dark dot on the map | "Saved with the tree's readings, so an expert can confirm it, and every confirmed photo trains a better model for our own farms." |
-| 3:20 | **Health** › Disease guide | Scroll once | "The AI only answers from this guide, built from published sources. It never invents a spray dose." |
+| 0:00 | **Today** | Point at the four figures, then the first rows of "What to do today" | "Guava farmers decide water and feed by feel. Too little water at bloom drops the flowers; feeding blind wastes money or starves the tree. This is the farmer's morning: what to do, block by block, from this morning's rover round." |
+| 0:40 | **Health** | The whole farm in 3D. Drag once to turn it. Point at the orange **!** marks and the list "To look at 4" | "This is the farm. The rover visited every tree this morning. Four trees have yellow leaves worth a closer look. They're marked, so nobody walks every row to find them." |
+| 1:20 | Health, 3D | Click the **!** on **G2 Commercial block · R2 T1** (or the first line of the list). The camera flies to G2 | "R2 T1. Under it, the rover read EC 0.68 against a target of 1.2 to 1.8: the arrow says low." |
+| 1:45 | Tree panel | **Photo of R2 T1** → `2-yellow-leaf.jpg` → **Check photo** (about 5 s) | "The rover can't take photos yet, so the farmer is the camera. The AI reads the leaf: **feed or soil, not a disease**. And **this tree's soil** agrees: likely low feed. Feed on schedule and take a leaf test. No fungicide: a wrong spray costs money and does nothing." |
+| 2:40 | Tree panel | **Save to R2 T1**. The dark dot appears on the tree in 3D | "Saved with the tree's readings, so an expert can confirm it. Every confirmed photo trains a better model for our farms." |
+| 3:00 | **Rover** | In Today's round choose **G5 Harvest block**, tick the three checks, **Start round**. Talk while it drives (about 30 s) | "This is the rover's software running a round: tree by tree, probe in the soil, in the right order. The hardware is being built around this same code." |
 | 3:45 | **Finance** | Point at the four figures, then By block | "And the farmer sees where the money goes, block by block. These are sample figures." |
 | 4:15 | **Rover** › What it does | Point down the Status column | "We're honest about where we are: the software and the advice work today, in simulation. Next is the chassis and probe arm, then a two-week hand-carried probe round to prove trees really differ." |
 | 4:45 | | Close | "One rover, every tree, every day, and the farmer knows what to do." |
+
+**3D controls:** drag to turn, scroll to zoom, the chips at the top jump to a block or back to the whole farm. On Rover, **Map** switches to the flat map if the 3D ever misbehaves.
 
 ## If they ask
 
@@ -42,5 +44,6 @@ Photos: `farm-photos\demo\` (1-healthy-leaf, 2-yellow-leaf, 3-mealybug). They co
 |---|---|
 | Photo check fails or hangs | No internet: say "it uses an online model; here's a saved answer" and open **Health › Photo library**, or switch to Today and carry on. |
 | "Rover today" not 5 of 5 | Run the missing rounds before starting (step 3). The demo still works with one: G2 is what matters. |
-| R2 T1 has no **!** | Tap any tree with **!** in G2. The soil line still explains that tree. |
+| R2 T1 has no **!** | Click any tree in the "To look at" list. The soil line still explains that tree. |
+| 3D is blank or slow | Use the "To look at" list on Health (it does the same), and **Map** on Rover. |
 | App won't load | Docker Desktop, then `docker compose --profile sim up -d` in the project folder. |

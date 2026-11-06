@@ -3,10 +3,12 @@ import { Camera, CircleCheck, Circle, OctagonX, Play } from "lucide-react";
 import RoundSchedule from "../components/RoundSchedule";
 import RoverMap, { RoverLegend } from "../components/RoverMap";
 import { TreePhotoCheck } from "../components/TreePhoto";
+import Farm3D from "../components/Farm3D";
+import { photoKeys, roverBlock } from "../lib/farm3d";
 import { EF, Kpis, More, Notice, Panel, Tag, Toolbar } from "../components/ui";
 import { api, loadProblem, type Advice, type RoverCell } from "../lib/api";
 import { litres, todayIso } from "../lib/format";
-import { ROVER, STATUS_WORD, cellName, estimate, fullLitresOf, litresOf, minutes, roundPlan, stopInfo } from "../lib/rover";
+import { ROVER, STATUS_WORD, cellName, estimate, fullLitresOf, headingAt, litresOf, minutes, roundPlan, serpentine, stopInfo } from "../lib/rover";
 import { useData } from "../lib/useData";
 import { ago, usePoll } from "../lib/usePoll";
 
@@ -131,6 +133,7 @@ export default function Rover() {
   const [ticked, setTicked] = useState<boolean[]>(MANUAL.map(() => false));
   const [problem, setProblem] = useState<string | null>(null);
   const [picked, setPicked] = useState<[number, number] | null>(null);
+  const [view, setView] = useState<"3d" | "map">("3d");
 
   const beds = zones.data ?? [];
   const growing = (cycles.data ?? []).filter((c) => c.status === "active");
@@ -234,14 +237,37 @@ export default function Rover() {
 
         <div className="grid g32 rc-top">
           <div className="stack">
-            <Panel title={`Block map · ${beds.find((b) => b.zone === (m?.zoneId ?? bed))?.label ?? bed}`} pad={false}
-                   right={m ? <span className="small muted">Generated orchard{running ? ` · ${ROVER.simSpeedup}× real speed` : ""}</span>
-                     : last ? <span className="small muted">Last round {ago(last.finishedAt ?? last.startedAt)}{last.simulated ? " · simulated" : ""}</span> : undefined}>
-              <div className="rm-wrap">
-                <RoverMap rows={m?.rows ?? last?.rows ?? (sizeOk ? r : 4)} cols={m?.cols ?? last?.cols ?? (sizeOk ? c : 4)} cells={cells}
-                          at={m ? m.cell ?? [0, 0] : last ? undefined : [0, 0]} selected={picked} onPick={(a, b) => setPicked([a, b])} photos={photographed} />
-              </div>
-              <div className="panel-foot rm-foot"><RoverLegend />{hasRound && !running && <span className="small muted">Tap a tree to photograph it</span>}</div>
+            <Panel title={`Block · ${beds.find((b) => b.zone === (m?.zoneId ?? bed))?.label ?? bed}`} pad={false}
+                   right={<span className="rv-right">
+                     {m ? <span className="small muted">Generated orchard{running ? ` · ${ROVER.simSpeedup}× real speed` : ""}</span>
+                       : last ? <span className="small muted">Last round {ago(last.finishedAt ?? last.startedAt)}{last.simulated ? " · simulated" : ""}</span> : null}
+                     <span className="seg" role="group" aria-label="View">
+                       <button type="button" className={view === "3d" ? "on" : ""} aria-pressed={view === "3d"} onClick={() => setView("3d")}>3D</button>
+                       <button type="button" className={view === "map" ? "on" : ""} aria-pressed={view === "map"} onClick={() => setView("map")}>Map</button>
+                     </span>
+                   </span>}>
+              {view === "3d" ? (() => {
+                const zoneNow = m?.zoneId ?? bed;
+                const rowsNow = m?.rows ?? last?.rows ?? (sizeOk ? r : 4), colsNow = m?.cols ?? last?.cols ?? (sizeOk ? c : 4);
+                const rowMNow = m?.rowM ?? cycle?.grid?.rowM ?? (rm || 3), treeMNow = m?.cellM ?? cycle?.grid?.treeM ?? (tm || 3);
+                const block = roverBlock(zoneNow, beds.find((b) => b.zone === zoneNow)?.label ?? zoneNow, rowsNow, colsNow, rowMNow, treeMNow,
+                                         cells, photoKeys(savedPhotos.data?.photos ?? []));
+                const path = serpentine(rowsNow, colsNow);
+                const step = m?.cell ? path.findIndex(([a, b]) => a === m.cell![0] && b === m.cell![1]) : -1;
+                return (
+                  <Farm3D blocks={[block]} focus={zoneNow} height={420}
+                          selected={picked ? { zone: zoneNow, row: picked[0], col: picked[1] } : null}
+                          onPick={(t) => setPicked([t.row, t.col])}
+                          rover={running && m?.cell ? { zone: zoneNow, row: m.cell[0], col: m.cell[1], heading: step >= 0 ? headingAt(path, step) : 0 } : null} />
+                );
+              })() : (
+                <div className="rm-wrap">
+                  <RoverMap rows={m?.rows ?? last?.rows ?? (sizeOk ? r : 4)} cols={m?.cols ?? last?.cols ?? (sizeOk ? c : 4)} cells={cells}
+                            at={m ? m.cell ?? [0, 0] : last ? undefined : [0, 0]} selected={picked} onPick={(a, b) => setPicked([a, b])} photos={photographed} />
+                </div>
+              )}
+              <div className="panel-foot rm-foot">{view === "map" ? <RoverLegend /> : <span className="f3-legend f3-legend-inline"><span><i className="lg-bang" />Look at</span><span><i className="lg-yellow" />Yellow leaves</span><span><i className="lg-photo" />Photo saved</span></span>}
+                {hasRound && !running && <span className="small muted">{view === "3d" ? "Drag to turn · click a tree to photograph it" : "Tap a tree to photograph it"}</span>}</div>
             </Panel>
             {hasRound && <TreeTable cells={cells} held={held} picked={picked} onPick={(a, b) => setPicked([a, b])} />}
           </div>
