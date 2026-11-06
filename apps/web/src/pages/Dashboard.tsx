@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Bot, Plus, Sprout, Sun } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Bot, Plus, Sprout, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 import EnvRibbon from "../components/EnvRibbon";
 import { DoneNote, JobRow, JobsHead, StageStrip, type LastDone } from "../components/Orchard";
@@ -8,6 +8,7 @@ import { api, loadProblem, type Advice, type BedConditions, type Cycle, type Orc
 import { litres, longToday, todayIso } from "../lib/format";
 import { roundPlan } from "../lib/rover";
 import { mergeToday } from "../lib/today";
+import { problems, type Problem } from "../lib/problems";
 import { useData } from "../lib/useData";
 import { usePoll } from "../lib/usePoll";
 
@@ -62,7 +63,36 @@ function Card({ c, cond, orchard, advice }: { c: Cycle; cond?: BedConditions; or
   );
 }
 
+/** One problem: what is wrong, the reading that shows it against its target, and the one thing to do. */
+function ProblemCard({ p }: { p: Problem }) {
+  return (
+    <article className={`pc${p.severity === "critical" ? " pc-crit" : ""}`}>
+      <div className="pc-top">
+        <span className={`pc-sev${p.severity === "critical" ? " pc-sev-crit" : ""}`}>{p.severity === "critical" ? "Now" : "Check"}</span>
+        <span className="pc-block">{p.label}</span>
+      </div>
+      <h3 className="pc-problem">{p.problem}</h3>
+      <div className="pc-ev">
+        {p.evidence ? (
+          <>
+            <span className="pc-val">{p.evidence.value}
+              {p.evidence.direction === "low" && <ArrowDown size={18} aria-label="below target" />}
+              {p.evidence.direction === "high" && <ArrowUp size={18} aria-label="above target" />}
+            </span>
+            <span className="pc-tgt">{p.evidence.label}{p.evidence.target ? ` · target ${p.evidence.target}` : ""}</span>
+          </>
+        ) : <span className="pc-txt">{p.evidenceText}</span>}
+      </div>
+      <div className="pc-act"><ArrowRight size={16} aria-hidden /><span>{p.action}</span></div>
+      {p.link && <Link className="pc-link" to={p.link.to}>{p.link.text}</Link>}
+    </article>
+  );
+}
+
+const CARDS = 6;
+
 export default function Dashboard() {
+  const [view, setView] = useState<"problems" | "list">("problems");
   const cycles = useData(api.cycles);
   const advice = usePoll(api.advice, 30000);
   const conditions = usePoll(api.conditions, 30000);
@@ -100,11 +130,20 @@ export default function Dashboard() {
   const roundsToday = slots.filter((s) => s.doneAt).length;
   const missing = all.filter((a) => !a.surveyed);
   const simulated = all.some((a) => a.simulated);
+  const found = problems(beds, all);
+  const urgent = found.filter((p) => p.severity === "critical").length;
+  const treesRead = all.reduce((s, a) => s + a.treesSeen, 0);
+  const feedBlocks = all.filter((a) => a.feed.action === "feed").length;
+  const tasks = today.filter((i) => i.kind === "job").length;
 
   return (
     <>
       <PageHead icon={Sun} title="Today" sub={longToday()}
                 actions={<>
+                  <span className="seg" role="group" aria-label="View">
+                    <button type="button" className={view === "problems" ? "on" : ""} aria-pressed={view === "problems"} onClick={() => setView("problems")}>Problems</button>
+                    <button type="button" className={view === "list" ? "on" : ""} aria-pressed={view === "list"} onClick={() => setView("list")}>Full list</button>
+                  </span>
                   <Link className="btn btn-sm btn-ghost" to="/rover"><Bot size={16} aria-hidden />Run a round</Link>
                   <Link className="btn btn-sm" to="/cycles?add=true"><Plus size={16} aria-hidden />Start a cycle</Link>
                 </>} />
@@ -118,7 +157,25 @@ export default function Dashboard() {
           </Empty></Panel>
         )}
 
-        {active.length > 0 && (
+        {active.length > 0 && view === "problems" && (
+          <>
+            <div className="steps3">
+              <div className="st"><span className="st-n">1</span><div><b>Read</b><span>{advice.data === null ? "…" : `${treesRead} trees · ${roundsToday} of ${slots.length} blocks today`}</span></div></div>
+              <div className="st"><span className="st-n">2</span><div><b>Find</b><span>{found.length} {found.length === 1 ? "problem" : "problems"}{urgent ? ` · ${urgent} urgent` : ""}</span></div></div>
+              <div className="st"><span className="st-n">3</span><div><b>Act</b><span>Water {litres(water)}{feedBlocks ? ` · feed ${feedBlocks} ${feedBlocks === 1 ? "block" : "blocks"}` : ""}</span></div></div>
+            </div>
+            {advice.data === null || conditions.data === null ? <p className="muted">Loading…</p> : found.length === 0
+              ? <Panel><Empty icon={Sprout}>No problems in this morning's readings.</Empty></Panel>
+              : <div className="pgrid">{found.slice(0, CARDS).map((p) => <ProblemCard key={p.key} p={p} />)}</div>}
+            <p className="small muted today-foot">
+              {found.length > CARDS && <>{found.length - CARDS} more, and </>}{tasks} stage {tasks === 1 ? "task" : "tasks"} in the{" "}
+              <button type="button" className="linkbtn" onClick={() => setView("list")}>full list</button>.
+              {simulated && " From simulated rover rounds; starting rules, not field results. Nothing here opens a valve."}
+            </p>
+          </>
+        )}
+
+        {active.length > 0 && view === "list" && (
           <>
             <Kpis items={[
               { k: "Rover today", v: advice.data === null ? "—" : `${roundsToday} of ${slots.length} ${slots.length === 1 ? "block" : "blocks"}` },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Bug, CircleCheck, CircleHelp, Droplets, FlaskConical, Microscope, Shovel, TriangleAlert, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Disease, PhotoResult } from "../lib/api";
@@ -34,7 +34,8 @@ function MatchCard({ d, onSoil, busy }: { d: Disease; onSoil?: (symptom: string)
 }
 
 /** The photo check's answer at a glance: is something wrong, what it most likely is, and what to do. */
-export default function PhotoVerdict({ r, onSoil, busy }: { r: PhotoResult; onSoil?: (symptom: string) => void; busy?: boolean }) {
+export default function PhotoVerdict({ r, onSoil, busy, lead }: { r: PhotoResult; onSoil?: (symptom: string) => void; busy?: boolean;
+  /** shown right under the headline: the line that matters most, such as what this tree's soil says */ lead?: ReactNode }) {
   const [pick, setPick] = useState(0);
   const unsure = r.status !== "ok";
   const healthy = !unsure && r.label === "healthy";
@@ -52,6 +53,8 @@ export default function PhotoVerdict({ r, onSoil, busy }: { r: PhotoResult; onSo
             : r.seen && <div className="pv-seen">{r.seen}</div>}
         </div>
       </div>
+
+      {lead}
 
       {healthy && <p className="pv-none">Nothing to do for this leaf or fruit.</p>}
 

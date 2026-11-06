@@ -107,9 +107,8 @@ export function TreePhotoCheck({ zone, row, col, onSaved, soil = true }:
       {!file && <p className="small muted">{online.data?.online ? "Check sends the photo to Ollama's online service." : "The photo stays on your farm server."} Saving keeps it with this tree's readings for an expert.</p>}
       {error && <Notice kind="warn">{`Could not do that: ${error}`}</Notice>}
       {result && (
-        <div className="tp-result">
-          <PhotoVerdict r={result} />
-          <SoilSays r={result} />
+        <div className="tp-result" ref={(el) => el?.scrollIntoView({ behavior: "smooth", block: "nearest" })}>
+          <PhotoVerdict r={result} lead={<SoilSays r={result} />} />
         </div>
       )}
     </div>

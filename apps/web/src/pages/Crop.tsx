@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Camera, Trees } from "lucide-react";
+import { ArrowLeft, Trees } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import AnyPhotoCheck from "../components/AnyPhotoCheck";
 import Farm3D, { type TreeRef } from "../components/Farm3D";
 import { TreePhotoCheck } from "../components/TreePhoto";
-import { Empty, Notice, Panel } from "../components/ui";
+import { Notice, Panel } from "../components/ui";
 import { api, loadProblem } from "../lib/api";
 import { farmBlocks, photoKeys, toLookAt } from "../lib/farm3d";
 import { useData } from "../lib/useData";
@@ -42,8 +42,9 @@ export default function Crop() {
   function pick(t: TreeRef, frame = false) {
     setPicked(t);
     if (frame) setFocus(t.zone);
-    requestAnimationFrame(() => document.getElementById("tree-check")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
+  // the farm fills the screen, so problem, tree and answer are seen together without scrolling
+  const sceneH = Math.max(window.innerWidth < 600 ? 320 : 420, window.innerHeight - (window.innerWidth < 900 ? 260 : 250));
 
   return (
     <main className="main stack">
@@ -55,7 +56,7 @@ export default function Crop() {
           <div className="hf-scene">
             {loading ? <p className="panel-pad muted">Loading…</p> : (
               <>
-                <Farm3D blocks={blocks} selected={picked} onPick={(t) => pick(t)} focus={focus} height={window.innerWidth < 600 ? 340 : 460} />
+                <Farm3D blocks={blocks} selected={picked} onPick={(t) => pick(t)} focus={focus} height={sceneH} />
                 <div className="f3-bar">
                   <button type="button" className={`f3-chip${focus === null ? " on" : ""}`} onClick={() => setFocus(null)}>Whole farm</button>
                   {blocks.map((b) => {
@@ -69,39 +70,38 @@ export default function Crop() {
               </>
             )}
           </div>
-          <aside className="hf-list" aria-label="Trees to look at">
-            <div className="hf-list-head">To look at <b>{looks.length}</b></div>
-            {!loading && list.length === 0 && <p className="small muted">Nothing marked. Run a round from <Link to="/rover">Rover</Link>.</p>}
-            <ul>
-              {list.map(({ block: b, tree: t }) => {
-                const on = picked?.zone === b.zone && picked.row === t.row && picked.col === t.col;
-                return (
-                  <li key={`${b.zone}-${t.row}-${t.col}`}>
-                    <button type="button" className={`hf-item${on ? " on" : ""}${t.alert === "expected" ? " hf-expected" : ""}`}
-                            onClick={() => pick({ zone: b.zone, row: t.row, col: t.col }, true)}>
-                      <span className={t.alert === "look" ? "hf-mark" : "hf-mark hf-mark-ok"}>{t.alert === "look" ? "!" : "i"}</span>
-                      <span><b>{b.label} · {name(t.row, t.col)}</b><span className="small muted">{t.note}</span></span>
-                      {t.photo && <span className="hf-photo" title="Photo saved" />}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+          <aside className="hf-list" aria-label={picked ? "The tree" : "Trees to look at"} style={{ maxHeight: window.innerWidth < 900 ? undefined : sceneH }}>
+            {picked && block ? (
+              <div className="hf-tree">
+                <div className="hf-tree-head">
+                  <button type="button" className="linkbtn small" onClick={() => setPicked(null)}><ArrowLeft size={14} aria-hidden /> All trees</button>
+                  <b>{block.label} · {name(picked.row, picked.col)}</b>
+                  {tree?.note && <span className="small muted">{tree.note}</span>}
+                </div>
+                <TreePhotoCheck key={`${picked.zone}-${picked.row}-${picked.col}`} zone={picked.zone} row={picked.row} col={picked.col}
+                                onSaved={() => photos.reload()} />
+              </div>
+            ) : (
+              <>
+                <div className="hf-list-head">To look at <b>{looks.length}</b><span className="small muted"> · click one, or a ! on the farm</span></div>
+                {!loading && list.length === 0 && <p className="small muted" style={{ padding: "0 14px" }}>Nothing marked. Run a round from <Link to="/rover">Rover</Link>.</p>}
+                <ul>
+                  {list.map(({ block: b, tree: t }) => (
+                    <li key={`${b.zone}-${t.row}-${t.col}`}>
+                      <button type="button" className={`hf-item${t.alert === "expected" ? " hf-expected" : ""}`}
+                              onClick={() => pick({ zone: b.zone, row: t.row, col: t.col }, true)}>
+                        <span className={t.alert === "look" ? "hf-mark" : "hf-mark hf-mark-ok"}>{t.alert === "look" ? "!" : "i"}</span>
+                        <span><b>{b.label} · {name(t.row, t.col)}</b><span className="small muted">{t.note}</span></span>
+                        {t.photo && <span className="hf-photo" title="Photo saved" />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </aside>
         </div>
       </Panel>
-
-      <div id="tree-check">
-        {picked && block ? (
-          <Panel title={`${block.label} · ${name(picked.row, picked.col)}`} icon={Camera}
-                 right={tree?.note ? <span className="small muted">{tree.note}</span> : undefined}>
-            <TreePhotoCheck key={`${picked.zone}-${picked.row}-${picked.col}`} zone={picked.zone} row={picked.row} col={picked.col}
-                            onSaved={() => photos.reload()} />
-          </Panel>
-        ) : (
-          <Panel><Empty icon={Camera}>Click a marked tree on the farm, or pick one from the list, to check a photo of it.</Empty></Panel>
-        )}
-      </div>
 
       <details className="hf-more">
         <summary>Photo without a tree: a fruit, a branch, or the whole block</summary>
