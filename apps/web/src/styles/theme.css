@@ -852,3 +852,30 @@ details.stagecard > summary::-webkit-details-marker{display:none}
   .seg button{min-height:34px}
   .side-link{padding:10px}
 }
+
+/* ---------- photo check result: the problem, the likely cause, what to do ---------- */
+.pv{display:flex;flex-direction:column;gap:12px}
+.pv-head{display:flex;gap:12px;align-items:flex-start}
+.pv-head svg{flex:0 0 auto;margin-top:2px}
+.pv-problem svg{color:var(--warn)} .pv-ok svg{color:var(--ok)} .pv-unsure svg{color:var(--ink-faint)}
+.pv-title{font-size:20px;font-weight:800;letter-spacing:-.01em;line-height:1.2}
+.pv-seen{color:var(--ink-muted);margin-top:2px}
+.pv-none{color:var(--ink-muted)}
+.pv-tabs{display:flex;gap:8px;flex-wrap:wrap}
+.pv-tab{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 12px;border:1px solid var(--line-strong);
+  border-radius:var(--r);background:var(--surface);color:var(--ink);font-weight:600;font-size:13.5px;cursor:pointer;text-align:left}
+.pv-tab.on{border-color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand)}
+.pv-tab-k{font-size:11px;font-weight:600;color:var(--ink-muted)}
+.pv-card{border:1px solid var(--line);border-radius:var(--r);background:var(--surface-alt);padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.pv-cause{display:flex;gap:10px;align-items:center;margin-bottom:4px}
+.pv-gicon{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--surface);border:1px solid var(--line);color:var(--ink-muted)}
+.pv-name{font-size:16px;font-weight:700}
+.pv-k{font-size:11.5px;font-weight:600;color:var(--ink-muted);margin-top:4px}
+.pv-signs{font-weight:600}
+.pv-steps{list-style:none;counter-reset:pv;display:flex;flex-direction:column;gap:6px}
+.pv-steps li{counter-increment:pv;display:flex;gap:9px;align-items:flex-start;font-weight:500}
+.pv-steps li::before{content:counter(pv);flex:0 0 22px;height:22px;border-radius:50%;background:var(--brand-soft);color:var(--brand-deep);
+  font-size:12px;font-weight:700;display:grid;place-items:center}
+.pv-ask{font-size:13px;color:var(--ink-muted);border-left:3px solid var(--warn);padding-left:8px;margin-top:4px}
+.pv-acts{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.pv-foot{font-size:12px;color:var(--ink-faint)}

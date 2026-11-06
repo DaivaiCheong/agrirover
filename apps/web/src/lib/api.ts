@@ -232,6 +232,8 @@ export type PhotoLibrary = {
 export type Disease = {
   id: string; title: string; kind: string; leaf: string | null; fruit: string | null; notToConfuse: string | null; favours: string | null; do: string;
   sources: { title: string; url: string }[]; symptom: string | null; thin: boolean;
+  /** The entry cut down for the photo result: a few words to look for, and two or three steps. */
+  card: { group: "fungus" | "alga" | "insect" | "feed" | "water" | "roots"; signs: string; steps: string[]; askFirst: boolean };
 };
 export type PhotoLabels = { labels: { id: string; title: string }[]; parts: string[]; online: boolean };
 export type SavePhotoInput = { zone: string; part: string; row?: number; col?: number; label?: string; note?: string; modelLabel?: string | null; modelSeen?: string | null };

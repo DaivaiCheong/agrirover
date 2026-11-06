@@ -112,6 +112,23 @@ def test_the_guide_is_served_with_its_sources():
     assert not any(ch in d.do for d in DISEASES for ch in ("ml/", "g/L", "ppm"))                  # no source gave a guava dose: none is invented
 
 
+def test_every_guide_entry_has_a_short_card_for_the_photo_result():
+    from app.services.guava_diseases import CARDS, DISEASES
+    assert set(CARDS) == {d.id for d in DISEASES}
+    for d in DISEASES:
+        card = d.to_dict()["card"]
+        assert card["group"] in {"fungus", "alga", "insect", "feed", "water", "roots"}
+        assert 0 < len(card["signs"].split()) <= 8, d.id                                        # a glance, not a paragraph
+        assert 1 <= len(card["steps"]) <= 3 and all(len(s.split()) <= 7 for s in card["steps"]), d.id
+        assert not any(ch in s for s in card["steps"] for ch in ("ml/", "g/L", "ppm"))            # still no invented dose
+
+
+def test_the_soil_check_follows_the_best_match_not_the_runner_up(client):
+    # leaf spot has no soil rule and rust has one: rust must not be offered for a photo that best fits leaf spot
+    body = _post(client, classifier=StubClassifier(Seen("leaf_spot", None, "Dark brown patches.", "rust"))).json()
+    assert [m["id"] for m in body["matches"]] == ["leaf_spot", "rust"] and body["symptom"] != "rust"
+
+
 def test_a_model_that_is_down_says_so_rather_than_guessing(client):
     class Down:
         def classify(self, data):

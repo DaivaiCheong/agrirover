@@ -40,7 +40,28 @@ class Disease:
         d = asdict(self)
         d["notToConfuse"] = d.pop("not_to_confuse")
         d["sources"] = [{"title": SOURCES[s][0], "url": SOURCES[s][1]} for s in self.sources]
+        group, signs, steps, ask = CARDS[self.id]
+        d["card"] = {"group": group, "signs": signs, "steps": list(steps), "askFirst": ask}
         return d
+
+
+# The same entries cut down for the photo result: what to look for in a few words, and two or three things to do.
+# Nothing here goes beyond the entry above it. `askFirst` marks entries whose sources lean on a spray.
+CARDS: dict[str, tuple[str, str, tuple[str, ...], bool]] = {
+    "anthracnose":     ("fungus", "Sunken dark patches on ripe fruit", ("Prune to let in light and air", "Ask about a spray before flowering"), True),
+    "algal_leaf_spot": ("alga", "Raised orange, silky tufts on leaves", ("Prune for air, remove weeds", "Fix drainage", "Keep the trees well fed"), True),
+    "rust":            ("fungus", "Orange powder on young leaves", ("Keep the block clean", "Feed, water and prune well", "Check for it often"), True),
+    "leaf_spot":       ("fungus", "Smoky brown patches with a dark border", ("Remove spotted leaves", "Prune the canopy for air"), True),
+    "scab":            ("fungus", "Corky round spots on green fruit", ("Remove affected fruit",), True),
+    "black_mold":      ("fungus", "Black mould on the fruit", ("Remove affected fruit", "Sticky film? Look for insects"), False),
+    "mealybug":        ("insect", "White waxy clusters or flat scales", ("Collect and burn fallen material", "Horticultural oil or natural enemies"), False),
+    "insect_damage":   ("insect", "Holes, chewed edges or silvery speckles", ("Find the insect before treating", "Keep away from onion and garlic"), False),
+    "fruit_fly":       ("insect", "Puncture marks, soft fruit, larvae inside", ("Bag fruit at 3-4 cm", "Destroy infested fruit", "Set pheromone traps"), False),
+    "chlorosis":       ("feed", "Yellow leaves with no spots", ("Check the soil readings", "Take a leaf test"), False),
+    "scorch":          ("feed", "Brown dead leaf edges", ("Check feed and water", "Take a leaf test"), False),
+    "cracking":        ("water", "Splits on ripening fruit", ("Keep moisture steady: short drip pulses",), True),
+    "guava_decline":   ("roots", "Whole tree yellow, drooping, dying back", ("Do not over-water", "Mulch and feed well", "Dig up roots, look for galls"), False),
+}
 
 
 DISEASES = (

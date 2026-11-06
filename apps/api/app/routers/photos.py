@@ -51,7 +51,8 @@ async def check_photo(photo: UploadFile = File(...), zone: str | None = None,
         return {"status": "uncertain", "label": None, "confidence": None, "seen": None, "matches": [], "symptom": None, "correlation": None,
                 "note": "The model is not sure. Take a clearer, closer photo of one leaf or fruit. " + NOTE}
     matches = [BY_ID[x].to_dict() for x in (result.label, result.also) if x in BY_ID]
-    symptom = next((m["symptom"] for m in matches if m["symptom"]), None) or diagnosis.match_symptom(result.label)
+    # the soil check is offered for the best match only: picking the runner-up's rule put "Guava rust" under a brown-spot photo
+    symptom = (matches[0]["symptom"] if matches else None) or diagnosis.match_symptom(result.label)
     correlation = None
     # Only a model with measured accuracy may run the soil check by itself. Otherwise a person compares the matches and chooses.
     if zone and symptom and result.confidence is not None:
