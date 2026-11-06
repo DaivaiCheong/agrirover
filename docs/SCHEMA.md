@@ -9,7 +9,7 @@ Built as migration `0002` (20 tables). The crop is **guava** (tomato was removed
 | `planting`, `sensor`, `daily_decision`, `zone.label`, `zone.trial_arm`, `sensor_reading.sensor_id` | Yes: seed, ingest, decisions, daily message |
 | `contact` | No. The Telegram chat id is still read from `.env`. Next to wire. |
 | `disease_class` | No. Filled from the model's labels file when the model arrives. |
-| `survey_finding` | No. Filled when rover results are stored (step S7). |
+| `survey_finding` | Yes: each tree of a finished rover round (`services/rover_live.py`). |
 | `field_observation` | No. Needs a small entry form. |
 | `daily_decision.done_at` / `done_seconds` | No. Needs a way for the farmer to say "I watered". |
 
@@ -69,7 +69,7 @@ Unique on (`zone_id`, `decision_date`). The farmer's answer lives in `action_pro
 **`disease_class`**: the list of diseases the model can name, with a plain-language explanation.
 `crop_id`, `code`, `name_en`, `name_km`, `advice`. Rows come from the model's labels file. The advice text must come from an agronomist, not from us.
 
-**`survey_finding`**: one row per rover cell. Today the rover's report is only logged, then lost.
+**`survey_finding`**: one row per rover cell. Migration `0007` added its `readings`, the tree's soil and air values.
 `mission_id`, `row`, `col`, `plant_present`, `needs_water`, `yellowing`, `disease_code`, `confidence`, `image_id`.
 
 **`field_observation`**: numbers a person writes down by hand: minutes spent checking, plants lost, waterlogging, a note. This is the evidence for the 4-6 week comparison.
@@ -120,13 +120,26 @@ What the farmer reads: **"Tomato bed A (day 21): water 17 s. Tomato bed B: skip,
 
 Everything the soil probe measures is filed under the bed's deciding probe, like moisture always was; air, rain and supply readings belong to the node.
 
-**No alert table.** An alert is worked out from the newest readings every time it is asked for (`services/agronomy.py`), so it cannot go stale and the readings stay the only record. The old `alert` table was dropped in `0002` for the same reason. If alerts ever need a history or a push (Telegram), that is when a table is earned.
+**No alert table.** An alert is worked out from the newest readings every time it is asked for (`guava.alerts_for` in `services/guava.py`), so it cannot go stale and the readings stay the only record. The old `alert` table was dropped in `0002` for the same reason. If alerts ever need a history or a push (Telegram), that is when a table is earned.
 
 **Downgrading `0005` deletes** every reading of the eight new metrics (Postgres cannot drop a value from an enum, so the type is rebuilt).
 
 ## Saved plant photos (migration `0008`)
 
 **`plant_photo`**: one row per saved photo. The image is a file in `farm-photos/`, so back that folder up with the database. It keeps the block, tree, crop day, and the soil and air when it was taken, marked if those were simulated. `farmer_label`, `model_label` and `expert_label` are kept apart: only `expert_label` may train or test a model ([PHOTO-LABELLING.md](PHOTO-LABELLING.md)). The older `crop_image` and `disease_detection` tables are not used for this.
+
+## Leaf samples and results (planned, not built)
+
+The rover's focus since 6 Nov is checking leaf nutrients ([plan](PLAN.md)). Today no table holds a leaf nutrient: S, Mg, Ca, Mn, B, Zn, Cu, Fe and Al have no column at all, and `nitrogen`, `phosphorus` and `potassium` in `metric_type` are soil values in mg/kg, not leaf values. A sketch for the migration to settle:
+
+**`leaf_sample`**: one bag or set of leaves.
+`zone_id`, `planting_id`, `variety`, `taken_on`, `crop_day`, `stage`, `leaf_pairs`, `trees` (which trees it came from, or one tree for a per-tree test), `collected_by`, `simulated`, `note`.
+
+**`leaf_result`**: one nutrient from one sample, from one source. A scan and a lab result on the same sample are the pair that a scanner is tested against.
+`sample_id`, `nutrient`, `value`, `unit` (kept as reported: g/kg, mg/kg or %), `source` (`lab` | `scanner`), `lab_or_device`, `model_version` (for a scanner), `measured_on`.
+Unique on (`sample_id`, `nutrient`, `source`, `lab_or_device`).
+
+Leaf ranges stay in code until a table is earned, but as numbers with units instead of the text in `LEAF_RANGES`, and with the study they came from. A result stores no low / OK / high: that is worked out when asked, so a changed range cannot leave an old verdict behind.
 
 ## Decisions I need from you
 

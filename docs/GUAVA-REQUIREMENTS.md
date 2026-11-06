@@ -7,6 +7,24 @@ The pasted text lists no sources, so its numbers are labelled "guava document, n
 
 Status: **Shown** = you can see it working. **Build** = what was still needed when written. **Left out** = on purpose.
 
+## Nutrient check (added 2026-11-06)
+
+Asked for by Daivai: the rover checks nutrients, following the LENS concept, on guava only. Source: [PICKETA-RESEARCH.md](PICKETA-RESEARCH.md), evidence: [GUAVA-RESEARCH.md](GUAVA-RESEARCH.md#leaf-nutrient-check-6-nov-2026). Nothing in this table runs on the farm yet.
+
+| Requirement | Owner | Status today | Needs |
+|---|---|---|---|
+| Collect leaves the standard way: third pair, mid-canopy, at a set stage | Daivai | Not on screen. Steps in [ROVER-SOP.md](ROVER-SOP.md#leaf-sample-how-to) | A screen to record the sample |
+| Lab result per sample | Daivai | **Build.** A task says "Send a leaf sample to a lab"; no way to enter the result | Tables and a screen, and a lab that tests leaf tissue |
+| Compare with leaf ranges | Daivai | Display only: `LEAF_RANGES` is text, for 11 nutrients | Numbers, with low / OK / high |
+| Scan a leaf | Daivai | **Build.** No sensor chosen | Table test of the candidates |
+| Pair each scan with a lab result | LENS method | **Build** | Pairs table, about 100 pairs to start |
+| Show a nutrient only after it passes | Follows from the research | **Build** | Pass mark to agree: proposed at most 10 % of samples off by more than 20 % |
+| First nutrients: N, P, K, Mg, as low / OK / high | Follows from the research | **Build** | Nothing sourced for micronutrients on a low-cost scanner; no guava range for Al |
+| Nutrient round per block, per stage | Follows from the research | **Build.** Today's round reads soil per tree, simulated | A leaf stop in the round. A person picks the leaf first |
+| Result turns into one thing to do | Daivai | Partly. Advice works from soil and the calendar, not from a leaf | Advice takes a leaf result as input |
+| Nutrient view per block and tree, and an export | Follows from LENS's Fieldbook | **Build.** Today only soil N, P, K as a trend | Screen and export |
+| Soil readings explain a low leaf (EC, pH) | Follows from the research | Rule exists for yellow leaves in `guava.why_yellow`, from soil only | Use it with a leaf result |
+
 ## Sensors and targets
 
 | Requirement | Sample | Real version needs |
@@ -66,7 +84,7 @@ Status: **Shown** = you can see it working. **Build** = what was still needed wh
 ## Left out on purpose
 
 Lab-level figures (AMF exudate chemistry, PCA of leaf norms), world leaf-export statistics, and root pruning, which the document itself
-advises against. Soil N, P and K are shown but not rated, because the document gives removal per tonne of fruit, not soil targets.
+advises against. Soil N, P and K are shown but not rated, because the document gives removal per tonne of fruit, not soil targets. Since 6 Nov they are out of the promise too, and come off the screens with the next code work: nutrients are checked on the leaf.
 
 ## To settle with the owner
 
@@ -81,6 +99,6 @@ These show on screen too, in the cycle page's **Open questions** tab.
 7. **No sources** in the pasted text.
 8. **Chemical doses** (NAA, 2,4-D, GA3, ethephon, urea defoliation, foliar mixes) are marked "confirm with an agronomist", and the growth regulators the document lists for deblossoming are not given as doses at all.
 9. **Stage 1 without stress.** The document gives no moisture target for bending, pruning or chemical methods; the app uses the general 55-75 %.
-10. **Soil N, P, K.** No soil targets in the document (above).
+10. **Soil N, P, K.** No soil targets in the document (above). Settled 6 Nov: out of the promise.
 
 Choices made here, also yours to change: EC below 0.8 is a warning although the document lists it under critical; the EC ceiling is 3.0 where the document says 2.78-3.0; humid air during stress is a warning rather than critical, because there is no fruit to rot yet.

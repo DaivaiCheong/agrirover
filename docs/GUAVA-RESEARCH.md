@@ -5,7 +5,7 @@
 ## What this changed in the design
 
 1. **Rover survey plus water-and-fertiliser advice is how China's smart orchards are organised.** Sensing feeds a platform, and the platform sets water and feed. Our rover is the sensing, and the app is the platform.
-2. **N, P and K from a cheap probe must not set a fertiliser dose.** They are shown but never used in the sums. Doses come from the stage plan, are held back by EC, and are checked by a leaf test.
+2. **N, P and K from a cheap probe must not set a fertiliser dose.** They are shown but never used in the sums. Doses come from the stage plan, are held back by EC, and are checked by a leaf test. Since 6 Nov the leaf is what the rover is meant to check; see [Leaf nutrient check](#leaf-nutrient-check-6-nov-2026).
 3. **GPS alone will not work under guava trees.** China's orchard robots combine GNSS with LiDAR. The rover design changed.
 4. **"Less water" has a limit, and it depends on the stage.** Water deficit at flowering and fruit growth costs fruit size. A deficit at ripening raises sugar but cost yield in the one study that split it by stage.
 
@@ -93,8 +93,76 @@ The farm photo came back "Yellow leaves from feed or soil" under the three new-g
 
 Wider evidence: models trained on PlantVillage lab photos drop from above 99 % to below 30 % on field photos ([Kyushu 2025](https://catalog.lib.kyushu-u.ac.jp/opac_download_md/7395548/2025_p0402.pdf), summary only). Anthracnose spreads under humid conditions, rust in warm humid weather, and algal spot with wet conditions and splashing water, where guava in high rainfall is a crop that can need control ([IPM Guava](https://agritech.tnau.ac.in/horticulture/pdf/tech_bulletin/national/IPM-GUAVA-Revised-Sept2011.pdf), [Pacific Pests](https://apps.lucidcentral.org/ppp/text/web_full/entities/algal_leaf_spot_148.htm), summaries only). No source found links soil moisture to anthracnose, so the app says wet soil is not the cause.
 
+## Leaf nutrient check (6 Nov 2026)
+
+Why: the rover now follows the LENS concept ([PICKETA-RESEARCH.md](PICKETA-RESEARCH.md)). The question is what a leaf scan can do for guava, and at what cost.
+
+**What this changed in the design**
+
+1. **"Every tree, every day" does not carry over to nutrients.** Guava leaf standards use a composite from many leaves at a set stage, and LENS also samples per area. So the nutrient round is per block, per stage. A per-tree scan is something to test, not assume.
+2. **We must calibrate for guava ourselves.** No guava-leaf scanner calibration was found.
+3. **Start with N, P, K, Mg as low / OK / high.** Add a nutrient only when its paired tests pass.
+4. **A person handles the leaf first.** A leaf-scanning rover arm is not proven.
+
+**How to sample a guava leaf**
+
+| Finding | Source | Status |
+|---|---|---|
+| Third pair from the branch end, with petiole, 12 pairs per plot, mid-canopy, at full flowering | Paluma study, [Rev. Bras. Frutic. 42(3), 2020](https://new.scielo.br/j/rbf/a/dQCKPfPDvS6cgpKgwKgGKmf/?lang=en) | Read |
+| Third pair with petioles, branch ends around the canopy at about 1.5 m, 30 pairs per sample, at full bloom | [Natale et al. 2002, Acta Horticulturae 594](https://acervodigital.unesp.br/handle/11449/67105) | Read (abstract) |
+| Recently matured leaves, 50-60 days old, third pair from the growing tip, in July-August or November-December | [ICAR-IIHR guava pages, 2017](https://guava-crop.web.app/cp-inm1.html) | Read. No study cited, and it warns its ranges are general guides |
+
+**Leaf ranges disagree.** Same cultivar, same country, different figures:
+
+| Nutrient | Souza et al. 2013 (168 samples; used in the app) | Paluma study 2020 (48 plots) |
+|---|---|---|
+| N, g/kg | 18-21 | 17.9-21.2 |
+| P, g/kg | 1.5-1.7 | 1.0-1.3 |
+| K, g/kg | 15-17 | 13.3-15.0 |
+| Ca, g/kg | 8-11 | 6.1-7.6 |
+| Mg, g/kg | 1.8-2.5 | 1.9-2.1 |
+| S, g/kg | 2.5-2.9 | 1.9-2.4 |
+| B, mg/kg | 26-38 | 13.1-19.0 |
+| Cu, mg/kg | 5-57 | 43.9-55.8 |
+| Fe, mg/kg | 54-112 | 76.2-105 |
+| Mn, mg/kg | 53-101 | 63.7-113.7 |
+| Zn, mg/kg | 13-126 | 15.3-20.4 |
+
+The IIHR guide gives N 1.4-2.0 %, P 0.20-0.40 %, K 1.31-1.70 %, Ca 0.67-3.0 %, Mg 0.25-0.68 %, which is 14-20, 2.0-4.0, 13.1-17, 6.7-30 and 2.5-6.8 g/kg. None of these is from Cambodia or from Local Khmer or Kimju trees. **They are a starting reference until we have our own.** No range for aluminium was found.
+
+**What leaf scanners have shown.** None of these is guava.
+
+| Finding | Source | Status |
+|---|---|---|
+| Portable NIR on fresh oil palm leaflets (Nirone S2.2, 1750-2150 nm), 92 samples against lab. Samples off by more than 20 %: N 2 %, P 1 %, K 30 %, Mg 60 %. Authors: less accurate than lab analysis, suited to flagging severe shortages | [ESA Congress 2024 paper](https://agris.fao.org/search/es/records/66e851a0cd53c72de2ca8fdd) | Read (abstract). Conference paper. Cross-validated, not a separate test set |
+| About US$200 device (AS7262 + AS7263, 12 bands, 450-860 nm), 121 leaves against lab combustion. N R²: canola 64 %, corn 80 %, soybean 82 %, wheat 63 %, all crops 74 %. SPAD meter on the same leaves: 60 %. N and water only | [Sensors 20(5):1449](https://pmc.ncbi.nlm.nih.gov/articles/PMC7085727/) | Read. Greenhouse only; the authors say field use needs further study |
+| Pine seedlings: portable devices predicted N moderately to well in intact needles; K and most micronutrients were hard to predict | [NC State thesis](https://repository.lib.ncsu.edu/server/api/core/bitstreams/77c508c5-d070-485f-9627-84cc64439caf/content) | Summary only |
+| AS7265x breakout (18 bands, about 410-940 nm, [Sensors 2025](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11991415/)) listed at US$70 in January 2025 ([preprint](https://www.preprints.org/manuscript/202503.1183)) | Both linked | Summary only. Price may have changed |
+| Guava NIR work found is on fruit pulp, not leaves | Search of 6 Nov | No leaf calibration found. One search; Chinese journals not searched |
+
+**Can a rover do it?**
+
+| Finding | Source | Status |
+|---|---|---|
+| Ground robot with a 6-axis arm and a hyperspectral end-effector. Pistachio orchard: 70 % success end to end for grasping a leaf and measuring it. The abstract does not say which trait it predicts | [RoMu4o, arXiv 2501.10621](https://arxiv.org/abs/2501.10621v1) | Read (abstract). Preprint. Not a nutrient result |
+| The arm is a TM5M-900 cobot: 900 mm reach, 4 kg payload, on a crawler | [Same, full text](https://arxiv.org/html/2501.10621v1) | Summary only |
+
+**Scanner options for the table test**
+
+| Option | Cost | For | Against |
+|---|---|---|---|
+| LENS | US$10,000 a year | Proven product and workflow | Guava not listed. Whether Picketa would calibrate guava is unknown; asking them is Daivai's call |
+| AS7262 + AS7263 | About US$200 as a prototype | Published build, cheap | Stops at 860 nm; shown for N only, greenhouse only |
+| AS7265x | US$70 breakout, plus light and housing | 18 bands, cheap | No guava or field nutrient result seen |
+| Nirone S2.2 | Price not found | Best evidence for field use on fresh leaves | Weak on K and Mg |
+
+**Proposed test, for Daivai to change.** Start near 100 lab-paired samples, in line with the 92 and 121 above. A nutrient passes when at most 10 % of samples are off by more than 20 %, on samples the model was not trained on. This pass mark is ours, not from a study.
+
+**Lab.** One search on 6 Nov found no Cambodian service advertising leaf tissue analysis. That is an open item, not a finding that none exists.
+
 ## Open
 
+- A lab that can test guava leaf tissue, its price and how long it takes.
 - The guava document's own numbers remain unchecked (see [GUAVA-REQUIREMENTS.md](GUAVA-REQUIREMENTS.md)).
 - Chinese-language journals (CNKI) were not searched directly, so guava-specific Chinese trials may exist.
 - No source gives a rover-specific saving: the Chinese figures are for whole systems. AgriRover's value must be measured on your own orchard.

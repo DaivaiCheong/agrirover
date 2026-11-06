@@ -1,6 +1,8 @@
-# AgriRover daily round: standard operating procedure
+# AgriRover round: standard operating procedure
 
-**Status: draft.** Written from the rover's software limits and the guava plan. It has not been run on a real rover, because the guava rover is not built. Update it after the first field round. The same steps are on screen under Rover, SOP.
+**Status: draft.** Written from the rover's software limits and the guava plan. It has not been run on a real rover, because the guava rover is not built. Update it after the first field round. Most of these steps are on screen under Rover, SOP; the screen does not yet have the leaf sample steps.
+
+**The rover's focus since 6 Nov 2026 is checking leaf nutrients ([plan](PLAN.md)). The nutrient round is not built.** Until it is, leaves are collected by hand and sent to a lab: see [Leaf sample how-to](#leaf-sample-how-to). The steps below are for the daily soil round that exists in simulation.
 
 **Purpose:** visit every tree in a block, then act on what the app says for today.
 **Who:** one trained person, staying with the rover for the whole round.
@@ -49,8 +51,25 @@
 
 | # | Step | Pass when |
 |---|---|---|
-| 18 | Send a leaf sample at the end of the flush | Lab result compared with the leaf ranges. This, not the probe's N, P, K, changes a dose |
+| 18 | Send a leaf sample per block, as below | Lab result compared with the leaf ranges. This, not the probe's N, P, K, changes a dose |
 | 19 | Calibrate moisture on your own soil | Probe readings compared with a sample weighed wet and dry |
+
+## Leaf sample how-to
+
+**Status: draft.** Taken from published guava methods ([research](GUAVA-RESEARCH.md#leaf-nutrient-check-6-nov-2026)), not yet tried on this farm. Studies differ on the count (12 to 30 pairs) and timing, so this picks one method and keeps it the same every time. Results can only be compared if the method does not change.
+
+| # | Step | Pass when |
+|---|---|---|
+| 1 | Choose the block and keep each variety apart | Local Khmer and Kimju never share a sample |
+| 2 | Sample at full flowering. The app's task still says day 70-75, before flowering: follow this step | The same stage in every block and every cycle |
+| 3 | From trees spread across the block, take the third pair of leaves from the end of a branch, with the stalk | Healthy, mature leaves, mid-canopy, from around the tree |
+| 4 | Collect at least 12 pairs for one sample | Count written down |
+| 5 | Skip sick, torn or newly sprayed leaves | No foliar spray on them before picking. How long to wait: ask the lab |
+| 6 | Bag and label: farm, block, variety, date, crop day, trees | The label can be matched to the result |
+| 7 | Ask the lab how to store and send them, and send them as told | Lab confirms receipt |
+| 8 | Record the lab's figures with their units | Compare with the [leaf ranges](GUAVA-RESEARCH.md#leaf-nutrient-check-6-nov-2026), which are only a starting reference |
+
+**Open:** no lab found yet. No screen to enter the result yet, so keep it on paper or in a sheet.
 
 ## When it stops
 
