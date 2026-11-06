@@ -29,6 +29,8 @@ const STATE: Record<OrchardJob["state"], [string | undefined, string]> = {
 export function JobRow({ j, bed, urgent, fruitMm, onDone, onFruit }:
   { j: OrchardJob; bed?: ReactNode; urgent?: boolean; fruitMm: number | null; onDone?: (id: string) => void; onFruit?: (mm: number) => void }) {
   const [mm, setMm] = useState("");
+  const size = Number(mm);
+  const sizeOk = mm !== "" && size > 0 && size <= 150;     // the API takes more than 0 and up to 150 mm
   const open = j.state === "due" || j.state === "overdue";
   const [kind, word] = STATE[j.state];
   const label = <>{j.title}{j.confirm && <> <Tag>Ask an agronomist</Tag></>}</>;
@@ -38,13 +40,16 @@ export function JobRow({ j, bed, urgent, fruitMm, onDone, onFruit }:
       <td className="jr-job">
         {j.detail ? <More label={label}>{j.detail}</More> : label}
         {j.measure && open && onFruit && (
-          <form className="job-measure" onSubmit={(e) => { e.preventDefault(); if (Number(mm) > 0) { onFruit(Number(mm)); setMm(""); } }}>
+          <form className="job-measure" noValidate onSubmit={(e) => { e.preventDefault(); if (sizeOk) { onFruit(size); setMm(""); } }}>
             <label className="small" htmlFor={`fruit-${j.id}`}>Fruit size{fruitMm !== null ? ` (last ${fruitMm} mm)` : ""}</label>
             <div className="erp-input-group" style={{ width: 110 }}>
-              <input id={`fruit-${j.id}`} className="erp-input" type="number" min={1} max={150} value={mm} onChange={(e) => setMm(e.target.value)} />
+              <input id={`fruit-${j.id}`} className="erp-input" type="number" min={1} max={150} step="any" value={mm}
+                     aria-invalid={mm !== "" && !sizeOk} aria-describedby={mm !== "" && !sizeOk ? `fruit-${j.id}-hint` : undefined}
+                     onChange={(e) => setMm(e.target.value)} />
               <span className="erp-input-addon">mm</span>
             </div>
-            <button className="btn btn-sm btn-ghost" disabled={!mm}>Save</button>
+            <button className="btn btn-sm btn-ghost" disabled={!sizeOk}>Save</button>
+            {mm !== "" && !sizeOk && <span id={`fruit-${j.id}-hint`} className="small field-hint-alert">1 to 150 mm</span>}
           </form>
         )}
       </td>
@@ -58,6 +63,18 @@ export function JobRow({ j, bed, urgent, fruitMm, onDone, onFruit }:
     </tr>
   );
 }
+
+/** Says which task was just marked done, with a way back: "Done" removes the row at once, so a slip must be easy to undo. */
+export function DoneNote({ title, onUndo }: { title: string; onUndo: () => void }) {
+  return (
+    <p className="done-note" role="status">
+      <span>Done: <b>{title}</b></span>
+      <button type="button" className="linkbtn" onClick={onUndo}>Undo</button>
+    </p>
+  );
+}
+
+export type LastDone = { cycleId: string; job: string; title: string };
 
 export function JobsHead({ bed }: { bed?: boolean }) {
   return <thead><tr>{bed && <th>Block</th>}<th>Task</th><th className="r">When</th><th>Status</th><th /></tr></thead>;

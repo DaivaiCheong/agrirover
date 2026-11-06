@@ -78,6 +78,19 @@ async def job_done(cycle_id: str, job: str, farm: Farm = Depends(farm_dep), sess
     return await _orchard_view(session, farm, cycle_id)
 
 
+@router.delete("/cycles/{cycle_id}/orchard/jobs/{job}/done")
+async def job_undone(cycle_id: str, job: str, farm: Farm = Depends(farm_dep), session: AsyncSession = Depends(get_db)):
+    """Undo a "Done" pressed by mistake: the task is due again. Undoing a task that was not done changes nothing."""
+    p = (await load_cycle(session, farm, cycle_id))[0]
+    if job not in guava.JOB_IDS:
+        raise Invalid(f"unknown task {job!r}")
+    mark = await session.get(OrchardJobDone, (p.id, job))
+    if mark is not None:
+        await session.delete(mark)
+        await session.commit()
+    return await _orchard_view(session, farm, cycle_id)
+
+
 class FruitIn(BaseModel):
     mm: float = Field(gt=0, le=150)
 

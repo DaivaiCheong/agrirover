@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.entities import Device, Farm, Zone
 from app.services.decisions import latest_signal, newest_readings
+from app.services.rover_live import ROVER_CODE, live
 from app.services.rule_engine import utcnow
 
 STALE_AFTER_INTERVALS = 3        # silent for 3 expected intervals -> stale
@@ -23,8 +24,12 @@ def device_status(last_seen_at: datetime | None, expected_interval_s: int,
     return "online" if silent <= timedelta(seconds=STALE_AFTER_INTERVALS * expected_interval_s) else "stale"
 
 
-async def list_devices(session: AsyncSession, now: datetime | None = None) -> list[dict]:
+async def list_devices(session: AsyncSession, now: datetime | None = None, rover_link: str | None = None) -> list[dict]:
+    """Each device and how it is doing. The rover's row also carries `link`, its live connection (online, offline or
+    unknown): with no rover hardware commissioned, the software answering on that link is the simulator, and the
+    Devices screen must say so rather than contradict the Rover screen."""
     now = now or utcnow()
+    rover_link = rover_link or live.status
     rows = (await session.execute(
         select(Device, Zone.name).outerjoin(Zone, Device.zone_id == Zone.id).order_by(Device.code))).all()
     return [{
@@ -32,6 +37,7 @@ async def list_devices(session: AsyncSession, now: datetime | None = None) -> li
         "status": device_status(d.last_seen_at, d.expected_interval_s, d.commissioned, now),
         "lastSeenAt": d.last_seen_at.isoformat() if d.last_seen_at else None,
         "firmwareVersion": d.firmware_version,
+        "link": rover_link if d.code == ROVER_CODE else None,
     } for d, zone_name in rows]
 
 

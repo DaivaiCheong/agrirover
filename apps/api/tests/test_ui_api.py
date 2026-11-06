@@ -231,10 +231,11 @@ def test_registry_and_zone_readings_come_from_stored_telemetry():
                 await store_telemetry(s, "farm/farm-01/zone/g1/telemetry", payload, now=AT_6)
 
             async with Session() as s:
-                devices = {d["code"]: d for d in await reg.list_devices(s, now=AT_6 + timedelta(seconds=30))}
+                devices = {d["code"]: d for d in await reg.list_devices(s, now=AT_6 + timedelta(seconds=30), rover_link="online")}
             assert devices["ESP-FIELD-01"]["status"] == "online"
-            assert devices["ESP-FIELD-01"]["firmwareVersion"] == "sim-1.0"
-            assert devices["ROVER-01"]["status"] == "not_commissioned"
+            assert devices["ESP-FIELD-01"]["firmwareVersion"] == "sim-1.0" and devices["ESP-FIELD-01"]["link"] is None
+            # no rover hardware yet, but the simulator answers on the rover's link: both are reported, so the screens agree
+            assert devices["ROVER-01"]["status"] == "not_commissioned" and devices["ROVER-01"]["link"] == "online"
 
             async with Session() as s:
                 zones = {z["zone"]: z for z in await reg.latest_by_zone(s, "farm-01")}

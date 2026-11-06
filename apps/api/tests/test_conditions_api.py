@@ -154,6 +154,11 @@ async def test_the_cycle_page_and_its_tasks_through_the_api(Session):
         done = (await c.post(f"/api/v1/cycles/{g4['id']}/orchard/jobs/bag/done")).json()
         assert done["bagged"] is True and next(j for j in done["jobs"] if j["id"] == "bag")["state"] == "done"
         assert (await c.post(f"/api/v1/cycles/{g4['id']}/orchard/jobs/nope/done")).status_code == 422
+        undone = (await c.delete(f"/api/v1/cycles/{g4['id']}/orchard/jobs/bag/done")).json()
+        assert undone["bagged"] is False and next(j for j in undone["jobs"] if j["id"] == "bag")["state"] == "due"
+        again = await c.delete(f"/api/v1/cycles/{g4['id']}/orchard/jobs/bag/done")      # undoing twice is harmless
+        assert again.status_code == 200 and next(j for j in again.json()["jobs"] if j["id"] == "bag")["state"] == "due"
+        assert (await c.delete(f"/api/v1/cycles/{g4['id']}/orchard/jobs/nope/done")).status_code == 422
         assert (await c.post(f"/api/v1/cycles/{g4['id']}/orchard/fruit", json={"mm": 38})).json()["fruitMm"] == 38
         assert (await c.post(f"/api/v1/cycles/{g4['id']}/orchard/fruit", json={"mm": 0})).status_code == 422
         crops = (await c.get("/api/v1/crops")).json()

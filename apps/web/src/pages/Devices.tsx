@@ -9,6 +9,14 @@ const STATUS: Record<DeviceRow["status"], ["ok" | "warn" | "alert" | "idle", str
   not_commissioned: ["idle", "not commissioned"],
 };
 
+/** A device's status in words. A rover with no hardware commissioned is the simulator: say whether it is answering. */
+function statusOf(d: DeviceRow): ["ok" | "warn" | "alert" | "idle", string] {
+  if (d.status === "not_commissioned" && d.link) {
+    return d.link === "online" ? ["ok", "simulator online"] : ["idle", d.link === "offline" ? "simulator offline" : "no hardware yet"];
+  }
+  return STATUS[d.status];
+}
+
 export default function Devices() {
   const { data, error } = usePoll(api.devices, 10000);
 
@@ -23,14 +31,14 @@ export default function Devices() {
             </thead>
             <tbody>
               {(data ?? []).map((d) => {
-                const [kind, label] = STATUS[d.status];
+                const [kind, label] = statusOf(d);
                 return (
                   <tr key={d.code}>
                     <td><b>{d.code}</b></td>
                     <td>{d.kind.replace("_", " ")}</td>
                     <td>{d.zone ?? "—"}</td>
                     <td><Led kind={kind}>{label}</Led></td>
-                    <td>{d.commissioned ? ago(d.lastSeenAt) : "—"}</td>
+                    <td>{d.commissioned || d.lastSeenAt ? ago(d.lastSeenAt) : "—"}</td>
                     <td>{d.firmwareVersion ?? "—"}</td>
                   </tr>
                 );

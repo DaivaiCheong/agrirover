@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Bot, Calculator, Sprout } from "lucide-react";
 import EnvRibbon from "../components/EnvRibbon";
-import { OrchardJobs, StageStrip } from "../components/Orchard";
+import { DoneNote, OrchardJobs, StageStrip, type LastDone } from "../components/Orchard";
 import { Kpis, More, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api, type OrchardCycle as View } from "../lib/api";
 import { trim } from "../lib/conditions";
@@ -136,7 +136,18 @@ export default function OrchardCycle() {
   const c = v?.cycle, p = c?.perennial, a = v?.advice;
   const stress = a?.water.paused;
 
-  async function done(job: string) { await api.orchardJobDone(id, job); reload(); }
+  const [lastDone, setLastDone] = useState<LastDone | null>(null);
+  async function done(job: string) {
+    await api.orchardJobDone(id, job);
+    setLastDone({ cycleId: id, job, title: v?.jobs.find((j) => j.id === job)?.title ?? job });
+    reload();
+  }
+  async function undoDone() {
+    if (!lastDone) return;
+    await api.orchardJobUndo(lastDone.cycleId, lastDone.job);
+    setLastDone(null);
+    reload();
+  }
   async function fruit(mm: number) { await api.orchardFruitSize(id, mm); reload(); }
 
   const tabs: { id: TabId; label: string }[] = [
@@ -201,6 +212,7 @@ export default function OrchardCycle() {
               ))}
             </div>
 
+            {tab === "jobs" && lastDone && <DoneNote title={lastDone.title} onUndo={undoDone} />}
             {tab === "jobs" && <Panel pad={false}><OrchardJobs jobs={v.jobs} fruitMm={v.fruitMm} onDone={done} onFruit={fruit} /></Panel>}
             {tab === "trees" && <Trees v={v} />}
             {tab === "targets" && <Targets v={v} go={go} />}

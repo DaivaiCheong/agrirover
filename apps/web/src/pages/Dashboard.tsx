@@ -1,13 +1,15 @@
+import { useState } from "react";
 import { ArrowRight, Bot, Plus, Sprout, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 import EnvRibbon from "../components/EnvRibbon";
-import { JobRow, JobsHead, StageStrip } from "../components/Orchard";
+import { DoneNote, JobRow, JobsHead, StageStrip, type LastDone } from "../components/Orchard";
 import { Empty, Kpis, More, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api, loadProblem, type Advice, type BedConditions, type Cycle, type OrchardCycle } from "../lib/api";
-import { litres, longToday } from "../lib/format";
+import { litres, longToday, todayIso } from "../lib/format";
+import { roundPlan } from "../lib/rover";
 import { mergeToday } from "../lib/today";
 import { useData } from "../lib/useData";
-import { ago, usePoll } from "../lib/usePoll";
+import { usePoll } from "../lib/usePoll";
 
 const FEED_WORD: Record<string, [string | undefined, string]> = {
   feed: ["info", "Feed today"], hold: ["warn", "Hold the feed"], flush: ["alert", "Flush, no feed"], wait: [undefined, "Not due"], none: [undefined, "No feed"],
@@ -73,7 +75,18 @@ export default function Dashboard() {
   const condOf = new Map((conditions.data ?? []).map((b) => [b.zone, b]));
   const all = advice.data ?? [];
 
-  async function jobDone(c: Cycle, job: string) { await api.orchardJobDone(c.id, job); load.reload(); advice.data; }
+  const [lastDone, setLastDone] = useState<LastDone | null>(null);
+  async function jobDone(c: Cycle, job: string, title: string) {
+    await api.orchardJobDone(c.id, job);
+    setLastDone({ cycleId: c.id, job, title: `${title}, ${c.bedLabel}` });
+    load.reload();
+  }
+  async function undoDone() {
+    if (!lastDone) return;
+    await api.orchardJobUndo(lastDone.cycleId, lastDone.job);
+    setLastDone(null);
+    load.reload();
+  }
   async function fruit(c: Cycle, mm: number) { await api.orchardFruitSize(c.id, mm); load.reload(); }
 
   const today = mergeToday(all, active.map((c) => ({ c, jobs: load.data?.get(c.id)?.jobs ?? [] })));
@@ -82,7 +95,9 @@ export default function Dashboard() {
   const critical = alerts.filter((a) => a.severity === "critical").length;
   const water = all.reduce((s, a) => s + a.water.litres, 0);
   const full = all.reduce((s, a) => s + a.water.fullLitres, 0);
-  const newest = all.map((a) => a.surveyedAt).filter((x): x is string => Boolean(x)).sort().pop() ?? null;
+  // blocks the rover has been round today, not the age of its newest round: one fresh block must not make five look fresh
+  const slots = roundPlan(active, "07:00", all, todayIso());
+  const roundsToday = slots.filter((s) => s.doneAt).length;
   const missing = all.filter((a) => !a.surveyed);
   const simulated = all.some((a) => a.simulated);
 
@@ -106,7 +121,7 @@ export default function Dashboard() {
         {active.length > 0 && (
           <>
             <Kpis items={[
-              { k: "Last rover round", v: newest ? ago(newest) : "None" },
+              { k: "Rover today", v: advice.data === null ? "—" : `${roundsToday} of ${slots.length} ${slots.length === 1 ? "block" : "blocks"}` },
               { k: "Water today", v: `${litres(water)} of ${litres(full)}` },
               { k: "Feed today", v: ((n) => `${n} ${n === 1 ? "block" : "blocks"}`)(all.filter((a) => a.feed.action === "feed").length) },
               { k: "Alerts", v: alerts.length === 0 ? "None" : `${alerts.length}${critical ? ` (${critical} critical)` : ""}` },
@@ -114,6 +129,7 @@ export default function Dashboard() {
             {simulated && <p className="small muted">From simulated rover rounds. Starting rules, not field results. Nothing here opens a valve.</p>}
             {missing.length > 0 && <Notice kind="warn">No fresh round for {missing.map((a) => a.label).join(", ")}. <Link to="/rover">Run a round</Link> before acting on these.</Notice>}
 
+            {lastDone && <DoneNote title={lastDone.title} onUndo={undoDone} />}
             {today.length > 0 && (
               <Panel title="What to do today" pad={false}>
                 <div className="tablewrap">
@@ -123,7 +139,7 @@ export default function Dashboard() {
                       {today.map((item) => item.kind === "todo"
                         ? <TodoRow key={item.key} a={item.a} t={item.t} />
                         : <JobRow key={item.key} j={item.j} urgent={item.urgent} bed={<BlockLink id={item.c.id} label={item.c.bedLabel} />}
-                                  fruitMm={load.data?.get(item.c.id)?.fruitMm ?? null} onDone={(id) => jobDone(item.c, id)} onFruit={(mm) => fruit(item.c, mm)} />)}
+                                  fruitMm={load.data?.get(item.c.id)?.fruitMm ?? null} onDone={(id) => jobDone(item.c, id, item.j.title)} onFruit={(mm) => fruit(item.c, mm)} />)}
                     </tbody>
                   </table>
                 </div>

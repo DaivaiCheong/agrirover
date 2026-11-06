@@ -198,6 +198,8 @@ export type ZoneNow = {
 export type DeviceRow = {
   code: string; kind: string; zone: string | null; commissioned: boolean;
   status: "online" | "stale" | "never" | "not_commissioned";
+  /** The rover only: its live connection. With no hardware commissioned, what answers on it is the simulator. */
+  link: "online" | "offline" | "unknown" | null;
   lastSeenAt: string | null; firmwareVersion: string | null;
 };
 
@@ -343,6 +345,7 @@ export const api = {
   growth: (zone: string) => request<Growth>(`/advice/${zone}/growth`),
   orchardCycle: (id: string) => request<OrchardCycle>(`/cycles/${id}/orchard`),
   orchardJobDone: (id: string, job: string) => send<OrchardCycle>("POST", `/cycles/${id}/orchard/jobs/${job}/done`, {}),
+  orchardJobUndo: (id: string, job: string) => send<OrchardCycle>("DELETE", `/cycles/${id}/orchard/jobs/${job}/done`),
   orchardFruitSize: (id: string, mm: number) => send<OrchardCycle>("POST", `/cycles/${id}/orchard/fruit`, { mm }),
 
   // farm

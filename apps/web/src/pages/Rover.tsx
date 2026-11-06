@@ -22,7 +22,7 @@ function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 }
 
 /** One tree as the rover found it: the photo, what the probe read, and what it should get today. */
-function CellView({ cell, frame }: { cell?: RoverCell; frame?: string | null }) {
+function CellView({ cell, frame, held }: { cell?: RoverCell; frame?: string | null; held?: boolean }) {
   if (!cell) return <p className="small muted">The rover's photos and readings appear here during a round.</p>;
   const a = cell.advice;
   return (
@@ -30,7 +30,7 @@ function CellView({ cell, frame }: { cell?: RoverCell; frame?: string | null }) 
       {frame ? <img src={`data:image/jpeg;base64,${frame}`} alt={`Photo of ${cellName(cell.row, cell.col)}`} /> : <div className="rc-nophoto small muted">No photo kept</div>}
       <table className="tbl kv"><tbody>
         <tr><th scope="row">Tree</th><td><b>{cellName(cell.row, cell.col)}</b>{!cell.plant && " · no tree seen"}</td></tr>
-        {a && cell.plant && <tr><th scope="row">Water today</th><td><b>{a.litres} L</b> of {a.fullLitres} L full demand</td></tr>}
+        {a && cell.plant && <tr><th scope="row">Water today</th><td>{held ? <span className="muted">Held: induction stress</span> : <><b>{a.litres} L</b> of {a.fullLitres} L full demand</>}</td></tr>}
         {cell.plant && <tr><th scope="row">Leaf cover</th><td>{Math.round((cell.canopy ?? 0) * 100)} %{cell.flagged && <> <Tag kind="warn">Yellow {Math.round((cell.chlorosis ?? 0) * 100)} %</Tag></>}</td></tr>}
         {Object.keys(LABEL).filter((k) => cell.readings?.[k] !== undefined).map((k) => (
           <tr key={k}><th scope="row">{LABEL[k]}</th><td>{cell.readings[k]}</td></tr>
@@ -41,13 +41,14 @@ function CellView({ cell, frame }: { cell?: RoverCell; frame?: string | null }) 
 }
 
 /** Every tree of the round: the table behind the map. */
-export function TreeTable({ cells, picked, onPick }: { cells: RoverCell[]; picked?: [number, number] | null; onPick?: (r: number, c: number) => void }) {
+export function TreeTable({ cells, picked, onPick, held }: { cells: RoverCell[]; picked?: [number, number] | null; onPick?: (r: number, c: number) => void; held?: boolean }) {
   const trees = cells.filter((c) => c.plant);
   const given = litresOf(cells), full = fullLitresOf(cells);
   const hasAdvice = cells.some((c) => c.advice);
   return (
     <Panel title={`Trees (${trees.length})`} pad={false}
-           right={hasAdvice ? <span className="small muted">Water today {given.toFixed(0)} L of {full.toFixed(0)} L full demand</span> : undefined}>
+           right={!hasAdvice ? undefined : held ? <span className="small muted">Water held: induction stress</span>
+             : <span className="small muted">Water today {given.toFixed(0)} L of {full.toFixed(0)} L full demand</span>}>
       {trees.length === 0 ? <p className="panel-pad small muted">Nothing yet.</p> : (
         <div className="tablewrap rc-list">
           <table className="tbl">
@@ -59,7 +60,7 @@ export function TreeTable({ cells, picked, onPick }: { cells: RoverCell[]; picke
                 return (
                   <tr key={`${c.row}-${c.col}`} className={`pickable${picked?.[0] === c.row && picked?.[1] === c.col ? " picked" : ""}`} onClick={() => onPick?.(c.row, c.col)}>
                     <td className="nowrap"><b>{cellName(c.row, c.col)}</b></td>
-                    {hasAdvice && <td className="r"><b>{c.advice?.litres ?? "—"}</b></td>}
+                    {hasAdvice && <td className="r">{held ? <span className="muted">Hold</span> : <b>{c.advice?.litres ?? "—"}</b>}</td>}
                     <td className="r">{c.readings?.soil_moisture ?? "—"}</td>
                     <td className="r">{c.readings?.soil_ec ?? "—"}</td>
                     <td className="r">{c.readings?.soil_ph ?? "—"}</td>
@@ -152,6 +153,9 @@ export default function Rover() {
   const adviceOf = new Map((blockAdvice?.trees ?? []).map((t) => [`${t.row},${t.col}`, t]));
   const storedCells: RoverCell[] = (last && lastRound.data?.id === last.id ? lastRound.data.cells : []).map((x) => ({ ...x, advice: adviceOf.get(`${x.row},${x.col}`) ?? null }));
   const slots = roundPlan(growing, roundTime.data?.roundTime ?? "07:00", adviceList, todayIso());
+  // during induction stress no water is the plan, not a zero: say "held" the way Found today does
+  const shownZone = m?.zoneId ?? bed;
+  const held = Boolean(adviceList.find((a) => a.zone === shownZone)?.water.paused);
   const adviceWait = adviceNow.data === null ? (adviceNow.error ? "Could not be loaded just now." : "Loading…") : undefined;
 
   const r = Number(rows), c = Number(cols), rm = Number(rowM), tm = Number(treeM);
@@ -215,7 +219,7 @@ export default function Rover() {
           { k: "Status", v: <Tag kind={word[0]}>{word[1]}</Tag> },
           { k: "Stops", v: hasRound && scanned !== null ? `${scanned} of ${planned}` : "—" },
           { k: "Trees seen", v: hasRound ? trees : "—" },
-          { k: "Water today", v: hasRound ? `${litresOf(cells).toFixed(0)} L` : "—" },
+          { k: "Water today", v: !hasRound ? "—" : held ? "Held: stress" : `${litresOf(cells).toFixed(0)} L` },
           { k: "Yellow leaves", v: hasRound ? flagged : "—" },
           { k: `Battery (stops at ${ROVER.batteryStopV} V)`, v: m?.battery != null ? `${m.battery.toFixed(2)} V` : "—" },
         ]} />
@@ -234,12 +238,12 @@ export default function Rover() {
               </div>
               <div className="panel-foot rm-foot"><RoverLegend /></div>
             </Panel>
-            {hasRound && <TreeTable cells={cells} picked={picked} onPick={(a, b) => setPicked([a, b])} />}
+            {hasRound && <TreeTable cells={cells} held={held} picked={picked} onPick={(a, b) => setPicked([a, b])} />}
           </div>
 
           <div className="stack">
             {running ? (
-              <Panel title="At this tree" icon={Camera}><CellView cell={shownCell} frame={shownFrame} /></Panel>
+              <Panel title="At this tree" icon={Camera}><CellView cell={shownCell} frame={shownFrame} held={held} /></Panel>
             ) : (
               <Panel title="Today's round">
                 <div className="erp-form">
@@ -283,7 +287,7 @@ export default function Rover() {
             {!running && hasRound && cells.length > 0 && (
               <Panel title="At this tree" icon={Camera}
                      right={picked ? <button className="linkbtn small" onClick={() => setPicked(null)}>Last tree</button> : undefined}>
-                <CellView cell={shownCell} frame={shownFrame} />
+                <CellView cell={shownCell} frame={shownFrame} held={held} />
               </Panel>
             )}
           </div>

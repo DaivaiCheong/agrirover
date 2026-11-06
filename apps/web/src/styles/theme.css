@@ -540,7 +540,15 @@ details.stagecard > summary::-webkit-details-marker{display:none}
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
+/* a tag in a figure (a verdict, a status) wraps inside its column instead of running over the next one */
+.erp-summary-item .tag {
+  white-space: normal;
+  align-items: flex-start;
+  max-width: 100%;
+}
+.erp-summary-item .tag::before { margin-top: 6px; }
 .erp-summary-item .k {
   font-size: 11.5px;
   font-weight: 600;
@@ -735,6 +743,9 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .jr-later td,.jr-past td{color:var(--ink-muted)}
 .job-btn{flex:0 0 auto}
 .job-measure{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px}
+.field-hint-alert{color:var(--alert)}
+.done-note{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0;padding:8px 14px;font-size:13.5px;
+  background:var(--surface);border:1px solid var(--line);border-radius:6px}
 .settings-in{width:250px;min-width:210px}
 .settings-t th{vertical-align:middle}
 .rule-t td{white-space:nowrap}
