@@ -50,10 +50,10 @@ class Bed:
 
 BEDS = (
     Bed("g1", "G1 Wide orchard", "A", 400, TrialArm.guided, "wide", 16, "Local Khmer", 30, 6, "withhold", 0.75),
-    Bed("g2", "G2 Kimju block", "B", 105, TrialArm.usual, "commercial", 10, "Kimju", 60, 3, "pruning", 1.15),
-    Bed("g3", "G3 Hedgerow", "C", 60, None, "hedgerow", 10, "Crystal Guava", 90, 2.5, "pruning", 1.15, None, ("zn_b",)),
-    Bed("g4", "G4 Meadow pilot", "D", 50, None, "meadow", 25, "Dwarf Kimju", 120, 1.5, "pruning", 1.1, 34),
-    Bed("g5", "G5 Pearl block", "E", 105, None, "commercial", 10, "Taiwan Pearl", 165, 4, "bending", 1.15, 42),
+    Bed("g2", "G2 Commercial block", "B", 105, TrialArm.usual, "commercial", 10, "Kimju", 60, 3, "pruning", 1.15),
+    Bed("g3", "G3 Hedgerow", "C", 60, None, "hedgerow", 10, "Kimju", 90, 2.5, "pruning", 1.15, None, ("zn_b",)),
+    Bed("g4", "G4 Meadow pilot", "D", 50, None, "meadow", 25, "Kimju", 120, 1.5, "pruning", 1.1, 34),
+    Bed("g5", "G5 Harvest block", "E", 105, None, "commercial", 10, "Kimju", 165, 4, "bending", 1.15, 42),
     Bed("g6", "G6 Free plot", "F", 50),
 )
 

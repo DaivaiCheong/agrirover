@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Camera, CircleCheck, Circle, OctagonX, Play } from "lucide-react";
 import RoundSchedule from "../components/RoundSchedule";
 import RoverMap, { RoverLegend } from "../components/RoverMap";
+import { TreePhotoCheck } from "../components/TreePhoto";
 import { EF, Kpis, More, Notice, Panel, Tag, Toolbar } from "../components/ui";
 import { api, loadProblem, type Advice, type RoverCell } from "../lib/api";
 import { litres, todayIso } from "../lib/format";
@@ -156,6 +157,10 @@ export default function Rover() {
   // during induction stress no water is the plan, not a zero: say "held" the way Found today does
   const shownZone = m?.zoneId ?? bed;
   const held = Boolean(adviceList.find((a) => a.zone === shownZone)?.water.paused);
+  // trees someone has photographed, for a mark on the map: the camera on the rover is not built, so a person is the camera for now
+  const savedPhotos = useData(() => api.photos("all"));
+  const photographed = new Set((savedPhotos.data?.photos ?? []).filter((p) => p.zone === shownZone && p.tree)
+    .map((p) => { const [r, t] = p.tree!.replace(/[RT]/g, "").split(" ").map(Number); return `${r - 1},${t - 1}`; }));
   const adviceWait = adviceNow.data === null ? (adviceNow.error ? "Could not be loaded just now." : "Loading…") : undefined;
 
   const r = Number(rows), c = Number(cols), rm = Number(rowM), tm = Number(treeM);
@@ -234,9 +239,9 @@ export default function Rover() {
                      : last ? <span className="small muted">Last round {ago(last.finishedAt ?? last.startedAt)}{last.simulated ? " · simulated" : ""}</span> : undefined}>
               <div className="rm-wrap">
                 <RoverMap rows={m?.rows ?? last?.rows ?? (sizeOk ? r : 4)} cols={m?.cols ?? last?.cols ?? (sizeOk ? c : 4)} cells={cells}
-                          at={m ? m.cell ?? [0, 0] : last ? undefined : [0, 0]} selected={picked} onPick={(a, b) => setPicked([a, b])} />
+                          at={m ? m.cell ?? [0, 0] : last ? undefined : [0, 0]} selected={picked} onPick={(a, b) => setPicked([a, b])} photos={photographed} />
               </div>
-              <div className="panel-foot rm-foot"><RoverLegend /></div>
+              <div className="panel-foot rm-foot"><RoverLegend />{hasRound && !running && <span className="small muted">Tap a tree to photograph it</span>}</div>
             </Panel>
             {hasRound && <TreeTable cells={cells} held={held} picked={picked} onPick={(a, b) => setPicked([a, b])} />}
           </div>
@@ -285,9 +290,15 @@ export default function Rover() {
               </Panel>
             )}
             {!running && hasRound && cells.length > 0 && (
-              <Panel title="At this tree" icon={Camera}
+              <Panel title={shownCell ? `At this tree · ${cellName(shownCell.row, shownCell.col)}` : "At this tree"} icon={Camera}
                      right={picked ? <button className="linkbtn small" onClick={() => setPicked(null)}>Last tree</button> : undefined}>
-                <CellView cell={shownCell} frame={shownFrame} held={held} />
+                <div className="stack">
+                  <CellView cell={shownCell} frame={shownFrame} held={held} />
+                  {shownCell?.plant && (
+                    <TreePhotoCheck key={`${shownZone}-${shownCell.row}-${shownCell.col}`} zone={shownZone} row={shownCell.row} col={shownCell.col}
+                                    soil={false} onSaved={() => savedPhotos.reload()} />
+                  )}
+                </div>
               </Panel>
             )}
           </div>

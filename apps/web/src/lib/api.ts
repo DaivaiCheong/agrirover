@@ -205,13 +205,22 @@ export type DeviceRow = {
 
 export type PhotoResult = {
   status: "ok" | "uncertain"; label: string | null; confidence: number | null; seen: string | null; matches: Disease[]; note: string;
-  symptom: string | null; correlation: Correlation | null;
+  symptom: string | null; correlation: Correlation | null; tree: TreeContext | null;
+};
+/** One tree as the rover's newest round found it. Row and tree count from 0. */
+export type TreeContext = {
+  zone: string; name: string; row: number; col: number; found: boolean; roundAt: string | null; simulated: boolean; stage: string | null; flagged: boolean;
+  readings: { metric: string; label: string; unit: string; value: number | null; low: number | null; high: number | null; state: "low" | "ok" | "high" | null }[];
+  soil: { cause: string; text: string; action: string | null } | null;
 };
 
-async function checkPhoto(file: File, zone?: string): Promise<PhotoResult> {
+async function checkPhoto(file: File, zone?: string, tree?: { row: number; col: number }): Promise<PhotoResult> {
   const body = new FormData();
   body.append("photo", file);                       // multipart: the browser sets the content type
-  const res = await fetch(`${BASE}/photos/check${zone ? `?${new URLSearchParams({ zone })}` : ""}`, { method: "POST", body });
+  const q = new URLSearchParams();
+  if (zone) q.set("zone", zone);
+  if (zone && tree) { q.set("row", String(tree.row)); q.set("col", String(tree.col)); }
+  const res = await fetch(`${BASE}/photos/check${q.toString() ? `?${q}` : ""}`, { method: "POST", body });
   if (!res.ok) {
     let detail: unknown;
     try { detail = (await res.json()).detail; } catch { /* keep status */ }
@@ -331,6 +340,8 @@ export const api = {
   checkPhoto,
   savePhoto,
   photos: (status: string) => request<PhotoLibrary>(`/photos?${new URLSearchParams({ status })}`),
+  treeContext: (zone: string, row: number, col: number) =>
+    request<TreeContext>(`/photos/tree?${new URLSearchParams({ zone, row: String(row), col: String(col) })}`),
   photoLabels: () => request<PhotoLabels>("/photos/labels"),
   diseaseGuide: () => request<Disease[]>("/photos/guide"),
   confirmPhoto: (id: string, body: { label: string; name: string; note: string | null }) => send<SavedPhoto>("PUT", `/photos/${id}/confirm`, body),

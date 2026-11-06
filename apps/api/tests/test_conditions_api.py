@@ -178,3 +178,25 @@ def test_a_cycle_day_gives_readings_inside_its_stage_unless_an_event_says_otherw
 
 def test_today_is_cambodia_not_the_server():
     assert isinstance(farm_today(), date)
+
+
+@pgdb.with_db("aaf_tree_check")
+async def test_one_tree_is_read_against_its_own_soil_for_a_photo(Session):
+    # the rover's camera is not built: a person photographs a tree, and the answer uses that tree's probe readings
+    from app.services.tree_check import tree_context
+    await seeded(Session)
+    async with Session() as s:
+        assert await store_report(s, report("g2", {"soil_moisture": 65.0, "soil_ec": 0.6, "soil_ph": 6.4}))
+    async with Session() as s:
+        t = await tree_context(s, FARM, "g2", 0, 2)
+        assert t["found"] and t["name"] == "R1 T3" and t["simulated"] is True
+        ec = next(r for r in t["readings"] if r["metric"] == "soil_ec")
+        assert ec["value"] == 0.6 and ec["state"] == "low" and ec["low"] == 1.2
+        assert t["soil"]["cause"] == "low_feed"                                   # low EC at flush: feed, not a germ
+        missing = await tree_context(s, FARM, "g2", 3, 3)                         # the round only had row 1
+        assert missing["found"] is False and missing["readings"] == [] and missing["name"] == "R4 T4"
+        assert (await tree_context(s, FARM, "g6", 0, 0))["stage"] is None        # nothing growing: no stage, no rule
+    async with pgdb.api(Session) as c:
+        assert (await c.get("/api/v1/photos/tree", params={"zone": "g2", "row": 0, "col": 2})).json()["soil"]["cause"] == "low_feed"
+        assert (await c.get("/api/v1/photos/tree", params={"zone": "g2", "row": -1, "col": 0})).status_code == 422
+        assert (await c.get("/api/v1/photos/tree", params={"zone": "nope", "row": 0, "col": 0})).status_code == 404

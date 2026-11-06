@@ -123,6 +123,15 @@ def test_every_guide_entry_has_a_short_card_for_the_photo_result():
         assert not any(ch in s for s in card["steps"] for ch in ("ml/", "g/L", "ppm"))            # still no invented dose
 
 
+def test_the_guide_tells_rust_from_a_feed_shortage_by_which_leaves_show_it():
+    # a real photo of reddened old leaves with clean new growth was called rust: these clues are what fixed it
+    from app.services.disease import MATCH_PROMPT, MATCH_SCHEMA
+    from app.services.guava_diseases import BY_ID
+    assert "young" in BY_ID["rust"].leaf and "feed shortage, not rust" in BY_ID["rust"].not_to_confuse
+    assert "oldest leaves first" in BY_ID["chlorosis"].leaf and "between the veins" in BY_ID["chlorosis"].not_to_confuse
+    assert MATCH_SCHEMA["required"][0] == "where" and "old_leaves" in MATCH_PROMPT    # it says which leaves before naming
+
+
 def test_the_soil_check_follows_the_best_match_not_the_runner_up(client):
     # leaf spot has no soil rule and rust has one: rust must not be offered for a photo that best fits leaf spot
     body = _post(client, classifier=StubClassifier(Seen("leaf_spot", None, "Dark brown patches.", "rust"))).json()
@@ -283,3 +292,12 @@ def test_a_crash_in_a_route_is_a_readable_500_with_cors_so_the_browser_can_show_
     assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
     assert "farm server had an error" in r.json()["detail"]
     assert "column" not in r.text                       # the detail stays in the log, not on the screen
+
+
+def test_a_tree_needs_its_block_and_both_numbers(client):
+    # a row without a tree, or a tree without a block, is refused before the model is asked anything
+    app.dependency_overrides[get_classifier] = lambda: StubClassifier(Seen("rust", None, "x"))
+    r = client.post("/api/v1/photos/check?zone=g1&row=2", files={"photo": ("a.jpg", JPEG, "image/jpeg")})
+    assert r.status_code == 422
+    r = client.post("/api/v1/photos/check?row=1&col=1", files={"photo": ("a.jpg", JPEG, "image/jpeg")})
+    assert r.status_code == 422

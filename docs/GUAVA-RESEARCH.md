@@ -77,6 +77,18 @@ Test photos: [BD Guava Fruit and Leaf Disease Dataset v5](https://data.mendeley.
 
 So the guide cut false anthracnose but did not raise the number of right names. Local `gemma4` as healthy or problem got 130 of 148 right on these unseen photos, against 112 of 121 on the photos its prompt was tuned on. Local without the guide was not scored on this set: that run hung. Every other hosted vision model answered "not included in your free usage". Hosted runs sent only these public dataset photos.
 
+**Which leaves carry the signs (6 Nov).** A farm photo of old leaves reddened between green veins, with clean new growth, came back "Guava rust". Rust attacks young, soft growth and shoot tips first ([NVWA quick scan](https://english.nvwa.nl/binaries/nvwa-en/documenten/plant/plant-health/pest-risk-analysis/documents/quick-scan-austropuccinia-psidii/quick-scan-austropuccinia-psidii.pdf); no symptoms on old leaves of 'Paluma' in [this study](https://agris.fao.org/search/en/records/65decd12b766d82b18fe6c04)), while magnesium shortage starts on the oldest leaves, yellow, bronze or reddish between green veins ([Vikaspedia](https://vikaspedia.in/agriculture/crop-production/integrated-pest-managment/ipm-for-fruit-crops/ipm-strategies-for-guava/nutritional-deficiencies-of-guava)). The guide now says so, and versions of the match step were scored on the same 150 held-out photos, with the same screen results (hosted `gemma4:31b`):
+
+| Match step | Named right | Right in top two | Said rust | Said anthracnose | Against the old step |
+|---|---|---|---|---|---|
+| Old guide and prompt | 52 of 120 | 66 | 12 | 7 | |
+| New guide, old prompt | 58 | 69 | 3 | 9 | 6 fixed, 0 broken |
+| **New guide, `where` (which leaves) before the name: the app's setting** | **61** | **72** | 6 | 9 | 10 fixed, 1 broken |
+| New guide, `where` and a forced list of sign types | 51 | 67 | 7 | 8 | 3 fixed, 4 broken |
+| New guide, `where` and a shorter sign list (first try) | 49 | 64 | 5 | 6 | 4 fixed, 7 broken |
+
+The farm photo came back "Yellow leaves from feed or soil" under the three new-guide versions. The forced sign list hurt because it had no word for some signs (mealybug's white clusters, scorch's dead edges). **Caveat:** the winner was picked on these same 150 photos, so 61 is optimistic; the app still says "about 4 in 10" until it is scored on photos it was not chosen on. The healthy-or-problem screen, unchanged, called 21 of 30 healthy photos a problem on this run: it is now the weaker step.
+
 **Rule from this:** no disease name reaches a farmer until a model passes on Siem Reap photos from sessions it never trained on. `scripts/eval_photo_check.py` scores any Ollama model on a folder of labelled photos. Who confirms labels and how to take the photos: [PHOTO-LABELLING.md](PHOTO-LABELLING.md).
 
 Wider evidence: models trained on PlantVillage lab photos drop from above 99 % to below 30 % on field photos ([Kyushu 2025](https://catalog.lib.kyushu-u.ac.jp/opac_download_md/7395548/2025_p0402.pdf), summary only). Anthracnose spreads under humid conditions, rust in warm humid weather, and algal spot with wet conditions and splashing water, where guava in high rainfall is a crop that can need control ([IPM Guava](https://agritech.tnau.ac.in/horticulture/pdf/tech_bulletin/national/IPM-GUAVA-Revised-Sept2011.pdf), [Pacific Pests](https://apps.lucidcentral.org/ppp/text/web_full/entities/algal_leaf_spot_148.htm), summaries only). No source found links soil moisture to anthracnose, so the app says wet soil is not the cause.

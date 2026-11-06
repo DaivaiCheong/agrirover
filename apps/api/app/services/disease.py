@@ -36,13 +36,19 @@ SCREEN_PROMPT = (
 )
 SCREEN_SCHEMA = {"type": "object", "required": ["seen", "label"],
                  "properties": {"seen": {"type": "string"}, "label": {"type": "string", "enum": [HEALTHY, PROBLEM, UNSURE]}}}
+# `where` comes first so the model looks at which leaves carry the signs before it picks a name: young growth points to
+# rust, old leaves coloured between the veins to a feed shortage. On the 150 held-out photos this took right names from
+# 52 to 61 of 120. A forced list of sign types as well scored worse (51): it had no word for some signs (docs/GUAVA-RESEARCH.md).
+WHERE = ("young_growth", "old_leaves", "all_leaves", "fruit")
 MATCH_PROMPT = (
     "This photo of a guava leaf or fruit shows a problem. Use this guide, and go by what is visible.\n\n" + prompt_text() + "\n\n"
-    f"Give `label`, the entry that fits best, and `also`, the next closest entry. Use {NONE} if nothing else fits, and {UNSURE} as `label` if no entry fits. "
-    f"Use only the ids at the start of each entry. Reply only with JSON: " + '{"label": "...", "also": "..."}'
+    f"First give `where`: which part carries the signs ({', '.join(WHERE)}). Compare young shoots at the tips with older leaves lower down. "
+    f"Then `label` is the entry that fits best, and `also` the next closest entry. Use {NONE} if nothing else fits, and {UNSURE} as `label` if no entry fits. "
+    f"Use only the ids at the start of each entry. Reply only with JSON: " + '{"where": "...", "label": "...", "also": "..."}'
 )
-MATCH_SCHEMA = {"type": "object", "required": ["label", "also"],
-                "properties": {"label": {"type": "string", "enum": [*BY_ID, UNSURE]}, "also": {"type": "string", "enum": [*BY_ID, NONE]}}}
+MATCH_SCHEMA = {"type": "object", "required": ["where", "label", "also"],
+                "properties": {"where": {"type": "string", "enum": list(WHERE)},
+                               "label": {"type": "string", "enum": [*BY_ID, UNSURE]}, "also": {"type": "string", "enum": [*BY_ID, NONE]}}}
 
 
 class ModelUnavailable(Exception):

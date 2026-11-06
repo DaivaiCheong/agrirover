@@ -3,6 +3,7 @@ import { Activity, Camera, ScanSearch } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import CorrelationCard from "../components/CorrelationCard";
 import PhotoVerdict from "../components/PhotoVerdict";
+import { SoilSays, TreeSoil } from "../components/TreePhoto";
 import { EF, Empty, Field, FormModal, Notice, Panel, Toolbar, type FormMsg } from "../components/ui";
 import { api, type Correlation, type PhotoResult } from "../lib/api";
 import { useData } from "../lib/useData";
@@ -39,6 +40,10 @@ export default function Crop() {
   const beds = zones.data ?? [];
   const growing = new Set((cycles.data ?? []).filter((c) => c.status === "active").map((c) => c.zone));
   const bed = zone || beds.find((b) => growing.has(b.zone))?.zone || beds[0]?.zone || "";
+  // the tree, when the farmer says which one: then the answer uses that tree's own soil from the rover's newest round
+  const grid = (cycles.data ?? []).find((c) => c.status === "active" && c.zone === bed)?.grid ?? null;
+  const tree = row !== "" && col !== "" ? { row: Number(row) - 1, col: Number(col) - 1 } : undefined;
+  const treeCtx = useData(() => (bed && tree ? api.treeContext(bed, tree.row, tree.col) : Promise.resolve(null)), [bed, row, col]);
 
   useEffect(() => {
     if (!file) { setPreview(null); return; }
@@ -53,7 +58,7 @@ export default function Crop() {
     setResult(null);
     setError(null);
     try {
-      const r = await api.checkPhoto(file, bed || undefined);
+      const r = await api.checkPhoto(file, bed || undefined, bed ? tree : undefined);
       setResult(r);
       if (r.symptom) setSymptom(r.symptom);
       // on a phone the answer is below the photo: bring it into view instead of leaving the farmer to scroll for it
@@ -93,8 +98,14 @@ export default function Crop() {
     } catch (err) { setSaveMsg({ kind: "alert", text: (err as Error).message }); }
   }
 
+  function pickTree(r: string, c: string) {
+    setRow(r); setCol(c);
+    setResult(null); setSaved(false);                   // an answer about one tree must not sit under another tree's name
+  }
+
   function changeBed(z: string) {
     setZone(z);
+    pickTree("", "");
     setCorr(null);                                      // a verdict about one bed must not sit under another bed's name
     setCorrError(null);
   }
@@ -106,6 +117,19 @@ export default function Crop() {
           <select className="erp-select toolbar-select" aria-label="Bed" value={bed} onChange={(e) => changeBed(e.target.value)}>
             {beds.map((b) => <option key={b.zone} value={b.zone}>{b.label ?? b.zone}</option>)}
           </select>
+          {grid && (
+            <>
+              <select className="erp-select toolbar-select" aria-label="Row" value={row} onChange={(e) => pickTree(e.target.value, e.target.value && (col || "1"))}>
+                <option value="">Whole block</option>
+                {Array.from({ length: grid.rows }, (_, i) => <option key={i} value={String(i + 1)}>Row {i + 1}</option>)}
+              </select>
+              {row !== "" && (
+                <select className="erp-select toolbar-select" aria-label="Tree" value={col} onChange={(e) => pickTree(row, e.target.value)}>
+                  {Array.from({ length: grid.cols }, (_, i) => <option key={i} value={String(i + 1)}>Tree {i + 1}</option>)}
+                </select>
+              )}
+            </>
+          )}
         </Toolbar>
       )}
 
@@ -124,7 +148,7 @@ export default function Crop() {
                 {busy ? "Checking…" : "Check photo"}
               </button>
               <button className="btn btn-sm btn-ghost" disabled={!file || !bed || saved} onClick={() => { setSaveMsg(null); setSaving(true); }}>
-                {saved ? "Saved" : "Save to library"}
+                {saved ? "Saved" : tree ? `Save to R${tree.row + 1} T${tree.col + 1}` : "Save to library"}
               </button>
             </div>
             {saved
@@ -139,8 +163,10 @@ export default function Crop() {
                 {`Could not check the photo: ${error}. You can still pick the symptom below.`}
               </Notice>
             )}
-            {result && <div id="photo-result"><PhotoVerdict key={`${result.label}-${result.seen}`} r={result} busy={crossing}
-                                     onSoil={(sym) => { setSymptom(sym); crossCheck(sym); }} /></div>}
+            {result && <div id="photo-result" className="stack"><PhotoVerdict key={`${result.label}-${result.seen}`} r={result} busy={crossing}
+                                     onSoil={result.tree ? undefined : (sym) => { setSymptom(sym); crossCheck(sym); }} />
+              <SoilSays r={result} /></div>}
+            {treeCtx.data && <div className="tp-ctx"><TreeSoil t={treeCtx.data} /></div>}
           </Panel>
         </div>
 

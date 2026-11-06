@@ -53,7 +53,7 @@ async def test_seed_builds_the_guava_farm_and_is_repeatable(Session):
     assert guava.common_name == "Guava"
     assert set(zones) == {"g1", "g2", "g3", "g4", "g5", "g6"}
     assert zones["g1"].label == "G1 Wide orchard" and zones["g1"].trial_arm is TrialArm.guided
-    assert zones["g2"].label == "G2 Kimju block" and zones["g2"].trial_arm is TrialArm.usual
+    assert zones["g2"].label == "G2 Commercial block" and zones["g2"].trial_arm is TrialArm.usual
     assert all(z.crop_id == guava.id for z in zones.values())
     assert len(plantings) == 5 and all(p.planted_on == PLANTED for p in plantings)
     assert sorted(x.code for x in sensors) == [f"S-{x}-{d}" for x in "ABCDEF" for d in (10, 25)]
@@ -133,7 +133,7 @@ async def test_the_usual_bed_is_recorded_but_never_messaged(Session):
     async with Session() as s:
         ids = await send_daily_message(s, tg, farm_name="farm-01", chat_id="1001", now=AT_6)
     assert len(ids) == 1                                             # only the guided bed asks for approval
-    assert "G1 Wide orchard (day 21): water 40 s" in tg.sent[0] and "G2 Kimju block" not in tg.sent[0]
+    assert "G1 Wide orchard (day 21): water 40 s" in tg.sent[0] and "G2 Commercial block" not in tg.sent[0]
 
     async with Session() as s:
         names = {zid: n for zid, n in (await s.execute(select(Zone.id, Zone.name))).all()}

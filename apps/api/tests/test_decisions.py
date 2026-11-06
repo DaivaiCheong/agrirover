@@ -172,7 +172,7 @@ def test_telemetry_is_stored_and_drives_todays_decision():
                 by_zone = {d.zone: d for d in await svc.decisions_for_farm(s, "farm-01", now=AT_6)}
             assert by_zone["g1"].decision is Decision.IRRIGATE
             assert by_zone["g1"].text == "G1 Wide orchard (day 21): water 40 s"
-            assert by_zone["g2"].text == "G2 Kimju block (day 21): skip, no sensor reading"   # no data yet
+            assert by_zone["g2"].text == "G2 Commercial block (day 21): skip, no sensor reading"   # no data yet
 
             # the newest reading wins: once the soil is wet, the decision flips
             async with Session() as s:

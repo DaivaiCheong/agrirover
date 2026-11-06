@@ -2,7 +2,7 @@ import os
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_db
-from app.services import diagnosis, photo_library
+from app.services import diagnosis, photo_library, tree_check
 from app.services.disease import Classifier, ModelUnavailable, get_classifier
 from app.services.guava_diseases import BY_ID, DISEASES
 
@@ -34,12 +34,30 @@ async def _read_image(photo: UploadFile) -> bytes:
     return data
 
 
+async def _tree(session: AsyncSession, zone: str | None, row: int | None, col: int | None) -> dict | None:
+    if row is None and col is None:
+        return None
+    if zone is None or row is None or col is None:
+        raise HTTPException(422, "give the block, the row and the tree together")
+    return await tree_check.tree_context(session, settings.farm_name, zone, row, col)
+
+
+@router.get("/tree")
+async def tree(zone: str, row: int = Query(..., ge=0), col: int = Query(..., ge=0), session: AsyncSession = Depends(get_db)):
+    """One tree as the rover last found it: its soil against the stage's targets, and what that says about yellow leaves.
+    Row and tree count from 0."""
+    return await _tree(session, zone, row, col)
+
+
 @router.post("/check")
 async def check_photo(photo: UploadFile = File(...), zone: str | None = None,
+                      row: int | None = Query(None, ge=0), col: int | None = Query(None, ge=0),
                       classifier: Classifier | None = Depends(get_classifier),
                       session: AsyncSession = Depends(get_db)):
     """Check one plant photo. The image is not stored here: saving it is a separate choice. Say which bed it is from
-    (`zone`) and a symptom the farm has a rule for is set against that bed's soil and air readings."""
+    (`zone`) and a symptom the farm has a rule for is set against that bed's soil and air readings. Say which tree too
+    (`row`, `col`, from 0) and the answer carries that tree's own readings from the newest round."""
+    tree_ctx = await _tree(session, zone, row, col)        # checked first: a wrong tree should not cost a model call
     data = await _read_image(photo)
     if classifier is None:
         raise HTTPException(503, "disease model not installed")
@@ -49,7 +67,7 @@ async def check_photo(photo: UploadFile = File(...), zone: str | None = None,
         raise HTTPException(503, str(exc)) from exc
     if result is None:
         return {"status": "uncertain", "label": None, "confidence": None, "seen": None, "matches": [], "symptom": None, "correlation": None,
-                "note": "The model is not sure. Take a clearer, closer photo of one leaf or fruit. " + NOTE}
+                "tree": tree_ctx, "note": "The model is not sure. Take a clearer, closer photo of one leaf or fruit. " + NOTE}
     matches = [BY_ID[x].to_dict() for x in (result.label, result.also) if x in BY_ID]
     # the soil check is offered for the best match only: picking the runner-up's rule put "Guava rust" under a brown-spot photo
     symptom = (matches[0]["symptom"] if matches else None) or diagnosis.match_symptom(result.label)
@@ -59,7 +77,7 @@ async def check_photo(photo: UploadFile = File(...), zone: str | None = None,
         correlation = {**await diagnosis.diagnose(session, settings.farm_name, zone, symptom), "source": "photo"}
     confidence = None if result.confidence is None else round(float(result.confidence), 3)
     return {"status": "ok", "label": result.label, "confidence": confidence, "seen": result.seen, "matches": matches, "symptom": symptom,
-            "correlation": correlation, "note": NOTE}
+            "correlation": correlation, "tree": tree_ctx, "note": NOTE}
 
 
 @router.get("/guide")

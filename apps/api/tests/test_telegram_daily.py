@@ -171,7 +171,7 @@ async def test_daily_message_creates_a_pending_proposal_and_sends_buttons(Sessio
     assert len(ids) == 1                                   # only g1 needs water
     chat, text, buttons = tg.sent[0]
     assert chat == CHAT and "G1 Wide orchard (day 21): water 40 s" in text
-    assert "G2 Kimju block" not in text                      # the usual bed is never messaged
+    assert "G2 Commercial block" not in text                      # the usual bed is never messaged
     assert buttons[0][0][1] == f"approve:{ids[0]}"
     async with Session() as s:
         p = (await s.execute(select(ActionProposal))).scalar_one()
