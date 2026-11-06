@@ -108,7 +108,7 @@ export default function Dashboard() {
             <Kpis items={[
               { k: "Last rover round", v: newest ? ago(newest) : "None" },
               { k: "Water today", v: `${litres(water)} of ${litres(full)}` },
-              { k: "Feed today", v: all.filter((a) => a.feed.action === "feed").length + " blocks" },
+              { k: "Feed today", v: ((n) => `${n} ${n === 1 ? "block" : "blocks"}`)(all.filter((a) => a.feed.action === "feed").length) },
               { k: "Alerts", v: alerts.length === 0 ? "None" : `${alerts.length}${critical ? ` (${critical} critical)` : ""}` },
             ]} />
             {simulated && <p className="small muted">From simulated rover rounds. Starting rules, not field results. Nothing here opens a valve.</p>}

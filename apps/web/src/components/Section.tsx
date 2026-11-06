@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
+import SampleNotice from "./SampleNotice";
 import { PageHead } from "./ui";
 import { SECTIONS, type SectionKey } from "./Shell";
 
 /** A section's title and its tabs. */
-export default function Section({ id, children }: { id: Exclude<SectionKey, "today" | "crops">; children: ReactNode }) {
+export default function Section({ id, children }: { id: Exclude<SectionKey, "today" | "plan" | "crops">; children: ReactNode }) {
   const s = SECTIONS[id];
   const path = useLocation().pathname;
   // a crop's cost report (/cycles/<id>) sits under "Cost of production"
@@ -20,6 +21,7 @@ export default function Section({ id, children }: { id: Exclude<SectionKey, "tod
           </Link>
         ))}
       </nav>
+      {id === "finance" && <SampleNotice />}
       {children}
     </>
   );

@@ -2,9 +2,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Activity, Camera, ScanSearch } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import CorrelationCard from "../components/CorrelationCard";
-import { EF, Empty, Field, FormModal, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
+import { EF, Empty, Field, FormModal, More, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
 import { api, type Correlation, type PhotoResult } from "../lib/api";
 import { useData } from "../lib/useData";
+
+const MATCH_NOTE = "From the Disease guide. Right about 4 times in 10 in testing: compare with the plant before acting.";
 
 export default function Crop() {
   const zones = useData(api.zones);
@@ -63,12 +65,12 @@ export default function Crop() {
     }
   }
 
-  async function crossCheck() {
-    if (!bed || !symptom) return;
+  async function crossCheck(chosen: string = symptom) {
+    if (!bed || !chosen) return;
     setCrossing(true);
     setCorrError(null);
     try {
-      setCorr(await api.diagnose(bed, symptom));
+      setCorr(await api.diagnose(bed, chosen));
     } catch (e) {
       setCorr(null);
       setCorrError((e as Error).message);
@@ -125,8 +127,8 @@ export default function Crop() {
               </button>
             </div>
             {saved
-              ? <p className="small muted" style={{ marginTop: 10 }}>Saved. An expert can confirm it in the <Link to="/photos">Photo library</Link>.</p>
-              : <p className="small muted" style={{ marginTop: 10 }}>Stays on your farm server. Not kept unless you save it.</p>}
+              ? <p className="small muted" style={{ marginTop: 10 }}>Saved. Confirm what it shows in the <Link to="/photos">Photo library</Link>.</p>
+              : <p className="small muted" style={{ marginTop: 10 }}>{labels.data?.online ? "Check photo sends it to Ollama's online service." : "Stays on your farm server."} Not kept here unless you save it.</p>}
           </Panel>
 
           <Panel title="Result" icon={ScanSearch}>
@@ -140,7 +142,7 @@ export default function Crop() {
               <>
                 {result.status === "ok" ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <Tag>{result.label === "problem" ? "Something looks wrong" : result.label === "healthy" ? "Looks healthy" : (result.label ?? "").replace(/_/g, " ")}</Tag>
+                    <Tag>{result.label === "healthy" ? "Looks healthy" : "Something looks wrong"}</Tag>
                     {result.confidence !== null && <span className="mono-sm">confidence <b>{Math.round(result.confidence * 100)}%</b></span>}
                   </div>
                 ) : (
@@ -148,14 +150,21 @@ export default function Crop() {
                 )}
                 {result.seen && <p className="mono-sm" style={{ marginTop: 10 }}>{result.seen}</p>}
                 {result.label === "problem" && (
-                  <p className="mono-sm muted" style={{ marginTop: 10 }}>
-                    The photo check does not name diseases. Choose the closest symptom below.
-                  </p>
+                  <p className="mono-sm muted" style={{ marginTop: 10 }}>Compare with the <Link to="/guide">Disease guide</Link>, then choose the closest symptom below.</p>
                 )}
-                {result.status === "ok" && !result.symptom && result.label !== "healthy" && result.label !== "problem" && (
-                  <p className="mono-sm muted" style={{ marginTop: 10 }}>
-                    No sensor rule for this one, so there is nothing to cross-check.
-                  </p>
+                {result.matches.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div className="erp-label">Possible matches</div>
+                    <p className="small muted">{MATCH_NOTE}</p>
+                    <table className="tbl"><tbody>
+                      {result.matches.map((d) => (
+                        <tr key={d.id}>
+                          <td><More label={<b>{d.title}</b>}>{[d.leaf && `Leaf: ${d.leaf}`, d.fruit && `Fruit: ${d.fruit}`, d.notToConfuse && `Not to confuse: ${d.notToConfuse}`, `What to do: ${d.do}`].filter(Boolean).join(" ")}</More></td>
+                          <td className="act nowrap">{d.symptom && <button className="linkbtn" disabled={crossing} onClick={() => { setSymptom(d.symptom!); crossCheck(d.symptom!); }}>Check the soil</button>}</td>
+                        </tr>
+                      ))}
+                    </tbody></table>
+                  </div>
                 )}
                 <p className="mono-sm" style={{ marginTop: 14 }}>{result.note}</p>
               </>
@@ -175,7 +184,7 @@ export default function Crop() {
                     {(symptoms.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
                   </select>
                 </Field>
-                <button className="btn btn-sm" disabled={!symptom || crossing} onClick={crossCheck}>
+                <button className="btn btn-sm" disabled={!symptom || crossing} onClick={() => crossCheck()}>
                   {crossing ? "Checking…" : "Cross-check"}
                 </button>
               </div>

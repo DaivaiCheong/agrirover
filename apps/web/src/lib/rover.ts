@@ -1,4 +1,4 @@
-import type { RoverCell } from "./api";
+import type { Advice, Cycle, RoverCell } from "./api";
 
 /** The rover's limits, from edge/rover-agent/rover/config.py. probeS is an estimate until the probe arm is built. */
 export const ROVER = { cruiseMps: 0.2, turnDps: 45, photoS: 1, probeS: 40, batteryStopV: 11.1, maxTrees: 400, simSpeedup: 40 } as const;
@@ -34,6 +34,26 @@ export function estimate(rows: number, cols: number, rowM: number, treeM: number
     trees: path.length, distanceM, areaM2: rows * cols * rowM * treeM,
     seconds: distanceM / ROVER.cruiseMps + turns / ROVER.turnDps + path.length * (ROVER.photoS + ROVER.probeS),
   };
+}
+
+export type RoundSlot = { zone: string; label: string; start: string; stops: number; metres: number; seconds: number; doneAt: string | null; partial: boolean };
+
+/** The day's rounds, block after block from the start time, on a real rover's estimated times. Driving between blocks is not counted. */
+export function roundPlan(cycles: Cycle[], start: string, advice: Advice[], today: string): RoundSlot[] {
+  const [h, m] = start.split(":").map(Number);
+  let at = h * 60 + m;
+  const byZone = new Map(advice.map((a) => [a.zone, a]));
+  const out: RoundSlot[] = [];
+  for (const c of cycles) {
+    if (!c.grid) continue;
+    const est = estimate(c.grid.rows, c.grid.cols, c.grid.rowM, c.grid.treeM);
+    const a = byZone.get(c.zone);
+    const doneToday = a?.surveyedAt && new Date(a.surveyedAt).toLocaleDateString("sv-SE") === today ? a.surveyedAt : null;
+    out.push({ zone: c.zone, label: c.bedLabel, start: `${String(Math.floor(at / 60) % 24).padStart(2, "0")}:${String(Math.round(at % 60)).padStart(2, "0")}`,
+               stops: est.trees, metres: est.distanceM, seconds: est.seconds, doneAt: doneToday, partial: Boolean(a?.partial && doneToday) });
+    at += est.seconds / 60;
+  }
+  return out;
 }
 
 export const minutes = (seconds: number) => (seconds < 90 ? `${Math.round(seconds)} s` : seconds < 5400 ? `${(seconds / 60).toFixed(0)} min` : `${(seconds / 3600).toFixed(1)} h`);

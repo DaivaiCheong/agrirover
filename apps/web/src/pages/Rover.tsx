@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Camera, CircleCheck, Circle, OctagonX, Play } from "lucide-react";
+import RoundSchedule from "../components/RoundSchedule";
 import RoverMap, { RoverLegend } from "../components/RoverMap";
 import { EF, Kpis, More, Notice, Panel, Tag, Toolbar } from "../components/ui";
-import { api, loadProblem, type RoverCell } from "../lib/api";
-import { ROVER, STATUS_WORD, cellName, estimate, fullLitresOf, litresOf, minutes, stopInfo } from "../lib/rover";
+import { api, loadProblem, type Advice, type RoverCell } from "../lib/api";
+import { litres, todayIso } from "../lib/format";
+import { ROVER, STATUS_WORD, cellName, estimate, fullLitresOf, litresOf, minutes, roundPlan, stopInfo } from "../lib/rover";
 import { useData } from "../lib/useData";
-import { usePoll } from "../lib/usePoll";
+import { ago, usePoll } from "../lib/usePoll";
 
 type Simulate = "normal" | "rain" | "low_battery";
 
@@ -74,11 +76,49 @@ export function TreeTable({ cells, picked, onPick }: { cells: RoverCell[]; picke
   );
 }
 
+/** What the rover found in each block on its newest round. */
+function FoundToday({ advice, picked, onPick, waiting }: { advice: Advice[]; picked: string; onPick: (zone: string) => void; waiting?: string }) {
+  const count = (a: Advice, note: string) => a.trees.filter((t) => t.notes.some((n) => n.startsWith(note))).length;
+  return (
+    <Panel title="Found today" pad={false} right={advice.some((a) => a.simulated) ? <span className="small muted">Simulated rounds</span> : undefined}>
+      {waiting ? <p className="panel-pad small muted">{waiting}</p> : advice.length === 0 ? <p className="panel-pad small muted">Nothing is growing yet.</p> : (
+        <div className="tablewrap">
+          <table className="tbl fold">
+            <thead><tr><th>Block</th><th>Round</th><th className="r">Trees</th><th className="r">Dry</th><th className="r">Water</th><th>To look at</th></tr></thead>
+            <tbody>
+              {advice.map((a) => {
+                const looks = a.todo.filter((t) => t.kind === "look");
+                const gaps = a.trees.filter((t) => !t.plant).length;
+                return (
+                  <tr key={a.zone} className={`pickable${a.zone === picked ? " picked" : ""}`} onClick={() => onPick(a.zone)}>
+                    <td className="nowrap"><b>{a.label}</b><div className="small muted">Day {a.day} · {a.stage.short}</div></td>
+                    <td data-label="Round" className="nowrap">{a.surveyedAt ? ago(a.surveyedAt) : <span className="muted">None today</span>}{a.partial && <> <Tag kind="warn">Stopped early</Tag></>}</td>
+                    <td data-label="Trees" className="r">{a.surveyed ? a.treesSeen : "—"}{gaps > 0 && <div className="small muted">{gaps} no tree</div>}</td>
+                    <td data-label="Dry" className="r">{a.surveyed ? count(a, "Dry") : "—"}</td>
+                    <td data-label="Water" className="r nowrap">{a.surveyed ? (a.water.paused ? "Hold" : litres(a.water.litres)) : "—"}</td>
+                    <td data-label="To look at">
+                      {looks.length === 0 ? <span className="muted">{a.surveyed ? "Nothing" : "—"}</span> : (
+                        <ul className="found-list">{looks.map((t) => <li key={t.text}>{t.detail ? <More label={t.text}>{t.detail}</More> : t.text}</li>)}</ul>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 export default function Rover() {
   const { data, error } = usePoll(api.roverLive, 1000);
   const zones = useData(api.zones);
   const cycles = useData(api.cycles);
-  const rover = data?.rover, m = data?.mission ?? null;
+  const adviceNow = usePoll(api.advice, 30000);
+  const roundTime = useData(() => api.schedule(1));
+  const rover = data?.rover, live = data?.mission ?? null;
 
   const [zone, setZone] = useState("");
   const [rows, setRows] = useState("4");
@@ -102,6 +142,18 @@ export default function Rover() {
     setRows(String(grid.rows)); setCols(String(grid.cols)); setRowM(String(grid.rowM)); setTreeM(String(grid.treeM));
   }, [bed, grid?.rows, grid?.cols, grid?.rowM, grid?.treeM]);
 
+  // the live round if there is one here; otherwise this block's newest stored round
+  const m = live && (live.status === "queued" || live.status === "running" || live.zoneId === bed) ? live : null;
+  const history = useData(api.surveys, [live?.missionId, live?.status]);
+  const last = m ? undefined : (history.data ?? []).find((s) => s.zone === bed && (s.status === "completed" || s.status === "aborted"));
+  const lastRound = useData(() => (last ? api.survey(last.id) : Promise.resolve(null)), [last?.id]);
+  const adviceList = adviceNow.data ?? [];
+  const blockAdvice = adviceList.find((a) => a.zone === bed);
+  const adviceOf = new Map((blockAdvice?.trees ?? []).map((t) => [`${t.row},${t.col}`, t]));
+  const storedCells: RoverCell[] = (last && lastRound.data?.id === last.id ? lastRound.data.cells : []).map((x) => ({ ...x, advice: adviceOf.get(`${x.row},${x.col}`) ?? null }));
+  const slots = roundPlan(growing, roundTime.data?.roundTime ?? "07:00", adviceList, todayIso());
+  const adviceWait = adviceNow.data === null ? (adviceNow.error ? "Could not be loaded just now." : "Loading…") : undefined;
+
   const r = Number(rows), c = Number(cols), rm = Number(rowM), tm = Number(treeM);
   const sizeOk = Number.isInteger(r) && Number.isInteger(c) && r >= 1 && c >= 1 && r <= 40 && c <= 40 && r * c <= ROVER.maxTrees && rm >= 0.2 && rm <= 10 && tm >= 0.2 && tm <= 10;
   const est = sizeOk ? estimate(r, c, rm, tm) : null;
@@ -117,10 +169,10 @@ export default function Rover() {
   useEffect(() => setPicked(null), [missionId]);
 
   const frame = useData(() => (picked ? api.roverFrame(picked[0], picked[1]) : Promise.resolve(null)), [picked?.[0], picked?.[1], missionId]);
-  const cells = m?.cells ?? [];
+  const cells = m?.cells ?? storedCells;
   const shownCell = picked ? cells.find((x) => x.row === picked[0] && x.col === picked[1])
     : m?.cell ? cells.find((x) => x.row === m.cell![0] && x.col === m.cell![1]) : undefined;
-  const shownFrame = picked ? frame.data?.frame : m?.frame;
+  const shownFrame = picked && m ? frame.data?.frame : m?.frame;
 
   async function start() {
     setProblem(null);
@@ -135,9 +187,12 @@ export default function Rover() {
   }
 
   const stop = m && (m.status === "aborted" || m.status === "rejected" || m.status === "lost" || m.status === "failed") ? stopInfo(m.reason) : null;
-  const word = m ? STATUS_WORD[m.status] ?? [undefined, m.status] : [undefined, "Idle"];
+  const word = live && (live.status === "queued" || live.status === "running" || m) ? STATUS_WORD[live.status] ?? [undefined, live.status] : [undefined, "Idle"];
   const flagged = cells.filter((x) => x.flagged).length;
   const trees = cells.filter((x) => x.plant).length;
+  const hasRound = Boolean(m || last);
+  const scanned = m?.cellsScanned ?? last?.cellsScanned ?? null;
+  const planned = m?.cellsTotal ?? ((last?.rows ?? 0) * (last?.cols ?? 0));
 
   return (
     <>
@@ -158,24 +213,28 @@ export default function Rover() {
 
         <Kpis items={[
           { k: "Status", v: <Tag kind={word[0]}>{word[1]}</Tag> },
-          { k: "Stops", v: m ? `${m.cellsScanned} of ${m.cellsTotal}` : "—" },
-          { k: "Trees seen", v: m ? trees : "—" },
-          { k: "Water today", v: m ? `${litresOf(cells).toFixed(0)} L` : "—" },
-          { k: "Yellow leaves", v: m ? flagged : "—" },
+          { k: "Stops", v: hasRound && scanned !== null ? `${scanned} of ${planned}` : "—" },
+          { k: "Trees seen", v: hasRound ? trees : "—" },
+          { k: "Water today", v: hasRound ? `${litresOf(cells).toFixed(0)} L` : "—" },
+          { k: "Yellow leaves", v: hasRound ? flagged : "—" },
           { k: `Battery (stops at ${ROVER.batteryStopV} V)`, v: m?.battery != null ? `${m.battery.toFixed(2)} V` : "—" },
         ]} />
 
+        <FoundToday advice={adviceList} waiting={adviceWait} picked={bed} onPick={(z) => { setZone(z); setPicked(null); }} />
+        <RoundSchedule plan={slots} onPick={(z) => { setZone(z); setPicked(null); }} />
+
         <div className="grid g32 rc-top">
           <div className="stack">
-            <Panel title={m ? `Block map · ${beds.find((b) => b.zone === m.zoneId)?.label ?? m.zoneId}` : "Block map"} pad={false}
-                   right={m ? <span className="small muted">Generated orchard{running ? ` · ${ROVER.simSpeedup}× real speed` : ""}</span> : undefined}>
+            <Panel title={`Block map · ${beds.find((b) => b.zone === (m?.zoneId ?? bed))?.label ?? bed}`} pad={false}
+                   right={m ? <span className="small muted">Generated orchard{running ? ` · ${ROVER.simSpeedup}× real speed` : ""}</span>
+                     : last ? <span className="small muted">Last round {ago(last.finishedAt ?? last.startedAt)}{last.simulated ? " · simulated" : ""}</span> : undefined}>
               <div className="rm-wrap">
-                <RoverMap rows={m?.rows ?? (sizeOk ? r : 4)} cols={m?.cols ?? (sizeOk ? c : 4)} cells={cells}
-                          at={m ? m.cell ?? [0, 0] : [0, 0]} selected={picked} onPick={(a, b) => setPicked([a, b])} />
+                <RoverMap rows={m?.rows ?? last?.rows ?? (sizeOk ? r : 4)} cols={m?.cols ?? last?.cols ?? (sizeOk ? c : 4)} cells={cells}
+                          at={m ? m.cell ?? [0, 0] : last ? undefined : [0, 0]} selected={picked} onPick={(a, b) => setPicked([a, b])} />
               </div>
               <div className="panel-foot rm-foot"><RoverLegend /></div>
             </Panel>
-            {m && <TreeTable cells={cells} picked={picked} onPick={(a, b) => setPicked([a, b])} />}
+            {hasRound && <TreeTable cells={cells} picked={picked} onPick={(a, b) => setPicked([a, b])} />}
           </div>
 
           <div className="stack">
@@ -221,7 +280,7 @@ export default function Rover() {
                 </div>
               </Panel>
             )}
-            {!running && m && cells.length > 0 && (
+            {!running && hasRound && cells.length > 0 && (
               <Panel title="At this tree" icon={Camera}
                      right={picked ? <button className="linkbtn small" onClick={() => setPicked(null)}>Last tree</button> : undefined}>
                 <CellView cell={shownCell} frame={shownFrame} />

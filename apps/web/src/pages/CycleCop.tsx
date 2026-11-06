@@ -1,5 +1,6 @@
 import { Calculator, ChevronLeft, Wheat } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
+import SampleNotice from "../components/SampleNotice";
 import { Empty, Metric, Notice, PageHead, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
 import { num, riel, usd } from "../lib/format";
@@ -15,12 +16,13 @@ export default function CycleCop() {
       <PageHead icon={Calculator} title={c ? c.bedLabel : "Cost report"}
                 sub={c ? `${c.cropName} · ${c.perennial ? "cycle started" : "planted"} ${c.plantedOn}${c.status === "closed" ? `, closed ${c.endedOn}` : `, day ${c.day}`}` : undefined}
                 actions={<>
-                  <Link className="btn btn-ghost btn-sm" to="/cop"><ChevronLeft size={16} aria-hidden />All crops</Link>
+                  <Link className="btn btn-ghost btn-sm" to="/cop"><ChevronLeft size={16} aria-hidden />All blocks</Link>
                   <Link className="btn btn-ghost btn-sm" to="/costs">Add a cost</Link>
                   <Link className="btn btn-ghost btn-sm" to="/harvest">Add harvest or sale</Link>
                 </>} />
       <main className="main stack">
         {error && <Notice kind="alert">{error}</Notice>}
+        <SampleNotice inMain />
         {cop && (
           <>
             <div className="grid g4">
@@ -82,7 +84,7 @@ export default function CycleCop() {
             )}
 
             <div className="grid g32">
-              <Panel title="Where the money went" pad={false}>
+              <Panel title="Costs by kind" pad={false}>
                 {cop.lines.length === 0 ? <Empty>No costs recorded for this cycle yet.</Empty> : (
                   <table className="tbl">
                     <thead><tr><th>Cost</th><th className="r">USD</th><th>Share</th></tr></thead>

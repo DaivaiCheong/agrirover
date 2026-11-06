@@ -1,4 +1,26 @@
 import { describe, expect, it } from "vitest";
+import { roundPlan } from "./rover";
+import type { Advice, Cycle } from "./api";
+
+describe("the day's rounds", () => {
+  const g = (zone: string, rows: number, cols: number, rowM: number, treeM: number) => ({ zone, bedLabel: zone, grid: { rows, cols, rowM, treeM } }) as unknown as Cycle;
+  it("runs block after block, each starting when the last should end", () => {
+    const plan = roundPlan([g("g1", 4, 4, 5, 5), g("g2", 2, 5, 3, 3.5)], "07:00", [], "2026-11-05");
+    expect(plan.map((p) => p.start)).toEqual(["07:00", "07:17"]);
+    expect(plan[0].stops).toBe(16);
+    expect(plan[0].doneAt).toBeNull();
+  });
+  it("marks only a round from today as done, and says when one stopped early", () => {
+    const at = new Date(2026, 10, 5, 7, 20).toISOString();
+    const advice = (surveyedAt: string, partial = false) => [{ zone: "g1", surveyedAt, partial } as unknown as Advice];
+    expect(roundPlan([g("g1", 4, 4, 5, 5)], "07:00", advice(at), "2026-11-05")[0].doneAt).toBe(at);
+    expect(roundPlan([g("g1", 4, 4, 5, 5)], "07:00", advice(at, true), "2026-11-05")[0].partial).toBe(true);
+    expect(roundPlan([g("g1", 4, 4, 5, 5)], "07:00", advice(at), "2026-11-06")[0].doneAt).toBeNull();
+  });
+  it("leaves out a block with no grid", () => {
+    expect(roundPlan([{ zone: "g9", bedLabel: "g9", grid: null } as unknown as Cycle], "07:00", [], "2026-11-05")).toEqual([]);
+  });
+});
 import { cellName, estimate, fullLitresOf, headingAt, kindOf, litresOf, minutes, serpentine, stopInfo } from "./rover";
 import type { RoverCell } from "./api";
 

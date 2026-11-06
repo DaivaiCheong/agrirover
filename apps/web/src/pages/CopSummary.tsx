@@ -16,7 +16,7 @@ export default function CopSummary() {
         <Panel title="All cycles" pad={false}>
           {rows.length === 0 ? <Empty>No crops yet.</Empty> : (
             <div className="tablewrap"><table className="tbl">
-              <thead><tr><th>Bed</th><th>Crop</th><th>Status</th><th className="r">Total cost</th><th className="r">Kg to sell</th>
+              <thead><tr><th>Block</th><th>Crop</th><th>Status</th><th className="r">Total cost</th><th className="r">Kg to sell</th>
                 <th className="r">Cost per kg</th><th className="r">Profit</th><th /></tr></thead>
               <tbody>
                 {rows.map((r) => (

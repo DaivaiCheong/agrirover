@@ -25,12 +25,12 @@ from app.services import guava
 from app.services.advice import latest_round
 from app.services.conditions import load_snapshots
 from app.services.errors import Invalid, NotFound
+from app.services.guava_diseases import DISEASES
 from app.services.rule_engine import utcnow
 
 TARGET_PHOTOS, TARGET_DAYS = 100, 3
 PARTS = ("leaf", "fruit", "branch", "tree")
-LABELS = {"healthy": "Healthy", **{s.id: s.title for s in guava.SYMPTOMS.values()}, "scab": "Fruit scab", "black_mold": "Black mould",
-          "insect_damage": "Insect damage", "scorch": "Leaf scorch", "other": "Something else"}
+LABELS = {"healthy": "Healthy", **{d.id: d.title for d in DISEASES}, "other": "Something else"}
 README = ("Guava photos to confirm.\n\nFor each row of photos.csv, open the photo named in `file` and write what it shows in `expert_label`, "
           "using one of these words. Leave it empty if the photo cannot show it.\n\n" + "\n".join(f"{k}: {v}" for k, v in LABELS.items()) + "\n")
 
@@ -166,7 +166,7 @@ def _safe_cell(value) -> str:
 
 async def export_zip(session: AsyncSession, status: str) -> str:
     """A zip on disk, for the caller to send and delete. `confirmed`: one folder per expert label, ready for scripts/eval_photo_check.py.
-    `to_confirm`: the photos, a sheet to fill in, and the words to use, for an expert who is not at the farm."""
+    `to_confirm`: the photos, a sheet to fill in, and the words to use, for someone helping away from the farm."""
     photos = (await library(session, status))["photos"]
     fd, zip_path = tempfile.mkstemp(suffix=".zip")
     os.close(fd)

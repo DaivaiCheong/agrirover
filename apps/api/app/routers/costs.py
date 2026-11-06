@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.models.entities import Asset, CostEntry, Farm, StockItem, StockMove
 from app.routers._deps import farm_dep
-from app.services import cost
+from app.services import cost, sample_finance
 from app.services.clock import farm_today
 from app.services.errors import Conflict, Invalid, NotFound
 from app.services.farm_data import as_uuid, farm_settings, load_cycle
@@ -25,6 +25,26 @@ class _Camel(BaseModel):
 
 def _num(v):
     return None if v is None else float(v)
+
+
+# ------------------------------------------------------------------ sample figures
+
+@router.get("/finance/sample")
+async def sample_status(farm: Farm = Depends(farm_dep), session: AsyncSession = Depends(get_db)):
+    """How many sample rows and real rows the farm's finance holds."""
+    return await sample_finance.status(session, farm)
+
+
+@router.post("/finance/sample", status_code=201)
+async def sample_load(farm: Farm = Depends(farm_dep), session: AsyncSession = Depends(get_db)):
+    """Sample costs, harvests and sales for a demo. Refused once a farm has real figures."""
+    return await sample_finance.load(session, farm)
+
+
+@router.delete("/finance/sample")
+async def sample_remove(farm: Farm = Depends(farm_dep), session: AsyncSession = Depends(get_db)):
+    """Delete the sample rows and nothing else."""
+    return await sample_finance.remove(session, farm)
 
 
 # ------------------------------------------------------------------ costs
@@ -58,7 +78,7 @@ def _entry_dict(e: CostEntry) -> dict:
             "date": e.entry_date.isoformat(), "category": e.category, "description": e.description,
             "qty": _num(e.qty), "unit": e.unit, "unitPrice": _num(e.unit_price), "amount": _num(e.amount),
             "currency": e.currency, "amountUsd": _num(e.amount_usd), "rateUsed": _num(e.rate_used),
-            "source": e.source}
+            "source": e.source, "sample": e.sample}
 
 
 def _resolve_amount(category: str, qty, unit_price, amount, family_wage):

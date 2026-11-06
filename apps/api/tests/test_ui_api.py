@@ -92,8 +92,24 @@ def test_photo_check_returns_a_triage_result(client):
 
 
 def test_a_language_model_reports_what_it_saw_and_no_invented_percentage(client):
-    body = _post(client, classifier=StubClassifier(Seen("rust", None, "Orange powder on young leaves."))).json()
+    body = _post(client, classifier=StubClassifier(Seen("rust", None, "Orange powder on young leaves.", "algal_leaf_spot"))).json()
     assert body["confidence"] is None and body["seen"] == "Orange powder on young leaves." and body["symptom"] == "rust"
+    assert [m["id"] for m in body["matches"]] == ["rust", "algal_leaf_spot"] and body["matches"][0]["leaf"]
+
+
+def test_a_possible_match_never_runs_the_soil_check_by_itself(client):
+    # "zone" given, yet no database call: the model's name alone must not lead to advice
+    app.dependency_overrides[get_classifier] = lambda: StubClassifier(Seen("anthracnose", None, "Dark spots."))
+    body = client.post("/api/v1/photos/check?zone=g5", files={"photo": ("a.jpg", JPEG, "image/jpeg")}).json()
+    assert body["symptom"] == "anthracnose" and body["correlation"] is None
+
+
+def test_the_guide_is_served_with_its_sources():
+    from app.services.guava_diseases import DISEASES, SOURCES, prompt_text
+    assert {"anthracnose", "algal_leaf_spot", "rust", "scab", "chlorosis"} <= {d.id for d in DISEASES}
+    assert all(d.sources and all(s in SOURCES for s in d.sources) for d in DISEASES)
+    assert all(d.id in prompt_text() for d in DISEASES)
+    assert not any(ch in d.do for d in DISEASES for ch in ("ml/", "g/L", "ppm"))                  # no source gave a guava dose: none is invented
 
 
 def test_a_model_that_is_down_says_so_rather_than_guessing(client):
@@ -112,42 +128,72 @@ class _Res:
         return {"message": {"content": self._content}}
 
 
-def _gemma(status=200, content='{"seen": "Dark sunken spots on the fruit.", "label": "problem"}', sent=None):
-    def post(url, json, timeout):
+SCREEN_PROBLEM = '{"seen": "Dark sunken spots on the fruit.", "label": "problem"}'
+MATCH = '{"label": "anthracnose", "also": "scab"}'
+
+
+def _gemma(*contents, status=200, sent=None, api_key=None, matches=True):
+    """Answers in order: the healthy-or-problem screen, then the guide's matches."""
+    replies = list(contents) or [SCREEN_PROBLEM, MATCH]
+
+    def post(url, json, headers, timeout):
         if sent is not None:
-            sent.update(json, url=url)
-        return _Res(status, content)
-    return OllamaClassifier("http://farm:11434/", "gemma4", post=post)
+            sent.append({**json, "url": url, "headers": headers})
+        return _Res(status, replies.pop(0))
+    return OllamaClassifier("http://farm:11434/", "gemma4", api_key, post=post, matches=matches)
 
 
-def test_gemma_is_sent_the_photo_and_held_to_the_labels():
-    sent = {}
+def test_by_default_it_stops_at_healthy_or_problem_and_names_nothing():
+    sent = []
+    assert _gemma(sent=sent, matches=False).classify(JPEG) == Seen("problem", None, "Dark sunken spots on the fruit.")
+    assert len(sent) == 1
+    assert get_classifier() is None or get_classifier().matches is False                            # the setting starts off
+
+
+def test_gemma_screens_first_then_reads_the_guide_for_a_problem():
+    sent = []
     seen = _gemma(sent=sent).classify(JPEG)
-    assert seen == Seen("problem", None, "Dark sunken spots on the fruit.")
-    assert sent["url"] == "http://farm:11434/api/chat" and sent["model"] == "gemma4" and sent["options"]["temperature"] == 0
-    assert sent["messages"][0]["images"] == [base64.b64encode(JPEG).decode()]
-    # it named diseases wrongly on real photos, so it cannot be asked to
-    assert sent["format"]["properties"]["label"]["enum"] == ["healthy", "problem", "unsure"]
+    assert seen == Seen("anthracnose", None, "Dark sunken spots on the fruit.", "scab")
+    screen, match = sent
+    assert screen["url"] == "http://farm:11434/api/chat" and screen["model"] == "gemma4" and screen["options"]["temperature"] == 0
+    assert screen["messages"][0]["images"] == match["messages"][0]["images"] == [base64.b64encode(JPEG).decode()]
+    assert screen["format"]["properties"]["label"]["enum"] == ["healthy", "problem", "unsure"]
+    assert "Pink spore masses" in match["messages"][0]["content"] and "anthracnose" in match["format"]["properties"]["label"]["enum"]
+    assert screen["headers"] == {}                                                                  # a local Ollama gets no key
 
 
-def test_gemmas_problem_never_picks_a_symptom_or_triggers_advice(client):
-    body = _post(client, classifier=_gemma()).json()
-    assert body["label"] == "problem" and body["symptom"] is None and body["correlation"] is None
-    assert body["seen"] == "Dark sunken spots on the fruit." and body["confidence"] is None
+def test_a_healthy_photo_stops_at_the_screen():
+    sent = []
+    assert _gemma('{"seen": "Clean green leaf.", "label": "healthy"}', sent=sent).classify(JPEG) == Seen("healthy", None, "Clean green leaf.")
+    assert len(sent) == 1
+
+
+def test_the_key_is_sent_only_when_set():
+    sent = []
+    _gemma(sent=sent, api_key="k").classify(JPEG)
+    assert sent[0]["headers"] == {"Authorization": "Bearer k"}
+
+
+def test_a_fenced_answer_and_a_made_up_label_are_handled():
+    fenced = '```json\n{"seen": "Spots.", "label": "problem"}\n```'
+    assert _gemma(fenced, '```json\n{"label": "scab", "also": "none"}\n```').classify(JPEG) == Seen("scab", None, "Spots.")
+    assert _gemma('{"seen": "Spots.", "label": "diseased"}').classify(JPEG) is None                  # the hosted service ignores the allowed list
+    assert _gemma(SCREEN_PROBLEM, '{"label": "made_up", "also": "none"}').classify(JPEG) == Seen("problem", None, "Dark sunken spots on the fruit.")
 
 
 def test_gemma_being_unsure_is_not_a_label():
-    assert _gemma(content='{"seen": "Too dark.", "label": "unsure"}').classify(JPEG) is None
+    assert _gemma('{"seen": "Too dark.", "label": "unsure"}').classify(JPEG) is None
 
 
-@pytest.mark.parametrize("status,content,word", [(404, "{}", "not installed"), (500, "{}", "answered 500"), (200, "not json", "could not be read")])
+@pytest.mark.parametrize("status,content,word", [(404, "{}", "not installed"), (500, "{}", "answered 500"), (200, "not json", "could not be read"),
+                                                 (401, "{}", "key was refused"), (402, "{}", "not included"), (429, "{}", "limit is reached")])
 def test_gemma_failures_become_a_plain_error(status, content, word):
     with pytest.raises(ModelUnavailable, match=word):
-        _gemma(status, content).classify(JPEG)
+        _gemma(content, status=status).classify(JPEG)
 
 
 def test_gemma_being_unreachable_is_a_plain_error():
-    def post(url, json, timeout):
+    def post(url, json, headers, timeout):
         raise httpx.ConnectError("refused")
     with pytest.raises(ModelUnavailable, match="cannot reach"):
         OllamaClassifier("http://farm:11434", "gemma4", post=post).classify(JPEG)

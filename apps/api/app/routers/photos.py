@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.services import diagnosis, photo_library
 from app.services.disease import Classifier, ModelUnavailable, get_classifier
+from app.services.guava_diseases import BY_ID, DISEASES
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
@@ -47,21 +48,30 @@ async def check_photo(photo: UploadFile = File(...), zone: str | None = None,
     except ModelUnavailable as exc:
         raise HTTPException(503, str(exc)) from exc
     if result is None:
-        return {"status": "uncertain", "label": None, "confidence": None, "seen": None, "symptom": None, "correlation": None,
+        return {"status": "uncertain", "label": None, "confidence": None, "seen": None, "matches": [], "symptom": None, "correlation": None,
                 "note": "The model is not sure. Take a clearer, closer photo of one leaf or fruit. " + NOTE}
-    symptom = diagnosis.match_symptom(result.label)
+    matches = [BY_ID[x].to_dict() for x in (result.label, result.also) if x in BY_ID]
+    symptom = next((m["symptom"] for m in matches if m["symptom"]), None) or diagnosis.match_symptom(result.label)
     correlation = None
-    if zone and symptom:
+    # Only a model with measured accuracy may run the soil check by itself. Otherwise a person compares the matches and chooses.
+    if zone and symptom and result.confidence is not None:
         correlation = {**await diagnosis.diagnose(session, settings.farm_name, zone, symptom), "source": "photo"}
     confidence = None if result.confidence is None else round(float(result.confidence), 3)
-    return {"status": "ok", "label": result.label, "confidence": confidence, "seen": result.seen, "symptom": symptom,
+    return {"status": "ok", "label": result.label, "confidence": confidence, "seen": result.seen, "matches": matches, "symptom": symptom,
             "correlation": correlation, "note": NOTE}
+
+
+@router.get("/guide")
+async def disease_guide():
+    """The guava disease guide: what the photo AI reads, for a farmer to read too."""
+    return [d.to_dict() for d in DISEASES]
 
 
 @router.get("/labels")
 async def labels():
-    """The words a photo can be labelled with, and the parts of a tree it can show."""
-    return {"labels": [{"id": k, "title": v} for k, v in photo_library.LABELS.items()], "parts": list(photo_library.PARTS)}
+    """The words a photo can be labelled with, the parts of a tree it can show, and whether a check sends the photo online."""
+    return {"labels": [{"id": k, "title": v} for k, v in photo_library.LABELS.items()], "parts": list(photo_library.PARTS),
+            "online": "ollama.com" in settings.ollama_url}
 
 
 @router.post("", status_code=201)

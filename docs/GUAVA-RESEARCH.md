@@ -66,6 +66,17 @@ Test photos: [BD Guava Fruit and Leaf Disease Dataset v5](https://data.mendeley.
 | MobileNetV3-Small trained on the dataset (random 70/15/15 split, 169 test photos, about 1 minute on the GPU, 6 MB) | 91.1 % across the 10 classes. Sick called healthy 3 of 118, healthy called sick 0 of 51 | Promising, but see the next row. Not installed in the app |
 | The same model, leaf or fruit blacked out using the dataset's boxes | **51.5 %**, where always guessing the biggest class gets 16 % | A large part of the 91 % comes from something other than the disease: session, background or box shape. Not proof it works in our orchard |
 
+**Does a written guide help? (same day)** The guide is `services/guava_diseases.py`, also the Disease guide screen. Scored on 150 photos of the same dataset never used to tune anything, 15 a class. The set has no anthracnose. Red rust counted as algal leaf spot.
+
+| Test | Disease named right | Said anthracnose | Sick called healthy | Healthy called sick |
+|---|---|---|---|---|
+| Hosted `gemma4:31b`, one step, list of names only | 53 of 120 | 20 | 1 of 120 | 16 of 30 |
+| Hosted `gemma4:31b`, one step, with the guide | 53 of 120 | 11 | 1 of 120 | 12 of 30 |
+| Hosted `gemma4:31b`, the app's two steps with the guide | 52 of 120 | 7 | 0 of 120 | 22 of 30 |
+| Local `gemma4`, the app's two steps with the guide (149 photos, 1 failed) | 18 of 119 | 27 | 11 of 119 | 7 of 30 |
+
+So the guide cut false anthracnose but did not raise the number of right names. Local `gemma4` as healthy or problem got 130 of 148 right on these unseen photos, against 112 of 121 on the photos its prompt was tuned on. Local without the guide was not scored on this set: that run hung. Every other hosted vision model answered "not included in your free usage". Hosted runs sent only these public dataset photos.
+
 **Rule from this:** no disease name reaches a farmer until a model passes on Siem Reap photos from sessions it never trained on. `scripts/eval_photo_check.py` scores any Ollama model on a folder of labelled photos. Who confirms labels and how to take the photos: [PHOTO-LABELLING.md](PHOTO-LABELLING.md).
 
 Wider evidence: models trained on PlantVillage lab photos drop from above 99 % to below 30 % on field photos ([Kyushu 2025](https://catalog.lib.kyushu-u.ac.jp/opac_download_md/7395548/2025_p0402.pdf), summary only). Anthracnose spreads under humid conditions, rust in warm humid weather, and algal spot with wet conditions and splashing water, where guava in high rainfall is a crop that can need control ([IPM Guava](https://agritech.tnau.ac.in/horticulture/pdf/tech_bulletin/national/IPM-GUAVA-Revised-Sept2011.pdf), [Pacific Pests](https://apps.lucidcentral.org/ppp/text/web_full/entities/algal_leaf_spot_148.htm), summaries only). No source found links soil moisture to anthracnose, so the app says wet soil is not the cause.

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { EF, Empty, FormModal, Kpis, Notice, Panel, Toolbar, type FormMsg } from "../components/ui";
+import { EF, Empty, FormModal, Kpis, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
 import { api } from "../lib/api";
 import { cycleLabel, num, todayIso, usd } from "../lib/format";
 import { useData } from "../lib/useData";
@@ -52,13 +52,15 @@ export default function Harvest() {
         {listError && <Notice kind="alert">{listError}</Notice>}
         {(cycles.data ?? []).length === 0 ? <Empty>Start a crop first.</Empty> : (
           <>
-            <Kpis items={[
-              { k: "Harvested", v: `${num(hs.reduce((s, h) => s + h.kgTotal, 0), 1)} kg` },
-              { k: "To sell", v: `${num(hs.reduce((s, h) => s + h.kgMarketable, 0), 1)} kg` },
-              { k: "Lost", v: `${num(hs.reduce((s, h) => s + h.kgLost, 0), 1)} kg` },
-              { k: "Sold", v: `${num(ss.reduce((s, x) => s + x.kg, 0), 1)} kg` },
-              { k: "Revenue", v: usd(ss.reduce((s, x) => s + x.amountUsd, 0)) },
-            ]} />
+            {(hs.length > 0 || ss.length > 0) && (
+              <Kpis items={[
+                { k: "Harvested", v: `${num(hs.reduce((s, h) => s + h.kgTotal, 0), 1)} kg` },
+                { k: "To sell", v: `${num(hs.reduce((s, h) => s + h.kgMarketable, 0), 1)} kg` },
+                { k: "Lost", v: `${num(hs.reduce((s, h) => s + h.kgLost, 0), 1)} kg` },
+                { k: "Sold", v: `${num(ss.reduce((s, x) => s + x.kg, 0), 1)} kg` },
+                { k: "Sales", v: usd(ss.reduce((s, x) => s + x.amountUsd, 0)) },
+              ]} />
+            )}
 
             <div className="grid g2">
               <Panel title="Harvests" pad={false} right={<button className="btn btn-sm btn-ghost" onClick={() => open("harvest")}><Plus size={14} aria-hidden />Add</button>}>
@@ -67,7 +69,7 @@ export default function Harvest() {
                     <table className="tbl fold">
                       <thead><tr><th>Date</th><th className="r">Kg</th><th className="r">To sell</th><th className="r">Home</th><th className="r">Lost</th><th /></tr></thead>
                       <tbody>{hs.map((h) => (
-                        <tr key={h.id}><td className="nowrap"><b>{h.date}</b></td><td data-label="Kg" className="r">{num(h.kgTotal, 2)}</td><td data-label="To sell" className="r">{num(h.kgMarketable, 2)}</td>
+                        <tr key={h.id}><td className="nowrap"><b>{h.date}</b>{h.sample && <> <Tag>Sample</Tag></>}</td><td data-label="Kg" className="r">{num(h.kgTotal, 2)}</td><td data-label="To sell" className="r">{num(h.kgMarketable, 2)}</td>
                           <td data-label="Home" className="r">{num(h.kgHome, 2)}</td><td data-label="Lost" className="r">{num(h.kgLost, 2)}</td>
                           <td className="act"><button className="linkbtn linkbtn-alert" onClick={() => remove("harvest", () => api.deleteHarvest(h.id), harvests.reload)}>Delete</button></td></tr>))}
                       </tbody>
@@ -81,7 +83,7 @@ export default function Harvest() {
                     <table className="tbl fold">
                       <thead><tr><th>Date</th><th className="r">Kg</th><th className="r">Price</th><th className="r">USD</th><th>Buyer</th><th /></tr></thead>
                       <tbody>{ss.map((s) => (
-                        <tr key={s.id}><td className="nowrap"><b>{s.date}</b></td><td data-label="Kg" className="r">{num(s.kg, 2)}</td>
+                        <tr key={s.id}><td className="nowrap"><b>{s.date}</b>{s.sample && <> <Tag>Sample</Tag></>}</td><td data-label="Kg" className="r">{num(s.kg, 2)}</td>
                           <td data-label="Price" className="r nowrap">{s.currency === "KHR" ? `${s.pricePerKg.toLocaleString()} ៛` : usd(s.pricePerKg)}</td>
                           <td data-label="USD" className="r"><b>{usd(s.amountUsd)}</b></td><td data-label="Buyer">{s.buyer ?? "—"}</td>
                           <td className="act"><button className="linkbtn linkbtn-alert" onClick={() => remove("sale", () => api.deleteSale(s.id), sales.reload)}>Delete</button></td></tr>))}

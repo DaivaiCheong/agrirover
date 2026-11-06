@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import sys
 import time
@@ -29,9 +30,10 @@ def main() -> None:
     ap.add_argument("--url", default="http://localhost:11434")
     ap.add_argument("--model", default="gemma4")
     ap.add_argument("--out", type=pathlib.Path)
+    ap.add_argument("--matches", action="store_true", help="also ask for the guide's closest matches, as PHOTO_MATCHES does")
     args = ap.parse_args()
     truth_of = dict(pair.split("=", 1) for pair in args.map.split(",") if pair)
-    model = OllamaClassifier(args.url, args.model)
+    model = OllamaClassifier(args.url, args.model, os.environ.get("OLLAMA_API_KEY") if "ollama.com" in args.url else None, matches=args.matches)
 
     rows = []
     for folder in sorted(p for p in args.folder.iterdir() if p.is_dir()):
@@ -43,7 +45,7 @@ def main() -> None:
                 print(f"{folder.name:24} {image.name:32} FAILED: {exc}", flush=True)
                 continue
             rows.append({"folder": folder.name, "file": image.name, "truth": truth_of.get(folder.name), "said": seen.label if seen else UNSURE,
-                         "seen": seen.seen if seen else None, "seconds": round(time.perf_counter() - started, 1)})
+                         "also": seen.also if seen else None, "seen": seen.seen if seen else None, "seconds": round(time.perf_counter() - started, 1)})
             print(f"{folder.name:24} {image.name:32} {rows[-1]['said']:18} {rows[-1]['seconds']:6.1f}s", flush=True)
 
     per = defaultdict(Counter)
@@ -60,6 +62,7 @@ def main() -> None:
     print(f"\nPhotos {len(rows)}, unsure {len(rows) - len(answered)}, median {sorted(r['seconds'] for r in rows)[len(rows) // 2]} s a photo")
     if named:
         print(f"Exact label, where it answered and the class has a label: {sum(r['said'] == r['truth'] for r in named)}/{len(named)}")
+        print(f"Right label in its top two: {sum(r['truth'] in (r['said'], r['also']) for r in named)}/{len(named)}")
     if sick:
         print(f"Sick photos it called healthy (missed): {sum(r['said'] == HEALTHY for r in sick)}/{len(sick)}")
     if well:

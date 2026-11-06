@@ -170,7 +170,7 @@ a.btn{text-decoration:none}
 .ph{display:flex;align-items:center;gap:9px;min-width:0}
 .ph-sub{color:var(--ink-muted);font-size:12.5px;margin-top:1px}
 
-.tabs{display:flex;gap:2px;overflow-x:auto;padding:4px var(--gut) 0;max-width:1240px;margin:0 auto;border-bottom:1px solid var(--line-strong)}
+.tabs{display:flex;gap:2px;overflow-x:auto;overflow-y:hidden;padding:4px var(--gut) 0;max-width:1240px;margin:0 auto;border-bottom:1px solid var(--line-strong)}
 .tab{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;padding:7px 12px;margin-bottom:-1px;font-size:13px;font-weight:600;
   color:var(--ink-muted);text-decoration:none;background:transparent;border:0;border-bottom:2px solid transparent;cursor:pointer}
 .tab:hover{color:var(--ink)}
@@ -207,6 +207,7 @@ a.btn{text-decoration:none}
   .bn-on{color:var(--ink);background:var(--surface-sunk)}
   .content{padding-bottom:84px}
   .head,.main,.tabs{padding-left:16px;padding-right:16px}
+  .tabs{scrollbar-width:none}
   .d-xl{font-size:18px}
 }
 @media (max-width:600px){
@@ -296,10 +297,6 @@ details.more > summary::-webkit-details-marker{display:none}
 .source:first-child{border-top:0}
 .source a{font-weight:600}
 
-/* ---------- plan page: inputs stay beside the answer, results are split into tabs ---------- */
-.plan-grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:20px;align-items:start}
-.plan-form{position:sticky;top:16px}
-@media (max-width:1000px){.plan-grid{grid-template-columns:minmax(0,1fr)}.plan-form{position:static}}
 .tabs-in{padding:0;margin:0;max-width:none}
 .startbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;color:var(--ink)}
 .startbar-msg{font-size:13px;font-weight:600;display:inline-flex;gap:8px;align-items:center;flex:1 1 auto}
@@ -723,6 +720,13 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .xp-body{margin-top:3px;font-size:12.5px;color:var(--ink-muted);line-height:1.4}
 .flaglist{padding-left:16px;font-size:12.5px;line-height:1.5}
 
+.sample-bar{padding:10px var(--gut) 0;max-width:1240px;margin:0 auto}
+.water-grid th,.water-grid td{vertical-align:top}
+.plan-sticky{position:sticky;left:0;background:var(--surface);z-index:1}
+.plan-date{font-weight:400;font-size:11.5px;color:var(--ink-muted)}
+.plan-today{background:var(--surface-sunk)}
+.found-list{margin:0;padding:0;list-style:none}
+.found-list li{padding:1px 0}
 .photo-t td{vertical-align:top}
 .photo-thumb{display:block;width:64px;height:64px;object-fit:cover;border:1px solid var(--line);border-radius:4px;background:var(--surface-sunk)}
 .photo-big{display:block;max-width:100%;max-height:300px;margin:0 auto 10px;border:1px solid var(--line)}

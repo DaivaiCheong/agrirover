@@ -142,7 +142,7 @@ class HarvestIn(_Camel):
 def _harvest_dict(h: Harvest) -> dict:
     total, mk, home = float(h.kg_total), float(h.kg_marketable), float(h.kg_home)
     return {"id": str(h.id), "date": h.harvest_date.isoformat(), "kgTotal": total, "kgMarketable": mk,
-            "kgHome": home, "kgLost": round(max(0.0, total - mk - home), 2), "note": h.note}
+            "kgHome": home, "kgLost": round(max(0.0, total - mk - home), 2), "note": h.note, "sample": h.sample}
 
 
 @router.get("/cycles/{cycle_id}/harvests")
@@ -189,7 +189,7 @@ class SaleIn(_Camel):
 
 def _sale_dict(s: Sale) -> dict:
     return {"id": str(s.id), "date": s.sale_date.isoformat(), "kg": float(s.kg), "pricePerKg": float(s.price_per_kg),
-            "currency": s.currency, "amountUsd": float(s.amount_usd), "buyer": s.buyer}
+            "currency": s.currency, "amountUsd": float(s.amount_usd), "buyer": s.buyer, "sample": s.sample}
 
 
 @router.get("/cycles/{cycle_id}/sales")

@@ -534,6 +534,7 @@ class CostEntry(Base):
     stock_move_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("stock_move.id", ondelete="SET NULL"))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))        # soft delete: nothing is lost
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    sample: Mapped[bool] = mapped_column(Boolean, server_default=false(), default=False, nullable=False)
 
 
 class Asset(Base):
@@ -568,6 +569,7 @@ class Harvest(Base):
     kg_marketable: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     kg_home: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
     note: Mapped[str | None] = mapped_column(String(160))
+    sample: Mapped[bool] = mapped_column(Boolean, server_default=false(), default=False, nullable=False)
 
 
 class Sale(Base):
@@ -584,3 +586,4 @@ class Sale(Base):
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
     amount_usd: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)       # kg x price, in USD at the day's rate
     buyer: Mapped[str | None] = mapped_column(String(120))
+    sample: Mapped[bool] = mapped_column(Boolean, server_default=false(), default=False, nullable=False)

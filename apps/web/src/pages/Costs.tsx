@@ -67,27 +67,29 @@ export default function Costs() {
   return (
     <>
       <Toolbar>
-        <a className="btn btn-ghost btn-sm" href={api.costsCsvUrl}>Download CSV</a>
+        {rows.length > 0 && <a className="btn btn-ghost btn-sm" href={api.costsCsvUrl}>Download CSV</a>}
         <button className="btn btn-sm" onClick={() => { setMsg(null); setAdding(true); }}><Plus size={16} aria-hidden />Add cost</button>
       </Toolbar>
       <main className="main stack">
         {costs.error && <Notice kind="alert">{costs.error}</Notice>}
         {listError && <Notice kind="alert">{listError}</Notice>}
 
-        <Kpis items={[
-          { k: "Total", v: usd(total) },
-          { k: "Entries", v: rows.length },
-          { k: "Largest kind", v: top ? CATEGORY_LABELS[top[0]] ?? top[0] : "—" },
-          { k: "Largest amount", v: top ? usd(top[1]) : "—" },
-        ]} />
+        {rows.length > 0 && (
+          <Kpis items={[
+            { k: "Total", v: usd(total) },
+            { k: "Entries", v: rows.length },
+            { k: "Largest kind", v: top ? CATEGORY_LABELS[top[0]] ?? top[0] : "—" },
+            { k: "Largest amount", v: top ? usd(top[1]) : "—" },
+          ]} />
+        )}
 
         <Panel title="Costs" pad={false}
                right={
-                 <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Show costs for">
-                   <option value="">All cycles</option>
+                 <select className="erp-select toolbar-select" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Show costs for">
+                   <option value="">All blocks</option>
                    {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}</option>)}
                  </select>}>
-          {rows.length === 0 ? <Empty>No costs yet.</Empty> : (
+          {rows.length === 0 ? <Empty>No costs recorded{filter ? " for this block" : ""}. Fertilizer, labour and fuel go here, by block.</Empty> : (
             <div className="tablewrap">
               <table className="tbl fold costs-t">
                 <thead><tr><th>Date</th><th>For</th><th>Kind</th><th>Description</th><th className="r">Amount</th><th className="r">USD</th><th /></tr></thead>
@@ -96,7 +98,7 @@ export default function Costs() {
                     <tr key={r.id}>
                       <td className="nowrap"><b>{r.date}</b></td>
                       <td data-label="For">{r.plantingId ? byId.get(r.plantingId)?.bedLabel ?? "—" : "Whole farm"}</td>
-                      <td data-label="Kind">{CATEGORY_LABELS[r.category] ?? r.category}{r.source === "stock_use" && <> <Tag>Stock</Tag></>}</td>
+                      <td data-label="Kind">{CATEGORY_LABELS[r.category] ?? r.category}{r.source === "stock_use" && <> <Tag>Stock</Tag></>}{r.sample && <> <Tag>Sample</Tag></>}</td>
                       <td data-label="Description">{r.description ?? "—"}</td>
                       <td data-label="Amount" className={`r nowrap${r.currency === "KHR" ? "" : " hide-sm"}`}>{r.currency === "KHR" ? `${r.amount.toLocaleString()} ៛` : usd(r.amount)}</td>
                       <td data-label="USD" className="r"><b>{usd(r.amountUsd)}</b></td>

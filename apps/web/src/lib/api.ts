@@ -180,6 +180,16 @@ export type Growth = {
   trees: { row: number; col: number; first: number; now: number }[];
 };
 
+export type ScheduleEvent = {
+  zone: string; label: string; date: string; lastDate: string | null; firstDay: number; lastDay: number; kind: string; title: string; detail: string | null;
+  state: "due" | "overdue" | "later"; confirm: boolean;
+};
+export type WaterDay = { date: string; day: number; stage: string; litres: number; kind: "today" | "planned" | "hold" | "priming" };
+export type Schedule = {
+  start: string; days: number; roundTime: string; dates: string[]; events: ScheduleEvent[];
+  blocks: { zone: string; label: string; cycleId: string; trees: number; day: number; stage: string; water: (WaterDay | null)[] }[];
+};
+
 export type ZoneNow = {
   zone: string; label: string | null; areaM2?: number | null; moisturePct: number | null; rain: boolean | null;
   supplyVoltage: number | null; waterPh: number | null; recordedAt: string | null;
@@ -192,7 +202,7 @@ export type DeviceRow = {
 };
 
 export type PhotoResult = {
-  status: "ok" | "uncertain"; label: string | null; confidence: number | null; seen: string | null; note: string;
+  status: "ok" | "uncertain"; label: string | null; confidence: number | null; seen: string | null; matches: Disease[]; note: string;
   symptom: string | null; correlation: Correlation | null;
 };
 
@@ -217,7 +227,11 @@ export type PhotoLibrary = {
   photos: SavedPhoto[]; saved: number; toConfirm: number; confirmed: number; targetPhotos: number; targetDays: number;
   progress: { label: string; title: string; photos: number; days: number; ready: boolean }[];
 };
-export type PhotoLabels = { labels: { id: string; title: string }[]; parts: string[] };
+export type Disease = {
+  id: string; title: string; kind: string; leaf: string | null; fruit: string | null; notToConfuse: string | null; favours: string | null; do: string;
+  sources: { title: string; url: string }[]; symptom: string | null; thin: boolean;
+};
+export type PhotoLabels = { labels: { id: string; title: string }[]; parts: string[]; online: boolean };
 export type SavePhotoInput = { zone: string; part: string; row?: number; col?: number; label?: string; note?: string; modelLabel?: string | null; modelSeen?: string | null };
 
 export const photoImageUrl = (id: string) => `${BASE}/photos/${id}/image`;
@@ -264,7 +278,7 @@ export type Cycle = {
 export type CostEntry = {
   id: string; plantingId: string | null; date: string; category: string; description: string | null;
   qty: number | null; unit: string | null; unitPrice: number | null; amount: number; currency: "USD" | "KHR";
-  amountUsd: number; rateUsed: number | null; source: string;
+  amountUsd: number; rateUsed: number | null; source: string; sample: boolean;
 };
 
 export type StockItem = {
@@ -278,8 +292,8 @@ export type Asset = {
   retiredOn: string | null; dailyDepreciationUsd: number; status: "in_service" | "retired" | "worn_out";
 };
 
-export type Harvest = { id: string; date: string; kgTotal: number; kgMarketable: number; kgHome: number; kgLost: number; note: string | null };
-export type Sale = { id: string; date: string; kg: number; pricePerKg: number; currency: "USD" | "KHR"; amountUsd: number; buyer: string | null };
+export type Harvest = { id: string; date: string; kgTotal: number; kgMarketable: number; kgHome: number; kgLost: number; note: string | null; sample: boolean };
+export type Sale = { id: string; date: string; kg: number; pricePerKg: number; currency: "USD" | "KHR"; amountUsd: number; buyer: string | null; sample: boolean };
 
 export type Cop = {
   cycle: Cycle; currency: "USD"; khrPerUsd: number | null;
@@ -314,6 +328,7 @@ export const api = {
   savePhoto,
   photos: (status: string) => request<PhotoLibrary>(`/photos?${new URLSearchParams({ status })}`),
   photoLabels: () => request<PhotoLabels>("/photos/labels"),
+  diseaseGuide: () => request<Disease[]>("/photos/guide"),
   confirmPhoto: (id: string, body: { label: string; name: string; note: string | null }) => send<SavedPhoto>("PUT", `/photos/${id}/confirm`, body),
   deletePhoto: (id: string) => send<void>("DELETE", `/photos/${id}`),
   // the rover: its real software, with simulated wheels, camera and probe until the hardware is built
@@ -324,6 +339,7 @@ export const api = {
   surveys: () => request<SurveySummary[]>("/missions"),
   survey: (id: string) => request<SurveySummary & { cells: RoverCell[] }>(`/missions/${id}`),
   advice: () => request<Advice[]>("/advice"),
+  schedule: (days: number) => request<Schedule>(`/schedule?days=${days}`),
   growth: (zone: string) => request<Growth>(`/advice/${zone}/growth`),
   orchardCycle: (id: string) => request<OrchardCycle>(`/cycles/${id}/orchard`),
   orchardJobDone: (id: string, job: string) => send<OrchardCycle>("POST", `/cycles/${id}/orchard/jobs/${job}/done`, {}),
@@ -352,6 +368,8 @@ export const api = {
   costs: (cycleId?: string) => request<CostEntry[]>(`/costs${cycleId ? `?cycle=${cycleId}` : ""}`),
   addCost: (b: CostInput) => send<CostEntry>("POST", "/costs", b),
   deleteCost: (id: string) => send<void>("DELETE", `/costs/${id}`),
+  financeSample: () => request<{ sample: number; real: number }>("/finance/sample"),
+  removeFinanceSample: () => send<{ sample: number; real: number }>("DELETE", "/finance/sample"),
   costsCsvUrl: `${BASE}/export/costs.csv`,
   copCsvUrl: `${BASE}/export/cop.csv`,
 

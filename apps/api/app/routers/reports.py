@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.models.entities import CostEntry, CropProfile, Farm, Planting, Zone
 from app.routers._deps import farm_dep
+from app.services import sample_finance
 from app.services.clock import farm_today
 from app.services.cop_report import build_cop
 
@@ -72,11 +73,12 @@ async def export_cop(today: date | None = None, farm: Farm = Depends(farm_dep),
                                  .where(Zone.farm_id == farm.id).order_by(Planting.planted_on))).scalars().all()
     out = [["bed", "crop", "planted_on", "status", "total_cost_usd", "kg_marketable", "cop_per_kg_usd",
             "revenue_usd", "margin_usd", "cost_per_plant_usd", "cost_per_m2_usd", "notes"]]
+    sample = (await sample_finance.status(session, farm))["sample"] > 0
     for pid in ids:
         r = await build_cop(session, farm, str(pid), day)
         c = r["cycle"]
         out.append([c["bedLabel"], c["cropName"], c["plantedOn"], c["status"], r["totalCostUsd"], r["kgMarketable"],
                     r["copPerKg"], r["revenueUsd"], r["marginUsd"], r["costPerPlant"], r["costPerM2"],
-                    "; ".join(r["flags"])])
+                    "; ".join((["includes sample figures, not real results"] if sample else []) + r["flags"])])
     await session.commit()
     return _csv(out, "cost-of-production.csv")

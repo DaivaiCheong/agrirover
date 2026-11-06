@@ -30,9 +30,11 @@ class Settings(BaseSettings):
     weather_api_url: str | None = None
     weather_api_key: str | None = None
 
-    # Photo check. A local Ollama: photos stay on the farm's machine. No model named means the check is off.
+    # Photo check. A local Ollama keeps photos on the farm's machine. No model named means the check is off.
     ollama_url: str = "http://localhost:11434"
     ollama_model: str | None = None
+    ollama_api_key: str | None = None          # only for the hosted service at https://ollama.com; photos then leave the farm
+    photo_matches: bool = False                # suggest diseases from the guide. Too often wrong on local gemma4: see services/disease.py
     photo_dir: str = "farm-photos"             # saved plant photos: back this folder up with the database
 
     # Stage 1 runs one farm; the topic segment farm/{name}/... must match it.
@@ -42,6 +44,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
     daily_message_time: str = "06:05"          # farm-local HH:MM
+    rover_round_time: str = "07:00"            # farm-local HH:MM: when the day's rounds are planned to start
 
     admin_email: str = "admin@aiautofarm.local"
     admin_password: str = "change-me"

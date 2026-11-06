@@ -1,5 +1,5 @@
 """What the rover's round means for today: water, feed and what to look at, and how the trees are growing."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,7 @@ from app.services.conditions import load_snapshots
 from app.services.errors import Invalid, NotFound
 from app.services.farm_data import cycle_dict, load_cycle
 from app.services.rule_engine import utcnow
+from app.services.schedule import farm_schedule
 
 router = APIRouter(tags=["advice"])
 
@@ -22,6 +23,12 @@ router = APIRouter(tags=["advice"])
 async def farm_advice(session: AsyncSession = Depends(get_db)):
     """Each growing bed's day, from its newest fresh round. Advice only: nothing here opens a valve."""
     return await advice_svc.farm_advice(session, settings.farm_name)
+
+
+@router.get("/schedule")
+async def schedule(days: int = Query(14, ge=1, le=180), session: AsyncSession = Depends(get_db)):
+    """Water, feed, tasks and stage changes by date, for every growing block."""
+    return await farm_schedule(session, days)
 
 
 @router.get("/advice/{zone}/growth")

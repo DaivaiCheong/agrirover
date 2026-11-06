@@ -50,7 +50,7 @@ export default function Photos() {
         <select className="erp-select toolbar-select" aria-label="Show" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
           {STATUS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
-        <a className="btn btn-sm btn-ghost" href={photoExportUrl("to_confirm")}><Download size={16} aria-hidden />For the expert</a>
+        <a className="btn btn-sm btn-ghost" href={photoExportUrl("to_confirm")}><Download size={16} aria-hidden />To confirm</a>
         <a className="btn btn-sm btn-ghost" href={photoExportUrl("confirmed")}><Download size={16} aria-hidden />Confirmed</a>
         <Link className="btn btn-sm" to="/crop"><Camera size={16} aria-hidden />Add a photo</Link>
       </Toolbar>
@@ -65,9 +65,9 @@ export default function Photos() {
           { k: "Problems ready to test", v: `${progress.filter((p) => p.ready).length} of ${progress.length}` },
         ]} />
 
-        <Panel title="Photos" pad={false} right={<span className="small muted">Only an expert's label can train a model</span>}>
+        <Panel title="Photos" pad={false} right={<span className="small muted">Only a confirmed label can train a model</span>}>
           {rows.length === 0 ? (
-            <Empty icon={Images}>{status === "to_confirm" ? "Nothing waiting for an expert." : "No photos here yet."}</Empty>
+            <Empty icon={Images}>{status === "to_confirm" ? "Nothing waiting to be confirmed." : "No photos here yet."}</Empty>
           ) : (
             <div className="tablewrap">
               <table className="tbl fold photo-t">
@@ -118,7 +118,7 @@ export default function Photos() {
               {(labels.data?.labels ?? []).map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
             </select>
           </EF>
-          <EF label="Confirmed by" req hint="The agronomist or plant doctor who judged it">
+          <EF label="Confirmed by" req hint="The person who judged it">
             <input className="erp-input" value={name} required maxLength={80} onChange={(e) => setName(e.target.value)} />
           </EF>
           <EF label="Note"><input className="erp-input" value={note} onChange={(e) => setNote(e.target.value)} /></EF>
