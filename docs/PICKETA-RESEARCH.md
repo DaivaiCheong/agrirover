@@ -34,7 +34,7 @@ A grower waits 4-10 days for a leaf-tissue lab result, so feed decisions come to
 **Lesson:** even a funded, university-backed sensor failed an independent test on a crop in its range. A model is only as good as the crop and site it was calibrated on.
 
 ## AgriRover's features today (6 Nov 2026)
-Scores are our judgement, out of 10. Finance and stock are outside this check.
+Scores are our judgement, out of 10. Finance and stock are outside this check. Updated the same day after Leaf tests was built: the total went from 12 to 21. No real lab result has been entered yet.
 
 | Feature | State | Score |
 |---|---|---|
@@ -44,29 +44,29 @@ Scores are our judgement, out of 10. Finance and stock are outside this check.
 | Feed advice | Calendar dose from the guava document (unchecked); EC can only hold it back (`services/advisor.py`) | 5 |
 | Photo check | Real model, real photos; names right "about 4 in 10" | 4 |
 | Soil N, P, K | Simulated, shown as a trend, never used for a dose | 2 |
-| Leaf ranges | 11 nutrients as display text; nothing compares against them (`services/guava.py`, `LEAF_RANGES`) | 2 |
+| Leaf ranges | 11 nutrients as numbers, and lab results are rated against them (`services/guava.py`). From two Brazilian studies, not local | 5 |
 | Rover camera analysis | Counts yellow pixels; tested on simulated images only | 2 |
 | Per-tree history | Data is stored; no screen or API | 2 |
 | Rover hardware | Motor firmware only. No chassis, arm, navigation or probe reader. A real `rover run` passes no probe (`rover/__main__.py`), so it would report no readings | 1 |
-| Leaf test | Only a task, "Send a leaf sample to a lab". No way to enter a result | 1 |
+| Leaf tests | Record a sample and its lab result, low / OK / high, blocks side by side. Advice does not read them yet | 5 |
 
 ## Compared with LENS
 10 means as good as LENS on its own crops.
 
 | LENS concept | LENS | AgriRover today | Score |
 |---|---|---|---|
-| Collect | Person picks 10-15 healthy leaves per area | Rover reaches trees in simulation, touches no leaf; no sampling instructions | 1 |
+| Collect | Person picks 10-15 healthy leaves per area | A person picks; the method is on the form and each sample is recorded. Rover touches no leaf | 2 |
 | Leaf sensor | Portable optical scanner | None | 0 |
 | Leaf to nutrient values | Trained models | None | 0 |
-| Nutrients covered | 13 claimed | 3 in soil, simulated; none in leaf | 1 |
-| Time to result | About 2 minutes | No result in the app; lab time unknown | 0 |
-| Compare with ranges | Not stated on the page | Text list, no comparison | 2 |
+| Nutrients covered | 13 claimed | 12 can be recorded from a lab, 11 rated. We measure none | 2 |
+| Time to result | About 2 minutes | As long as the lab takes, which is unknown; no lab found yet | 0 |
+| Compare with ranges | Not stated on the page | Low / OK / high in the lab's own unit, and a wrong unit is caught. Ranges are not local | 6 |
 | Turn it into action | Results shared; the page describes no recommendation | One clear action per problem, but not from leaf data | 4 |
-| Results screen and sharing | Fieldbook | Good screens, no nutrient view, no nutrient export | 3 |
-| Lab pairing for each crop | Paired samples per crop (trade press) | None in the system; a manual SOP step only | 1 |
-| Field evidence | Company potato trials; an independent corn preprint found no treatment effect | None, all simulated | 0 |
+| Results screen and sharing | Fieldbook | Samples and Blocks compared. No export or sharing | 5 |
+| Lab pairing for each crop | Paired samples per crop (trade press) | Lab results are stored ready to pair; no scanner to pair them with | 2 |
+| Field evidence | Company potato trials; an independent corn preprint found no treatment effect | None. No real lab result yet, and rover data is simulated | 0 |
 
-**Total: 12 / 100.** As a nutrient checker the system barely exists. The base around it is sound: screens, rover software and the Read → Find → Act shape.
+**Total: 21 / 100.** We can now record what a lab says, but we cannot measure a leaf: the sensor and the leaf-to-nutrient rows are still 0. The base around it is sound: screens, rover software and the Read → Find → Act shape.
 
 **Where we are ahead (not scored, and none of it field-proven):**
 - Built for guava, which LENS does not list.

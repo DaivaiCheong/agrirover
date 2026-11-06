@@ -229,6 +229,26 @@ async function checkPhoto(file: File, zone?: string, tree?: { row: number; col: 
   return res.json() as Promise<PhotoResult>;
 }
 
+export type LeafStatus = "low" | "ok" | "high" | "check" | "none";
+export type LeafNutrient = { code: string; name: string; symbol: string; base: string; range: [number, number] | null };
+export type LeafResult = { nutrient: string; symbol: string; value: number; unit: string; inBase: number; base: string; status: LeafStatus };
+export type LeafSample = {
+  id: string; zone: string | null; zoneLabel: string | null; variety: string | null; takenOn: string; cropDay: number; stage: string; atBloom: boolean;
+  tree: string | null; leafPairs: number; collectedBy: string | null; note: string | null; lab: string | null; resultsOn: string | null;
+  results: LeafResult[]; low: string[]; high: string[]; check: string[];
+};
+export type LeafCompare = {
+  zone: string; label: string; takenOn: string; stage: string; variety: string | null;
+  values: Record<string, { inBase: number; status: LeafStatus }>;
+};
+export type LeafOverview = {
+  samples: LeafSample[]; total: number; waiting: number; withResults: number; outOfRange: number; compare: LeafCompare[];
+  blocks: { zone: string; label: string; variety: string | null; day: number; stage: string }[];
+  nutrients: LeafNutrient[]; units: string[]; rangeSource: string;
+};
+export type LeafSampleIn = { zone: string; takenOn: string; leafPairs: number; row: number | null; col: number | null; collectedBy: string | null; note: string | null };
+export type LeafResultsIn = { lab: string | null; resultsOn: string | null; values: { nutrient: string; value: number; unit: string }[] };
+
 export type SavedPhoto = {
   id: string; shortId: string; zone: string | null; zoneLabel: string | null; tree: string | null; part: string; takenAt: string; takenOn: string; cropDay: number | null;
   readings: { values: Record<string, number>; simulated: boolean } | null; modelName: string | null; modelLabel: string | null; modelSeen: string | null;
@@ -339,6 +359,10 @@ export const api = {
     request<Correlation>(`/diagnosis?${new URLSearchParams({ zone, symptom })}`),
   checkPhoto,
   savePhoto,
+  leafTests: () => request<LeafOverview>("/leaf-tests"),
+  addLeafSample: (body: LeafSampleIn) => send<LeafSample>("POST", "/leaf-tests", body),
+  saveLeafResults: (id: string, body: LeafResultsIn) => send<LeafSample>("PUT", `/leaf-tests/${id}/results`, body),
+  deleteLeafSample: (id: string) => send<void>("DELETE", `/leaf-tests/${id}`),
   photos: (status: string) => request<PhotoLibrary>(`/photos?${new URLSearchParams({ status })}`),
   treeContext: (zone: string, row: number, col: number) =>
     request<TreeContext>(`/photos/tree?${new URLSearchParams({ zone, row: String(row), col: String(col) })}`),

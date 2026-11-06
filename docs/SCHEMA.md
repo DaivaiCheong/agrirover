@@ -128,18 +128,17 @@ Everything the soil probe measures is filed under the bed's deciding probe, like
 
 **`plant_photo`**: one row per saved photo. The image is a file in `farm-photos/`, so back that folder up with the database. It keeps the block, tree, crop day, and the soil and air when it was taken, marked if those were simulated. `farmer_label`, `model_label` and `expert_label` are kept apart: only `expert_label` may train or test a model ([PHOTO-LABELLING.md](PHOTO-LABELLING.md)). The older `crop_image` and `disease_detection` tables are not used for this.
 
-## Leaf samples and results (planned, not built)
+## Leaf samples and results (migration `0010`)
 
-The rover's focus since 6 Nov is checking leaf nutrients ([plan](PLAN.md)). Today no table holds a leaf nutrient: S, Mg, Ca, Mn, B, Zn, Cu, Fe and Al have no column at all, and `nitrogen`, `phosphorus` and `potassium` in `metric_type` are soil values in mg/kg, not leaf values. A sketch for the migration to settle:
+The rover's focus since 6 Nov is checking leaf nutrients ([plan](PLAN.md)). These are the only tables that hold a leaf nutrient: `nitrogen`, `phosphorus` and `potassium` in `metric_type` are soil values in mg/kg, and stay apart. The screen is Plant health, Leaf tests.
 
-**`leaf_sample`**: one bag or set of leaves.
-`zone_id`, `planting_id`, `variety`, `taken_on`, `crop_day`, `stage`, `leaf_pairs`, `trees` (which trees it came from, or one tree for a per-tree test), `collected_by`, `simulated`, `note`.
+**`leaf_sample`**: one set of leaves, from across a block or from one tree.
+`zone_id`, `planting_id`, `variety`, `taken_on`, `crop_day`, `tree_row` and `tree_col` (empty = across the block), `leaf_pairs`, `collected_by`, `note`, `lab`, `results_on`. The stage is worked out from `crop_day`. There is no simulated flag and no seed data: every row is a real entry.
 
-**`leaf_result`**: one nutrient from one sample, from one source. A scan and a lab result on the same sample are the pair that a scanner is tested against.
-`sample_id`, `nutrient`, `value`, `unit` (kept as reported: g/kg, mg/kg or %), `source` (`lab` | `scanner`), `lab_or_device`, `model_version` (for a scanner), `measured_on`.
-Unique on (`sample_id`, `nutrient`, `source`, `lab_or_device`).
+**`leaf_result`**: one nutrient from one sample.
+`sample_id`, `nutrient`, `source`, `value`, `unit` (as reported: g/kg, mg/kg, ppm or %). The key is all of `sample_id`, `nutrient` and `source`. Only `lab` exists today. A scan and a lab result on the same sample will be the pair a scanner is tested against; the scanner's own fields wait until there is a scanner.
 
-Leaf ranges stay in code until a table is earned, but as numbers with units instead of the text in `LEAF_RANGES`, and with the study they came from. A result stores no low / OK / high: that is worked out when asked, so a changed range cannot leave an old verdict behind.
+Leaf ranges stay in code (`LEAF_NUTRIENTS` in `services/guava.py`), as numbers with their studies, until a table is earned. A result stores no low / OK / high: that is worked out when asked, so a changed range cannot leave an old verdict behind.
 
 ## Decisions I need from you
 

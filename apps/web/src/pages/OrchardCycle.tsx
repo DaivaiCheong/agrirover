@@ -76,12 +76,12 @@ function Fertigation({ v }: { v: View }) {
           {v.setup?.orchard && <tr><th scope="row">Yearly dose</th><td>{v.setup.orchard.npk}</td></tr>}
         </tbody></table>
       </Panel>
-      <Panel title="Leaf test ranges" pad={false} right={<span className="small muted">Bearing Paluma orchards, Brazil. A starting reference</span>}>
+      <Panel title="Leaf test ranges" pad={false} right={<Link className="linkbtn small" to="/leaf-tests">Leaf tests</Link>}>
         <div className="leaf-grid">
           {v.leafRanges.map((l) => <div key={l.nutrient}><span className="small muted">{l.nutrient}</span><b>{l.range}</b></div>)}
         </div>
       </Panel>
-      <p className="small muted">The rover's N, P and K are a trend only. A low-cost probe cannot measure them well enough to set a dose. Too much of a feed shows first as high EC, which holds the next run; too little shows in a leaf test.</p>
+      <p className="small muted">Leaf ranges: two studies of bearing Paluma orchards, Brazil. A starting reference. The rover's N, P and K are a trend only. A low-cost probe cannot measure them well enough to set a dose. Too much of a feed shows first as high EC, which holds the next run; too little shows in a leaf test.</p>
     </div>
   );
 }

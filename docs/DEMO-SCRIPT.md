@@ -2,7 +2,7 @@
 
 **One sentence:** we are building a rover that checks guava leaf nutrients and tells the farmer what to do; today its software runs a simulated soil round, and one phone photo plus a tree's soil readings suggests why it looks wrong.
 
-**Say this plainly: the nutrient check is not built.** No screen below shows a leaf nutrient. They show the soil round and photo check, the base it will sit on. Against LENS as a nutrient checker we score 12 / 100 by our own rating ([comparison](PICKETA-RESEARCH.md#compared-with-lens)). If this demo is for judges or investors, say so in the opening line.
+**Say this plainly: the rover cannot check a nutrient yet.** The screens below show the soil round and photo check, the base it will sit on. Plant health, Leaf tests records lab results, and it stays empty until a real one comes: **never type in made-up figures to fill it for a demo.** Against LENS as a nutrient checker we score 21 / 100 by our own rating ([comparison](PICKETA-RESEARCH.md#compared-with-lens)). If this demo is for judges or investors, say so in the opening line.
 
 **The shape of every screen:** Read (measured data) → Find (the problem, with its number against the target) → Act (one thing to do). Today and Health each fit one screen. Why this shape: [PICKETA-RESEARCH.md](PICKETA-RESEARCH.md).
 
@@ -27,7 +27,7 @@ Photos: `farm-photos\demo\` (1-healthy-leaf, 2-yellow-leaf, 3-mealybug). They co
 | 2:40 | Right column | **Save to R2 T1**. The dark dot appears on the tree in 3D | "Saved with the tree's readings, so an expert can confirm it. Every confirmed photo trains a better model for our farms." |
 | 3:00 | **Rover** | In Today's round choose **G5 Harvest block**, tick the three checks, **Start round**. Talk while it drives (about 30 s) | "This is the rover's software running a round: tree by tree, probe in the soil, in the right order. The hardware is being built around this same code." |
 | 3:45 | **Finance** | Point at the four figures, then By block | "And the farmer sees where the money goes, block by block. These are sample figures." |
-| 4:15 | **Rover** › What it does | Point down the Status column | "We're honest about where we are: the software and the advice work today, in simulation. Nutrient checking is next and is not built. First we send guava leaves to a lab to prove blocks really differ, then we test a scanner against those lab results, and only then does it go on the rover." |
+| 4:15 | **Rover** › What it does | Point down the Status column | "We're honest about where we are: the software and the advice work today, in simulation. The rover does not check nutrients yet. First we send guava leaves to a lab and record them here, under Leaf tests, to prove blocks really differ, then we test a scanner against those lab results, and only then does it go on the rover." |
 | 4:45 | | Close | "Collect the leaf, scan it, act, for guava. Today, the software. Next, the proof." |
 
 **3D controls:** drag to turn, scroll to zoom, the chips at the top jump to a block or back to the whole farm. On Rover, **Map** switches to the flat map if the 3D ever misbehaves.
@@ -38,7 +38,7 @@ Photos: `farm-photos\demo\` (1-healthy-leaf, 2-yellow-leaf, 3-mealybug). They co
 |---|---|
 | How accurate is the photo AI? | Healthy or not: good. Naming the problem: about half on 150 public test photos (61 of 120), and the app says "about 4 in 10" to stay safe. It is triage; an expert confirms. Our own farm photos will raise it. |
 | Is the rover real? | The software runs the real rover code against a simulated field. The hardware does not exist yet in this form: chassis, leaf scanner, side camera, soil probe arm. |
-| How is this different from Picketa's LENS? | We follow their concept: collect a leaf, scan it, act. LENS is a working product on potato, corn, canola, soy and wheat, and sells to agronomists at US$10,000 a year. Ours is not built. What we add is guava, which they do not list, soil readings that help explain a low leaf, and a rover to carry it. We have no scanner result yet. |
+| How is this different from Picketa's LENS? | We follow their concept: collect a leaf, scan it, act. LENS is a working product on potato, corn, canola, soy and wheat, and sells to agronomists at US$10,000 a year. Ours records lab results today; it has no scanner. What we add is guava, which they do not list, soil readings that help explain a low leaf, and a rover to carry it. We have no scanner result yet. |
 | Can it read all 13 nutrients? | No. We plan to start with N, P, K and Mg as low, OK or high, and only show a nutrient after it passes against a lab. Low-cost scanners are good on nitrogen and weak on potassium and magnesium in the work we found. |
 | Why a rover and not a person with a scanner? | That is what we have to prove. While a person picks the leaves, a rover may add little, and we will time it. If it does not earn its cost, we'll say so. |
 | Why a rover and not fixed sensors? | A fixed sensor reads one spot in the soil. It cannot read a leaf. For soil alone, a few fixed probes may win. |

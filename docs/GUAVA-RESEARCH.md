@@ -114,7 +114,7 @@ Why: the rover now follows the LENS concept ([PICKETA-RESEARCH.md](PICKETA-RESEA
 
 **Leaf ranges disagree.** Same cultivar, same country, different figures:
 
-| Nutrient | Souza et al. 2013 (168 samples; used in the app) | Paluma study 2020 (48 plots) |
+| Nutrient | Souza et al. 2013 (168 samples) | Paluma study 2020 (48 plots) |
 |---|---|---|
 | N, g/kg | 18-21 | 17.9-21.2 |
 | P, g/kg | 1.5-1.7 | 1.0-1.3 |
@@ -129,6 +129,8 @@ Why: the rover now follows the LENS concept ([PICKETA-RESEARCH.md](PICKETA-RESEA
 | Zn, mg/kg | 13-126 | 15.3-20.4 |
 
 The IIHR guide gives N 1.4-2.0 %, P 0.20-0.40 %, K 1.31-1.70 %, Ca 0.67-3.0 %, Mg 0.25-0.68 %, which is 14-20, 2.0-4.0, 13.1-17, 6.7-30 and 2.5-6.8 g/kg. None of these is from Cambodia or from Local Khmer or Kimju trees. **They are a starting reference until we have our own.** No range for aluminium was found.
+
+**What the app does with this:** Leaf tests uses both Paluma studies together. A value is low or high only when it is outside both, so neither study would call it sufficient. This avoids false alarms, and it can miss a real shortage that sits inside one study's wider range. The IIHR guide is left out because it cites no study. A figure more than 5 times outside the range is marked "Check unit", because a percentage typed as g/kg looks like a severe shortage. That factor is our number, not from a study.
 
 **What leaf scanners have shown.** None of these is guava.
 

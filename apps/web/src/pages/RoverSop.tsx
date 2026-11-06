@@ -29,7 +29,7 @@ const PHASES: { phase: string; steps: Step[] }[] = [
     { what: "Clean, charge, store dry", pass: "Ready for tomorrow" },
   ] },
   { phase: "Every cycle", steps: [
-    { what: "Send a leaf sample at the end of the flush", pass: "Lab result compared with the leaf ranges. This, not the probe's N, P, K, changes a dose" },
+    { what: "Send a leaf sample at full flowering, and record it under Plant health, Leaf tests", pass: "Lab result compared with the leaf ranges. This, not the probe's N, P, K, changes a dose" },
     { what: "Calibrate moisture on your own soil", pass: "Probe readings compared with a sample weighed wet and dry" },
   ] },
 ];

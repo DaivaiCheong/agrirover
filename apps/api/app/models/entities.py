@@ -208,6 +208,36 @@ class PlantPhoto(Base):
     expert_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class LeafSample(Base):
+    """One set of leaves, from a whole block or one tree, with what the lab said about it in leaf_result."""
+    __tablename__ = "leaf_sample"
+    id: Mapped[uuid.UUID] = _pk()
+    zone_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("zone.id", ondelete="SET NULL"))
+    planting_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("planting.id", ondelete="SET NULL"))
+    variety: Mapped[str | None] = mapped_column(String(80))             # kept here: ranges and scanners may differ by variety
+    taken_on: Mapped[date] = mapped_column(Date, nullable=False)
+    crop_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    tree_row: Mapped[int | None] = mapped_column(SmallInteger)          # empty = leaves from across the block
+    tree_col: Mapped[int | None] = mapped_column(SmallInteger)
+    leaf_pairs: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    collected_by: Mapped[str | None] = mapped_column(String(80))
+    note: Mapped[str | None] = mapped_column(Text)
+    lab: Mapped[str | None] = mapped_column(String(120))
+    results_on: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LeafResult(Base):
+    """One nutrient of one sample, in the unit it was reported. Low, OK or high is worked out when asked, so a changed
+    range cannot leave an old verdict behind. `source` is the pair a scanner will be tested on: only "lab" exists today."""
+    __tablename__ = "leaf_result"
+    sample_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("leaf_sample.id", ondelete="CASCADE"), primary_key=True)
+    nutrient: Mapped[str] = mapped_column(String(4), primary_key=True)
+    source: Mapped[str] = mapped_column(String(8), primary_key=True, server_default="lab")
+    value: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    unit: Mapped[str] = mapped_column(String(8), nullable=False)
+
+
 class Sensor(Base):
     """One probe on a field node. Two depths per zone: a reading says which probe it came from."""
     __tablename__ = "sensor"

@@ -2,7 +2,7 @@
 
 Working plan for the team. Order matters: do not start step N+1 before step N is done.
 
-**Changed 2026-11-06 by Daivai:** the rover focuses on checking nutrients, following the concept of Picketa's LENS (collect a leaf, scan it, act). Guava stays the one crop. As a nutrient checker the system scores 12 / 100 against LENS today, because there is no leaf sensor or leaf result yet: [the comparison](PICKETA-RESEARCH.md#compared-with-lens). **None of this is built.**
+**Changed 2026-11-06 by Daivai:** the rover focuses on checking nutrients, following the concept of Picketa's LENS (collect a leaf, scan it, act). Guava stays the one crop. As a nutrient checker the system scores 21 / 100 against LENS today: lab results can be recorded and rated, but there is no leaf sensor and no real result yet ([the comparison](PICKETA-RESEARCH.md#compared-with-lens)). **Nothing on the rover checks a nutrient.**
 
 **Changed 2026-11-05 by Daivai:** the rover is the main product, and guava is the one crop. The earlier plan put the rover in a later stage and sold the daily decision on fixed sensors. Its review is kept in `agrirover-business-review.md`; its warnings below still apply.
 
@@ -31,7 +31,8 @@ Nutrient readings do not need every tree every day. Guava leaf standards use a c
 | Requirement | Who asked | Verdict |
 |---|---|---|
 | **Rover checks leaf nutrients: collect, scan, act** | Daivai, 6 Nov | **Keep. The product.** Not built |
-| Start with N, P, K, Mg as low / OK / high; add a nutrient when its paired tests pass | Follows from the research | Keep. Not built |
+| Record leaf samples and lab results, rated low / OK / high | Daivai, 6 Nov | Keep. **Built:** Plant health, Leaf tests. No real result yet; advice does not read them |
+| From a scanner, start with N, P, K, Mg as low / OK / high; add a nutrient when its paired tests pass | Follows from the research | Keep. Not built |
 | Every scan paired with a lab result until the model passes | LENS method | Keep. Not built |
 | Learn from Picketa's concept, on guava only | Daivai, 6 Nov | Done: [PICKETA-RESEARCH.md](PICKETA-RESEARCH.md) |
 | Tells the farmer what to do | Daivai | Keep. Built on simulated rounds; must take leaf results as input |
@@ -57,7 +58,7 @@ Nutrient readings do not need every tree every day. Guava leaf standards use a c
 One crop, one nutrient round per stage, one list of what to do.
 
 ## Step 4: accelerate (weekly cycles)
-1. **Lab baseline: the cheapest test of the whole product.** Pick leaves the standard way ([ROVER-SOP.md](ROVER-SOP.md#leaf-sample-how-to)), send them to a lab, type in the results. Do blocks or trees really differ? If not, stop and rethink before building anything to scan them. First find a lab that tests leaf tissue: none was found yet.
+1. **Lab baseline: the cheapest test of the whole product.** Pick leaves the standard way ([ROVER-SOP.md](ROVER-SOP.md#leaf-sample-how-to)), send them to a lab, enter the results under Plant health, Leaf tests. Blocks compared shows them side by side. Do blocks or trees really differ? If not, stop and rethink before building anything to scan them. First find a lab that tests leaf tissue: none was found yet.
 2. **Scanner on a table.** Test candidate scanners against paired lab results, starting near 100 pairs. Proposed pass mark: at most 10 % of samples off by more than 20 %, on samples the model did not train on. That number is ours, for Daivai to change. Options: [research](GUAVA-RESEARCH.md#leaf-nutrient-check-6-nov-2026).
 3. **Week-0 baseline:** how watering and feeding are decided now, minutes spent checking, water and fertiliser used, last season's grade.
 4. **Chassis and navigation:** drive one row between trunks, then one block.
@@ -102,13 +103,14 @@ Message, farmer acts. Then an arm that scans leaves, only after step 4.5 works: 
 
 ## Next in the repo
 Nutrient check, in order:
-- [ ] Tables and a screen to enter a leaf sample and its lab result ([SCHEMA.md](SCHEMA.md#leaf-samples-and-results-planned-not-built))
-- [ ] Move the "Send a leaf sample" task: the app says day 70-75, before flowering; the method in the SOP samples at full flowering (`services/guava.py`)
-- [ ] Numeric ranges, with low / OK / high against them (`LEAF_RANGES` is text today)
-- [ ] Nutrient view per block and per tree, and an export
+- [x] Tables and a screen to enter a leaf sample and its lab result ([SCHEMA.md](SCHEMA.md#leaf-samples-and-results-migration-0010))
+- [x] Move the "Send a leaf sample" task to day 86-94: in flowering, after the zinc and boron spray
+- [x] Numeric ranges, with low / OK / high against them
+- [x] Blocks compared: each block's newest result, side by side
+- [ ] Export of leaf results, and history per block and per tree
 - [ ] Advice that takes a leaf result as input
 - [ ] Take soil N, P, K off the screens
-- [ ] Reword Rover, What it does, and Rover, SOP: they still describe the old product and the old leaf sample step
+- [ ] Reword Rover, What it does, and the rest of Rover, SOP: they still describe the old product
 - [ ] Mark simulated rover averages in `sensor_reading`: they are stored as `valid` today (`services/rover_live.py`)
 
 Still open from before:

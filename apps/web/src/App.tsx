@@ -15,6 +15,7 @@ import Equipment from "./pages/Equipment";
 import Finance from "./pages/Finance";
 import Guide from "./pages/Guide";
 import Harvest from "./pages/Harvest";
+import LeafTests from "./pages/LeafTests";
 import OrchardCycle from "./pages/OrchardCycle";
 import Photos from "./pages/Photos";
 import Plan from "./pages/Plan";
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/settings" element={farm(<Settings />)} />
         <Route path="/devices" element={farm(<Devices />)} />
         <Route path="/crop" element={health(<Crop />)} />
+        <Route path="/leaf-tests" element={health(<LeafTests />)} />
         <Route path="/photos" element={health(<Photos />)} />
         <Route path="/guide" element={health(<Guide />)} />
         <Route path="*" element={<Navigate to="/" replace />} />

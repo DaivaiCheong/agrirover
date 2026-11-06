@@ -9,20 +9,20 @@ Status: **Shown** = you can see it working. **Build** = what was still needed wh
 
 ## Nutrient check (added 2026-11-06)
 
-Asked for by Daivai: the rover checks nutrients, following the LENS concept, on guava only. Source: [PICKETA-RESEARCH.md](PICKETA-RESEARCH.md), evidence: [GUAVA-RESEARCH.md](GUAVA-RESEARCH.md#leaf-nutrient-check-6-nov-2026). Nothing in this table runs on the farm yet.
+Asked for by Daivai: the rover checks nutrients, following the LENS concept, on guava only. Source: [PICKETA-RESEARCH.md](PICKETA-RESEARCH.md), evidence: [GUAVA-RESEARCH.md](GUAVA-RESEARCH.md#leaf-nutrient-check-6-nov-2026). No real sample or lab result has been entered yet.
 
 | Requirement | Owner | Status today | Needs |
 |---|---|---|---|
-| Collect leaves the standard way: third pair, mid-canopy, at a set stage | Daivai | Not on screen. Steps in [ROVER-SOP.md](ROVER-SOP.md#leaf-sample-how-to) | A screen to record the sample |
-| Lab result per sample | Daivai | **Build.** A task says "Send a leaf sample to a lab"; no way to enter the result | Tables and a screen, and a lab that tests leaf tissue |
-| Compare with leaf ranges | Daivai | Display only: `LEAF_RANGES` is text, for 11 nutrients | Numbers, with low / OK / high |
+| Collect leaves the standard way: third pair, mid-canopy, at a set stage | Daivai | **Shown.** Plant health, Leaf tests records each sample. Steps in [ROVER-SOP.md](ROVER-SOP.md#leaf-sample-how-to) | Nothing |
+| Lab result per sample | Daivai | **Shown.** Entered in the lab's own unit | A lab that tests leaf tissue |
+| Compare with leaf ranges | Daivai | **Shown.** Low / OK / high for 11 nutrients; a likely wrong unit is marked | Our own ranges, in time |
 | Scan a leaf | Daivai | **Build.** No sensor chosen | Table test of the candidates |
-| Pair each scan with a lab result | LENS method | **Build** | Pairs table, about 100 pairs to start |
+| Pair each scan with a lab result | LENS method | **Build.** Lab results are stored ready to pair (`leaf_result.source`) | A scanner, a screen, about 100 pairs to start |
 | Show a nutrient only after it passes | Follows from the research | **Build** | Pass mark to agree: proposed at most 10 % of samples off by more than 20 % |
 | First nutrients: N, P, K, Mg, as low / OK / high | Follows from the research | **Build** | Nothing sourced for micronutrients on a low-cost scanner; no guava range for Al |
 | Nutrient round per block, per stage | Follows from the research | **Build.** Today's round reads soil per tree, simulated | A leaf stop in the round. A person picks the leaf first |
 | Result turns into one thing to do | Daivai | Partly. Advice works from soil and the calendar, not from a leaf | Advice takes a leaf result as input |
-| Nutrient view per block and tree, and an export | Follows from LENS's Fieldbook | **Build.** Today only soil N, P, K as a trend | Screen and export |
+| Nutrient view per block and tree, and an export | Follows from LENS's Fieldbook | Partly. Blocks compared shows each block's newest result | Export, and history per block and tree |
 | Soil readings explain a low leaf (EC, pH) | Follows from the research | Rule exists for yellow leaves in `guava.why_yellow`, from soil only | Use it with a leaf result |
 
 ## Sensors and targets

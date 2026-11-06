@@ -798,6 +798,14 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .growth-chart{height:210px;padding:6px}
 .leaf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:1px;background:var(--line)}
 .leaf-grid>div{display:grid;gap:1px;padding:6px 10px;background:var(--surface);font-size:13px}
+.leaf-entry .erp-input{width:92px;min-width:92px}
+@media (max-width:560px){
+  .leaf-entry th,.leaf-entry td{padding-left:5px;padding-right:5px}
+  .leaf-entry .erp-input{width:68px;min-width:68px}
+  .leaf-entry .tag{padding:1px 4px;gap:2px}
+  .leaf-entry .tag::before{display:none}
+}
+.leaf-col{font-weight:400;white-space:nowrap}
 .cc-sep{width:10px}
 .todo-t td{vertical-align:top}
 .todo-t .xp{display:inline-block;vertical-align:top}

@@ -61,6 +61,18 @@ No farmer has used this version, so the claim is "less to read", not "faster to 
 * **E-stop is the one red button in the app, and always visible.**
 * **Volts, not a battery percentage.** A lithium pack does not discharge in a straight line, so a percentage would be a guess.
 
+## Leaf tests (2026-11-06)
+
+* **One dialog to enter and to read a result.** A saved figure shows its status beside it. Change the figure and the status goes to "—" until it is saved, so an old verdict never sits beside a new number.
+* **The range sits under the nutrient and follows the unit.** Pick % and N shows 1.79–2.12 %. This is what catches a wrong unit while typing. On a phone it also leaves only three columns, so the status stays on screen: as five columns, Range and Status slid out of view.
+* **A likely wrong unit is not called a shortage.** N 1.9 in g/kg is probably 1.9 %. It says "Check unit", not Low, and the figure is still saved.
+* **One line per sample.** "Low K · High Zn" names only what is out of range. Figures across the top appear only once there are samples.
+* **Blocks compared answers the first question of the plan:** do blocks differ? One-tree samples stay out of it, because one tree says nothing about a block.
+* **No sample data.** A made-up lab result could be taken for a measured one, so the screen stays empty until a real one comes.
+* **Honest labels stay on screen:** "Advice does not use these yet", "Not at flowering", and the source of the ranges.
+
+Checked in headless Chrome on the live demo, at 1280 px and 390 px, then every test entry was deleted. No farmer has used it, and no real lab report has been entered.
+
 ## Soil and air readings (the ribbon)
 
 Question: what must a farmer see per bed? Seven readings (moisture, pH, EC, soil temperature, N-P-K, air temperature, humidity),

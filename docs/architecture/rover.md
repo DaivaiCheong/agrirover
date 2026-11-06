@@ -1,6 +1,6 @@
 # AgriRover: the orchard rover
 
-**The goal since 6 Nov 2026:** the rover checks guava leaf nutrients, block by block, following the LENS concept: collect, scan, act ([plan](../PLAN.md), [comparison](../PICKETA-RESEARCH.md)). **The nutrient round is not built.** No scanner is chosen, and the software has no leaf stop.
+**The goal since 6 Nov 2026:** the rover checks guava leaf nutrients, block by block, following the LENS concept: collect, scan, act ([plan](../PLAN.md), [comparison](../PICKETA-RESEARCH.md)). **The nutrient round is not built.** No scanner is chosen, and the software has no leaf stop. What exists is the record it will feed: lab results under Plant health, Leaf tests.
 
 **What runs today, in simulation:** the rover goes to every guava tree once a day. At each tree it photographs the canopy from the side, lowers a soil probe,
 and reads the air. It does not water or feed. The farm server turns the round into the day's advice
@@ -14,7 +14,7 @@ Any watering then passes through the same firmware limits as every other irrigat
 | When | Once per stage for each block, not daily: guava leaf standards sample at a set stage | Planned |
 | Collect | A person walks with the rover and picks the third leaf pair, mid-canopy. An arm comes only after this works | Planned |
 | Scan | The scanner on the rover reads each leaf. Which scanner: table test first ([options](../GUAVA-RESEARCH.md#leaf-nutrient-check-6-nov-2026)) | Not chosen |
-| Result | N, P, K, Mg as low / OK / high for the block. A nutrient appears only after its paired lab tests pass | Not built |
+| Result | N, P, K, Mg as low / OK / high for the block. A nutrient appears only after its paired lab tests pass | Rating built, for lab results. Nothing from a scan |
 | Why | Soil EC and pH from the same block help explain a low leaf | Rule exists, for yellow leaves only |
 | Act | One thing to do | Advice does not take a leaf result yet |
 
@@ -117,7 +117,7 @@ other trees, will need new work and is not tested. Fruit count and size from pho
 - **No login.** Anyone with the app's address can start or stop the rover. Add one before connecting real hardware.
 - **Navigation is not written.** Position comes from timed wheel runs, which is not enough between trees. The team has already set up
   ArduPilot GPS waypoint missions on its drone build, which is a good start.
-- **No leaf scanner, leaf stop or leaf result.** The rover cannot check a nutrient yet.
+- **No leaf scanner or leaf stop.** The rover cannot check a nutrient yet.
 - **The probe reader and arm are not built,** and the stop time per tree (40 s) is an estimate. A real `rover run` passes no probe (`rover/__main__.py`), so it would report no readings.
 - **The simulated battery drain is invented.** Endurance is unknown until a timed row test.
 - **Rover hardware** does not exist yet in this form. The software has been tested in simulation and against an Arduino stub.

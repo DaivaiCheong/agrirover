@@ -334,8 +334,8 @@ JOBS = (
     Job("priming", 46, 49, "Two priming irrigations", "Water on day 46 and again on day 49, then start the drip pulses."),
     Job("micronutrients", 46, 60, "Soil micronutrients", "Per tree: zinc sulphate 25-40 g, borax 15-20 g, iron sulphate 25 g."),
     Job("pinch", 60, 72, "Pinch new shoots", "When shoots have 4-5 leaf pairs, pinch at 30-35 cm."),
-    Job("leaf_test", 70, 75, "Send a leaf sample to a lab", "The probe's N, P and K cannot set a dose. A leaf test can: compare with the ranges on the Fertilisation tab."),
     Job("zn_b", 76, 85, "Foliar zinc and boron", "Zinc sulphate 0.5 % plus boric acid 0.2 %. Spray at 18-25 °C.", confirm=True),
+    Job("leaf_test", 86, 94, "Send a leaf sample to a lab", "At full flowering: third leaf pair, mid-canopy, at least 12 pairs. Zinc and boron may read high after the foliar spray. Record it under Plant health, Leaf tests."),
     Job("k_set", 95, 105, "Foliar potassium at fruit set", "Potassium sulphate 1.0 %, to hold more fruit on the tree.", confirm=True),
     Job("bag", 106, 125, "Bag the fruit at 3-4 cm", "Measure a few fruit. At 30-40 mm: inner foam net, outer plastic bag.", measure=True),
     Job("mg_fe", 110, 135, "Foliar magnesium and iron", "Magnesium sulphate 1.0 % plus iron sulphate 0.5 %. The document adds GA3 100 ppm.", confirm=True),
@@ -389,15 +389,67 @@ def fertigation_for(stage_n: int) -> dict:
     return {"stageN": stage_n, **_RECIPE[stage_n], "phases": [] if stage_n == 1 else _PHASES, "waterPh": _WATER_PH}
 
 
-# Souza et al. 2013, bearing 'Paluma' orchards, Brazil (docs/GUAVA-RESEARCH.md): a starting reference for a leaf test.
-LEAF_RANGES = [
-    {"nutrient": "Nitrogen (N)", "range": "18-21 g/kg"}, {"nutrient": "Phosphorus (P)", "range": "1.5-1.7 g/kg"},
-    {"nutrient": "Potassium (K)", "range": "15-17 g/kg"}, {"nutrient": "Calcium (Ca)", "range": "8-11 g/kg"},
-    {"nutrient": "Magnesium (Mg)", "range": "1.8-2.5 g/kg"}, {"nutrient": "Sulphur (S)", "range": "2.5-2.9 g/kg"},
-    {"nutrient": "Boron (B)", "range": "26-38 mg/kg"}, {"nutrient": "Iron (Fe)", "range": "54-112 mg/kg"},
-    {"nutrient": "Manganese (Mn)", "range": "53-101 mg/kg"}, {"nutrient": "Zinc (Zn)", "range": "13-126 mg/kg"},
-    {"nutrient": "Copper (Cu)", "range": "5-57 mg/kg"},
-]
+# ------------------------------------------------------------------ leaf test ranges
+
+LEAF_RANGE_SOURCE = "Two studies of bearing Paluma orchards, Brazil. A starting reference"
+LEAF_UNITS = {"g/kg": 1000.0, "mg/kg": 1.0, "ppm": 1.0, "%": 10000.0}       # to mg/kg
+UNIT_CHECK_FACTOR = 5.0              # our number: this far outside a range is more likely a wrong unit than a real leaf
+
+
+@dataclass(frozen=True)
+class LeafNutrient:
+    """The ranges of Souza et al. 2013 and of the Paluma study of 2020 (docs/GUAVA-RESEARCH.md), which disagree. None = no range found."""
+    code: str
+    name: str
+    symbol: str
+    base: str
+    souza: tuple[float, float] | None
+    paluma: tuple[float, float] | None
+
+    @property
+    def range(self) -> tuple[float, float] | None:
+        """Both studies together: a value is low or high only when neither study would call it sufficient."""
+        if self.souza is None or self.paluma is None:
+            return None
+        return min(self.souza[0], self.paluma[0]), max(self.souza[1], self.paluma[1])
+
+    def to_dict(self) -> dict:
+        r = self.range
+        return {"code": self.code, "name": self.name, "symbol": self.symbol, "base": self.base, "range": list(r) if r else None}
+
+
+LEAF_NUTRIENTS = (
+    LeafNutrient("n", "Nitrogen", "N", "g/kg", (18, 21), (17.9, 21.2)),
+    LeafNutrient("p", "Phosphorus", "P", "g/kg", (1.5, 1.7), (1.0, 1.3)),
+    LeafNutrient("k", "Potassium", "K", "g/kg", (15, 17), (13.3, 15.0)),
+    LeafNutrient("ca", "Calcium", "Ca", "g/kg", (8, 11), (6.1, 7.6)),
+    LeafNutrient("mg", "Magnesium", "Mg", "g/kg", (1.8, 2.5), (1.9, 2.1)),
+    LeafNutrient("s", "Sulphur", "S", "g/kg", (2.5, 2.9), (1.9, 2.4)),
+    LeafNutrient("b", "Boron", "B", "mg/kg", (26, 38), (13.1, 19.0)),
+    LeafNutrient("fe", "Iron", "Fe", "mg/kg", (54, 112), (76.2, 105)),
+    LeafNutrient("mn", "Manganese", "Mn", "mg/kg", (53, 101), (63.7, 113.7)),
+    LeafNutrient("zn", "Zinc", "Zn", "mg/kg", (13, 126), (15.3, 20.4)),
+    LeafNutrient("cu", "Copper", "Cu", "mg/kg", (5, 57), (43.9, 55.8)),
+    LeafNutrient("al", "Aluminium", "Al", "mg/kg", None, None),
+)
+LEAF_BY_CODE = {n.code: n for n in LEAF_NUTRIENTS}
+LEAF_RANGES = [{"nutrient": f"{n.name} ({n.symbol})", "range": f"{n.range[0]:g}-{n.range[1]:g} {n.base}"} for n in LEAF_NUTRIENTS if n.range]
+
+
+def leaf_in_base(code: str, value: float, unit: str) -> float:
+    """A lab's figure in the nutrient's own unit: g/kg for the major ones, mg/kg for the rest."""
+    return float(value) * LEAF_UNITS[unit] / LEAF_UNITS[LEAF_BY_CODE[code].base]
+
+
+def rate_leaf(code: str, value: float, unit: str) -> str:
+    """low, ok or high against the ranges; check when the figure is so far out that the unit is probably wrong; none when there is no range."""
+    r = LEAF_BY_CODE[code].range
+    if r is None:
+        return "none"
+    v = leaf_in_base(code, value, unit)
+    if v < r[0] / UNIT_CHECK_FACTOR or v > r[1] * UNIT_CHECK_FACTOR:
+        return "check"
+    return "low" if v < r[0] else "high" if v > r[1] else "ok"
 
 
 # ------------------------------------------------------------------ symptoms set against readings
