@@ -61,6 +61,25 @@ No farmer has used this version, so the claim is "less to read", not "faster to 
 * **E-stop is the one red button in the app, and always visible.**
 * **Volts, not a battery percentage.** A lithium pack does not discharge in a straight line, so a percentage would be a guess.
 
+## Rover page: the block first (2026-11-06)
+
+The owner: too much scrolling, show the 3D first, the rest feels redundant.
+
+* **Deleted, not folded.** Found today repeated Today and Plant health, and Rover schedule repeated Plan. Schedule is now a link to Plan.
+* **The block and the round fill the first screen,** in the same layout as Plant health: the farm on the left, a side panel on the right. The panel shows the round's form, or the tree you clicked, or the tree the rover is at during a round.
+* **Chips replace the block list.** Each shows the same count of trees to look at as Plant health, and "Not yet" if the block has no round today.
+* **Rows, spacing and Simulate fold into one line** ("4 rows × 4 trees · 5 × 5 m"), because they fill in from the block's setup. A simulated rain or low battery stays on that line, so it cannot be forgotten. The safety checks stay in full view.
+* **Figures and the tree table move under the block.** The status moves up to the toolbar, so it is still seen during a round.
+* **Bug found on the way:** the camera framed a block before its real spacing loaded, so a block could overflow the view at one window size and not another. Framing now follows spacing too.
+
+Measured in headless Chrome on the live demo. No farmer has used this version.
+
+| Window | Page height | Where the 3D starts | Bottom of Start round |
+|---|---|---|---|
+| 1920 × 910 | 1,750 to 1,314 | 864 to 214 | 1,406 to 562 |
+| 1280 × 800 | 1,750 to 1,204 | 864 to 214 | 1,406 to 562 |
+| 390 × 844 | 3,949 to 1,864 | 2,129 to 436 | 3,667 to 1,190 |
+
 ## Leaf tests (2026-11-06)
 
 * **One dialog to enter and to read a result.** A saved figure shows its status beside it. Change the figure and the status goes to "—" until it is saved, so an old verdict never sits beside a new number.

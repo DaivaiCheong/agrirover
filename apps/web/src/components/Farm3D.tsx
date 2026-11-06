@@ -323,7 +323,8 @@ export default function Farm3D({ blocks, selected, onPick, focus, rover, height 
   }, [key]);    // eslint-disable-line react-hooks/exhaustive-deps
 
   // frame a block, or the whole farm, when asked
-  const frameKey = `${focus ?? ""}|${blocks.map((b) => `${b.zone}${b.rows}x${b.cols}`).join()}`;
+  // the spacing changes a block's size as much as its rows do: without it, a block framed before its real spacing loads overflows the view
+  const frameKey = `${focus ?? ""}|${blocks.map((b) => `${b.zone}${b.rows}x${b.cols}@${b.rowM}x${b.treeM}`).join()}`;
   useEffect(() => {
     const e = env.current;
     if (!e || e.farmBox.isEmpty()) return;

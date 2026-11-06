@@ -790,7 +790,7 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .sw-water{background:var(--water);color:#fff;border-color:var(--water)}
 .sw-flag{background:#fff;color:var(--warn);border:2px solid var(--warn);font-size:11px}
 .rc-cam{display:grid;grid-template-columns:132px minmax(0,1fr);gap:10px;align-items:start}
-.rc-cam img,.rc-nophoto{width:132px;height:132px;border:1px solid var(--line);display:grid;place-items:center;image-rendering:auto}
+.rc-cam img{width:132px;height:132px;border:1px solid var(--line);display:grid;place-items:center;image-rendering:auto}
 .rc-cam .tbl td,.rc-cam .tbl th{padding:3px 8px}
 .rc-grid2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .rc-history{max-height:360px;overflow:auto}
@@ -843,7 +843,7 @@ details.stagecard > summary::-webkit-details-marker{display:none}
   .tbl.costs-t td.act{grid-column:2;grid-row:3;text-align:right}
   /* the arrow and the alert line say it; the name stays whole */
   .rc-cam{grid-template-columns:96px minmax(0,1fr)}
-  .rc-cam img,.rc-nophoto{width:96px;height:96px}
+  .rc-cam img{width:96px;height:96px}
   .bn{font-size:10.5px}
   .chk-man{padding:7px 0}
   .rb-glyph{display:none}
@@ -1010,6 +1010,12 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .hf-tree{display:flex;flex-direction:column;gap:12px;padding:12px 14px}
 .hf-tree-head{display:flex;flex-direction:column;gap:2px}
 .hf-tree-head b{font-size:16px}
+.hf-tree-head .linkbtn{align-self:flex-start}
 .hf-tree .ts-grid{gap:6px}
 .hf-tree .ts-v{font-size:15px}
 @media (max-width:900px){.hf{grid-template-columns:minmax(0,1fr)}}
+/* ---------- rover: the block and the round on the first screen ---------- */
+.rv-blocks{display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line)}
+.rv-round-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rv-options{margin-top:8px}
+.rv-map{display:flex;flex-direction:column;justify-content:space-between}
