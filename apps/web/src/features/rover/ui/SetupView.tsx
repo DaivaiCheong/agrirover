@@ -1,36 +1,22 @@
 // Setup for a block, done once: its plant map (where the trees stand), the route the rover takes, and the camera.
 // The Field log uses these settings on every round.
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import RoverMap, { RoverLegend } from "../../../components/RoverMap";
 import { EF, Empty, More, Notice, Panel } from "../../../components/ui";
 import { api } from "../../../lib/api";
 import { CORNERS, DEFAULT_ROUTE, cellName, cornerCell, estimate, minutes, savedRoute, spotKey, type Corner, type Route } from "../../../lib/rover";
-import { useData } from "../../../lib/useData";
 import BlockPicker from "./BlockPicker";
 import { CAMERA, savedCamera, savedInspect, setCamera, setInspect, setRoute, type CameraMode } from "./fieldlog/roundSettings";
-import { layoutOf, layoutOk } from "./fieldlog/model";
+import { layoutOk } from "./fieldlog/model";
+import { useBlock } from "./fieldlog/useBlock";
 
 type Msg = { kind: "ok" | "alert"; text: string } | null;
 
 export default function SetupView() {
-  const [search, setSearch] = useSearchParams();
-  const zones = useData(api.zones);
-  const cycles = useData(api.cycles);
-  const maps = useData(api.plantMaps);
-
-  const beds = zones.data ?? [];
-  const growing = (cycles.data ?? []).filter((c) => c.status === "active");
-  // a block named in the address must exist; once the blocks have loaded, an unknown one falls back to the first
-  const requested = search.get("zone");
-  const zone = requested && (beds.length === 0 || beds.some((b) => b.zone === requested))
-    ? requested : growing[0]?.zone || beds[0]?.zone || "";
-  const bed = beds.find((b) => b.zone === zone);
-  const cycle = growing.find((c) => c.zone === zone);
-  const pm = (maps.data ?? []).find((m) => m.zone === zone) ?? null;
-  const layout = layoutOf(pm, cycle);
-  const label = bed?.label ?? cycle?.bedLabel ?? zone;
+  const block = useBlock();
+  const { zones, maps, zone, cycle, pm, layout, label } = block;
 
   // route, camera and inspection: read for the block, kept on this device
   const [route, setRouteState] = useState<Route>(DEFAULT_ROUTE);
@@ -118,7 +104,7 @@ export default function SetupView() {
       const made = await api.newPlantBlock({ label: nb.label.trim() || "New block", crop: nb.crop.trim() || "Plant", rows, cols, rowM: spacing.rowM, plantM: spacing.treeM, plants: all });
       await Promise.all([zones.reload(), maps.reload()]);
       setNewOpen(false);
-      setSearch({ zone: made.zone });
+      block.setZone(made.zone);
     } catch (err) { setMsg({ kind: "alert", text: (err as Error).message }); } finally { setBusy(false); }
   }
 
@@ -138,9 +124,9 @@ export default function SetupView() {
   return (
     <main className="main">
       <div className="fl-top">
-        <BlockPicker blocks={beds.map((b) => ({ zone: b.zone, label: b.label ?? b.zone }))} value={zone} onChange={(z) => setSearch({ zone: z })} />
+        <BlockPicker blocks={block.options} value={zone} onChange={block.setZone} />
         <span className="small muted fl-grow">{label}: setup, done once. Rounds use these settings.</span>
-        <Link className="btn btn-sm btn-ghost" to={`/rover?zone=${encodeURIComponent(zone)}`}><ArrowLeft size={15} aria-hidden />Field log</Link>
+        <Link className="btn btn-sm btn-ghost" to={`/rover?zone=${encodeURIComponent(zone)}`}><ArrowLeft size={15} aria-hidden />Soil table</Link>
       </div>
 
       {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}

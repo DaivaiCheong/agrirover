@@ -2,7 +2,8 @@
 // docs/architecture/backend.md ("Planned for the Rover page"). Same pattern as features/rover/store.ts.
 
 import { useSyncExternalStore } from "react";
-import type { PlantEntry, SoilEntry } from "./model";
+import type { PlantEntry } from "./model";
+import type { SoilEntry } from "./soil";
 
 const KEY = "agrirover.fieldlog.v1";
 

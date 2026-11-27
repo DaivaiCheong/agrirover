@@ -74,7 +74,7 @@ The Field log keeps the farmer's entries in the browser until these exist. Each 
 
 | Endpoint | Body or returns | Stored in (new table) |
 |---|---|---|
-| `POST /blocks/{zone}/soil-readings` | `{at, tree?: [row, col], moisture?, ec?, ph?, meter: "hand" \| "other", note?}`; at least one value | `farmer_soil_reading` |
+| `POST /blocks/{zone}/soil-readings` | `{at, tree?: [row, col], ph?, texture?, depthCm?, drainage?, om?, n?, p?, k?, ca?, mg?, moisture?, ec?, meter: "hand" \| "lab" \| "other", note?}`| "other", note?}`; at least one value | `farmer_soil_reading` |
 | `GET /blocks/{zone}/soil-readings?limit=` | The block's readings, newest first | `farmer_soil_reading` |
 | `POST /blocks/{zone}/trees/{row}/{col}/observations` | `{at, result: "confirmed" \| "notIt" \| "fixed" \| "checking", seen?, roverSaw?, did?, note?}` | `tree_observation` |
 | `GET /blocks/{zone}/trees/{row}/{col}/observations` | The tree's entries, newest first | `tree_observation` |

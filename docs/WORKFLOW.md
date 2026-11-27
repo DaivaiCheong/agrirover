@@ -150,7 +150,7 @@ Each step is run by one part: **F** frontend, **B** backend, **R** rover. The Pa
 | # | Part | Step | What happens | Code |
 |---|---|---|---|
 | 0 | B | Set up the farm (once) | Blocks, tree count, spacing, variety, planting date and growing setup. The first start seeds one tomato block with a plant map (T1, for the rover demo: [TOMATO-DEMO.md](TOMATO-DEMO.md)). With `DEMO_ORCHARD=true` in `.env` it also seeds a guava demo farm: six blocks (G1 to G5 growing guava, G6 empty) and two weeks of simulated rounds | `apps/api/app/services/seed.py`; screens Farm › Beds & Land, Crops |
-| 1 | F | Get ready | On **Rover**, the Field log shows the block. The route (start corner, lanes) and the camera are set once on the **Setup** tab, where a corner dot on the map also sets the start. Start stays locked until three live checks pass (rover online, e-stop released, no rain) and a person ticks three more (rows clear, rover on the start tree facing the next one, camera and probe clean) | `apps/web/src/pages/Rover.tsx`, `components/RoverMap.tsx`, [ROVER-SOP.md](ROVER-SOP.md) |
+| 1 | F | Get ready | On **Rover**, the Soil tab lists the block's plants. The route (start corner, lanes) and the camera are set once on the **Setup** tab, where a corner dot on the map also sets the start. Start stays locked until three live checks pass (rover online, e-stop released, no rain) and a person ticks three more (rows clear, rover on the start tree facing the next one, camera and probe clean) | `apps/web/src/pages/Rover.tsx`, `components/RoverMap.tsx`, [ROVER-SOP.md](ROVER-SOP.md) |
 | 2 | B | Send the round | `POST /api/v1/missions {zoneId, rows, cols, cellM, rowM, start, along}`. Refused if the rover is busy, offline or e-stopped. Published to MQTT `devices/rover-01/mission/set` | `apps/api/app/routers/missions.py` |
 | 3 | R | Plan the path | The rover checks the round (at most 400 trees, 40 a side, spacing 0.2 to 10 m) and plans a serpentine path from the start corner: every tree once, in moves of at most 1 m | `edge/rover-agent/rover/planner.py` (`route`), `mission.py` |
 | 4 | R | At each tree | Check the guards (e-stop, rain, battery below 11.1 V, lost link) → drive → photograph → leaf cover and yellowing from colour (over 8 % yellow is flagged) → soil probe and air sensor → record | `rover/safety.py`, `drive.py`, `vision.py`, `probe.py` |
@@ -267,7 +267,7 @@ You need **Docker Desktop**. Python and Node are only needed to run a part outsi
 
 **Walk the workflow in five minutes:**
 
-1. **Rover:** pick the block, tick the three checks, **Start round**. It goes tree by tree, forty times faster than a real rover (about 30 s). Then open **Needs you** and walk the flagged trees.
+1. **Rover:** pick the block, tick the three checks, **Start round**. It goes tree by tree, forty times faster than a real rover (about 30 s). Then open **Needs attention** on the Soil tab.
 2. **Today:** Read → Find → Act. Open a problem to see its number against the target.
 3. **Health:** click a tree marked **!** in the 3D farm, add a leaf photo, **Check photo**, then **Save**.
 4. **Health › Leaf tests:** where lab results go. Leave it empty until a real one comes; never type in made-up figures.

@@ -46,43 +46,28 @@ The frontend shows the farm and takes the farmer's actions. It answers three que
 |---|---|---|
 | `/` | Today | `GET /today`, `GET /advice` |
 | `/plan` | Plan | `GET /schedule` |
-| `/rover` | Field log: what needs the farmer, the next round, the block map, the soil log, the plant log, the rounds | `GET /missions/live`, `GET /missions`, `GET /missions/{id}`, `POST /missions`, `GET /cycles`, `GET /zones`, `GET /plant-maps`, `GET /inspections/{zone}`; the logs are kept in this browser (see known gaps) |
+| `/rover` | Soil: every plant in a table with its soil values; start a round; set the block's soil | `GET /conditions`, `GET /missions`, `GET /missions/{id}`, `GET /missions/live`, `POST /missions`, `GET /plant-maps`, `GET /cycles`, `GET /zones`; the farmer's values are kept in this browser |
+| `/rover/history` | History: one plant, one row a day (the day's last round and what the farmer logged); all rounds below | `GET /missions`, `GET /missions/{id}` for up to 30 days, `GET /conditions` |
 | `/rover/setup` | Setup, done once per block: plant map, route, camera, photo of every tree | `PUT /plant-maps/{zone}`, `POST /plant-maps` (the route and camera are kept in this browser, as before) |
 | `/rover/advice` | Advice (the agronomist's report) | Simulated rounds today; `GET /rounds/{id}/advice` when built |
 | `/rover/round` | Round: a replay of a round, stop by stop | Simulated rounds today. The live view (`GET /missions/live`) comes with the rover's live telemetry; it is not built |
 | `/rover/plants` | Plants (one record per plant) | Simulated rounds today; `GET /plants/{id}/history` when built |
-| `/rover/about`, `/growth`, `/sop`, `/history`, `/test` | Older rover tabs | Unchanged |
+| `/rover/about`, `/growth`, `/sop`, `/test` | Older rover tabs | Unchanged |
 | `/crop` and the other health and farm pages | Health, Crops, Finance, Farm | Unchanged by the rover work |
 
-The section's tab bar holds the rover tabs in this order: Field log, Advice, Round, Plants, Setup, What it does, Growth, SOP, History, Test.
+The section's tab bar holds the rover tabs in this order: Soil, History, Setup, Advice, Round, Plants, What it does, Growth, SOP, Test.
 
-### The Field log, as a farmer uses it
+### The Soil table
 
-The Field log exists so the farmer does not have to check every tree. The rover checks them all; the farmer looks only at what the rover flags, and writes down what they find.
+One row a plant. The columns are the five soil parameters: soil pH, texture, rooting depth and drainage, organic matter, and essential nutrients (N, P, K, Ca, Mg).
 
-| Part | What the farmer does there |
+| Value | Where it comes from |
 |---|---|
-| Known condition, Need you, Soil readings, Last round | Reads the block's state at a glance. Each number appears once |
-| Needs you | Opens the flagged trees, or walks them one at a time (Field walk: Confirmed a problem, Not a problem, Fixed it, or Add details) |
-| Next round | Sees what is ready, ticks the three checks by eye, and starts a round. A missing check says why it cannot start |
-| Block map | Taps any tree to open its record: the rover's readings and photo check, and what the farmer logged for it |
-| Soil log | Logs a hand-meter reading for the block or one tree. The rover's soil for each round is shown beside it |
-| Plant log | Logs what the farmer sees on a tree, what they decided, and what they did |
-| Rounds | Sees the last five rounds: when, the result, spots checked and flagged |
+| pH, N, P, K (also moisture and EC, in the plant's record and History) | The rover's probe, from the last round. N, P and K show the trend only, never a dose |
+| Texture, root depth, drainage, organic matter, Ca, Mg | The farmer or a lab test, for the whole block (grey italics) or one plant (marked "you") |
+| Targets | pH, moisture and EC from `GET /conditions` for the crop. For tomato only, also loam or sandy loam, root depth 60 cm or more, fast drainage (the farmer's guide, in `fieldlog/soil.ts`) |
 
-A spot where the rover saw no tree is known too: it shows as "No tree seen" and is counted in Known condition.
-
-The farmer's answers leave the Needs you list at once, and the next round checks the tree again.
-
-## The top bar (every rover tab)
-
-One strip above the tabs, present on every rover tab:
-
-- the rover's state chip: **Docked**, **Scouting** (with progress when a round runs elsewhere), or **Stopped** with the reason;
-- the battery, as a percentage, with its voltage in the tooltip (never a voltage as a percentage on its own);
-- the **E-stop**, a red button on a yellow collar: one press stops; once engaged it becomes **Release**, which asks for a 1.5 s hold.
-
-It reads `GET /missions/live` every 2 s and calls `POST /missions/estop`. It does not hold rover state of its own.
+A plant's newest own value wins (rover or farmer); a block value fills only what the plant has nothing of its own for. A value outside its target is marked Low, High or Check.
 
 ## Acceptance for a screen change
 
@@ -100,5 +85,5 @@ It reads `GET /missions/live` every 2 s and calls `POST /missions/estop`. It doe
 | The physics twin, advice rules and plant simulation run in `features/rover/sim/` | Rules 4, 5 | A rover-side simulator; advice in the backend |
 | `lib/rover.ts` copies the rover's route planner | Rule 2 (duplicated logic) | The backend returns the route |
 | Simulated rounds and feedback are stored in the browser | Rule 3 | The backend stores rounds and responses |
-| The farmer's soil readings and plant entries (Field log) are kept in this browser, in `fieldlog/store.ts` | Rule 3: farm data in the browser | Planned endpoints in backend.md ("Field log"). Until they exist the log is per device and is lost if the browser's storage is cleared |
+| The farmer's soil readings and plant entries (Soil tab) are kept in this browser, in `fieldlog/store.ts` | Rule 3: farm data in the browser | Planned endpoints in backend.md ("Field log"). Until they exist the log is per device and is lost if the browser's storage is cleared |
 | "Which trees need you" is worked out in the browser (`fieldlog/model.ts`, `lookItems`) | Rule 3: decisions in the browser | Planned `GET /rounds/{id}/needs-you`, next to the round advice |
