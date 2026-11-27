@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BRAND } from "../lib/brand";
 import {
-  BookOpen, Bot, CalendarDays, Calculator, Camera, ChartColumn, ClipboardList, Cpu, History, Images, Info, Leaf, MapPin, Package, Receipt, Scale, Settings,
+  BookOpen, Bot, CalendarDays, Calculator, Camera, ChartColumn, ClipboardCheck, ClipboardList, Cpu, History, Images, Info, Leaf, MapPin, Package, Play, Receipt, Scale, Settings,
   Sprout, Sun, Tractor, TrendingUp, Wallet, Wheat, Wrench, type LucideIcon,
 } from "lucide-react";
 
@@ -13,7 +13,10 @@ export const SECTIONS = {
   today:   { to: "/",         label: "Today",    icon: Sun,         title: "Today", tabs: [] as Tab[] },
   plan:    { to: "/plan",     label: "Plan",     icon: CalendarDays, title: "Plan", tabs: [] as Tab[] },
   rover:   { to: "/rover",    label: "Rover",    icon: Bot,         title: "Rover",
-             tabs: [{ to: "/rover", label: "Daily round", icon: Bot }, { to: "/rover/about", label: "What it does", icon: Info },
+             tabs: [{ to: "/rover", label: "Field log", icon: Bot }, { to: "/rover/advice", label: "Advice", icon: ClipboardCheck },
+                    { to: "/rover/round", label: "Round", icon: Play }, { to: "/rover/plants", label: "Plants", icon: Sprout },
+                    { to: "/rover/setup", label: "Setup", icon: Settings },
+                    { to: "/rover/about", label: "What it does", icon: Info },
                     { to: "/rover/growth", label: "Growth", icon: TrendingUp }, { to: "/rover/sop", label: "SOP", icon: ClipboardList },
                     { to: "/rover/history", label: "History", icon: History },
                     { to: "/rover/test", label: "Test", icon: Wrench }] },

@@ -1,0 +1,30 @@
+/* The Field log and Setup tabs: the parts the app's own panels and tables do not give. */
+.fl-two{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
+@media (min-width:900px){.fl-two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.fl-stack{display:grid;gap:16px;margin-top:16px}
+.fl-top{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 16px;margin-bottom:4px}
+.fl-top .fl-grow{flex:1}
+.fl-note{margin:8px 0 0}
+.fl-list{list-style:none;margin:0;padding:0}
+.fl-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--line-strong)}
+.fl-list li:first-child{border-top:0}
+.fl-checks{list-style:none;margin:0 0 12px;padding:0}
+.fl-checks li{display:flex;gap:8px;align-items:flex-start;padding:4px 0}
+.fl-checks li.ok{color:var(--ink)}
+.fl-checks li.no{color:var(--ink-muted)}
+.fl-checks li.ok svg{color:var(--ok)}
+.fl-checks li.no svg{color:var(--warn)}
+.fl-map{display:block;width:100%;height:auto;max-height:460px}
+.fl-map .tree{cursor:pointer}
+.fl-map .tree:focus-visible circle{stroke:var(--brand);stroke-width:3}
+.fl-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12px;color:var(--ink-muted)}
+.fl-legend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.fl-legend i{display:inline-block;width:12px;height:12px;border-radius:50%;border:1.5px solid}
+.fl-h3{font-size:16px;margin:16px 0 8px}
+.fl-walk h3{font-size:22px;margin:0 0 8px}
+.fl-walk p{margin:6px 0}
+.fl-photo{display:block;max-width:100%;max-height:320px;border-radius:8px;margin:8px 0;border:1px solid var(--line)}
+.fl-walk-buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.fl-walk-buttons .btn{min-height:44px}
+.fl-grid-2{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+@media (min-width:700px){.fl-grid-2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}

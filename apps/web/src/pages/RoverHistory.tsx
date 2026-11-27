@@ -1,6 +1,6 @@
 import { useState } from "react";
 import RoverMap, { RoverLegend } from "../components/RoverMap";
-import { TreeTable } from "./Rover";
+import { TreeTable } from "../components/TreeTable";
 import { Empty, Notice, Panel, Tag } from "../components/ui";
 import { api, type SurveySummary } from "../lib/api";
 import { STATUS_WORD, minutes, stopInfo } from "../lib/rover";

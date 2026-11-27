@@ -21,6 +21,10 @@ import Photos from "./pages/Photos";
 import Plan from "./pages/Plan";
 import Rover from "./pages/Rover";
 import RoverAbout from "./pages/RoverAbout";
+import RoverAdvice from "./pages/RoverAdvice";
+import RoverRound from "./pages/RoverRound";
+import RoverSetup from "./pages/RoverSetup";
+import RoverPlants from "./pages/RoverPlants";
 import RoverGrowth from "./pages/RoverGrowth";
 import RoverHistory from "./pages/RoverHistory";
 import RoverSop from "./pages/RoverSop";
@@ -42,6 +46,10 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/plan" element={<Plan />} />
         <Route path="/rover" element={rover(<Rover />)} />
+        <Route path="/rover/advice" element={rover(<RoverAdvice />)} />
+        <Route path="/rover/round" element={rover(<RoverRound />)} />
+        <Route path="/rover/setup" element={rover(<RoverSetup />)} />
+        <Route path="/rover/plants" element={rover(<RoverPlants />)} />
         <Route path="/rover/about" element={rover(<RoverAbout />)} />
         <Route path="/rover/growth" element={rover(<RoverGrowth />)} />
         <Route path="/rover/sop" element={rover(<RoverSop />)} />
