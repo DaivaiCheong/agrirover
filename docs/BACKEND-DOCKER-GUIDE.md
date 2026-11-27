@@ -2,6 +2,8 @@
 
 Practical reference for running, migrating, seeding, debugging, and extending the FastAPI + PostgreSQL + Mosquitto + Docker stack to serve the 100%-Tomato AgriRover frontend on `main`.
 
+> Also see [architecture/frontend-backend-db.md](architecture/frontend-backend-db.md) for the standard Frontend ↔ FastAPI ↔ PostgreSQL communication flow, `JSONB` rationale vs. MongoDB, and adding new API features cleanly.
+
 ---
 
 ## 1. Docker Compose Stack (`docker-compose.yml`)

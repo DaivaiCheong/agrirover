@@ -80,24 +80,22 @@ Every frontend module (`Today`, `Plan`, `Rover`, `Health`, `Crops`, `Finance`, `
 
 ---
 
-## Live-Telemetry Care Logic
+## Live-Telemetry Care Logic (Mulder's Chart & Fast-Focus Cards)
 
-When a farmer opens a tomato plant in **`Rover`** or **`Health`**, `PlantSoilModal` runs `buildPlantCarePlan(plant, targets)` (`apps/web/src/lib/treatments.ts`):
+When a farmer inspects a tomato plant in **`Rover`**, **`Health`**, **`Today`**, or **`Plan`**, `evaluateAgronomyAction(plant, targets)` ([agronomyEngine.ts](../apps/web/src/utils/agronomyEngine.ts)) cross-checks live `N, P, K, pH, EC, Moisture, Soil Temp` against AI vision findings using **Mulder's Chart Nutrient Antagonism**:
 
-1. **Correlates Camera Vision with Root Telemetry:**
-   - **`Yellow leaves` (`G1 R2 T2` vs `G2 R2 T2`):**
-     - When `Soil N >= 80 mg/kg` and `pH` / `Moisture` are optimal (e.g., `G1 R2 T2`: `N 109 mg/kg`, `pH 6.35`, `Moisture 63.6%`), diagnosis explains natural lower-canopy aging or mild uptake lag and advises **skipping heavy granular nitrogen**.
-     - When `Soil N < 80 mg/kg` (e.g., `G2 R2 T2`: `N 64 mg/kg`), diagnosis confirms true nitrogen deficiency with exact organic (`15 mL/L` fish emulsion) or standard (`15–20 g` NPK 12-12-17) rates.
-     - When `Moisture > 72%` or `pH` is outside `6.0–6.8`, diagnosis highlights the exact out-of-range reading restricting root uptake first.
-   - **`Leaf curl` (`G2 R1 T5`):** Links directly to `Soil Moisture 54.2%` (`< 58%` target), prescribing a `2.0–2.5 L` pulse drip cycle + `4–5 cm` mulch alongside yellow sticky trap inspection for whiteflies/TYLCV.
-   - **`Blossom-end rot` (`G3 R2 T4`):** Flags acidic `Soil pH 5.75` locking up calcium, scheduling `50–80 g/m²` agricultural lime + foliar chelated calcium (`3–4 mL/L`).
-   - **`Early blight` & `Pest damage`:** Pairs live moisture/soil temp/N readings with biological *Bacillus subtilis*, wettable sulfur/copper, or spinosad/neem oil sprays applied early morning or dusk below `30 °C`.
-2. **Outputs a Standardized 4-Step Procedure:**
-   - **Step 1 — Immediate Field Action (Today)**
-   - **Step 2 — Soil / Irrigation Adjustment (Based on Live Probe)**
-   - **Step 3 — Targeted Treatment Method (Organic & Standard Options)**
-   - **Step 4 — Follow-Up Check** (`24–72 h` automated rover scan verification)
-3. **Contextual Guide Link:** Clicking **`View full treatment guide →`** navigates directly to `/crop?tab=guide&zone=...&plant=...#<conditionId>`, scrolls to and highlights that card, and displays the plant's live telemetry banner inside the guide card.
+1. **Dynamic Mulder Antagonism Rules:**
+   - **Low `K` (`< 160 mg/kg`):** Recommends Potassium Sulfate (`K2SO4`) or `KNO3` (if N < 80); warns **not** to apply high Calcium (`Ca`) or Magnesium (`Mg`) simultaneously.
+   - **High `K` (`> 230 mg/kg`, e.g., `G4` at `235 mg/kg`):** Warns that excess `K` blocks **`Ca` & `Mg`** uptake (blossom-end rot / chlorosis risk); advises skipping extra `K` / heavy `N`.
+   - **High `P` (`> 85 mg/kg`, e.g., `G3` average `90 mg/kg`, `R2 T4` at `89 mg/kg`):** Warns that excess `P` blocks **`Zn`, `Fe`, and `Ca`** uptake; blocks DAP / MAP / P-boosters.
+   - **Optimal/High `N` (`>= 105 mg/kg`, e.g., `G1 R2 T2` at `109 mg/kg`):** Identifies lower-canopy aging rather than N shortage and warns **not to add Urea/high-N** (excess `N` blocks `K` and weakens fruit).
+   - **Tank-Mix Safety:** Always warns **never to mix Calcium (`Ca`) with Sulfates or Phosphates** in the same concentrated tank.
+2. **Compact 4-Block Fast-Focus Format (`FastFocusCard.tsx`):**
+   - **⚡ `DO THIS NOW`:** Concise 1–2 line dose & field action.
+   - **🚫 `DO NOT MIX / AVOID`:** Explicit Mulder antagonism & tank-mix warning.
+   - **🎯 `EXPECTED RESULT`:** Measurable recovery window & input savings.
+   - **🔬 `WHY`:** 1-line live soil sensor trigger summary.
+3. **Interactive `MulderQuickCheck` in `Health` (`/crop` & `/guide`):** Lets farmers pick **`Low K`**, **`High K`**, **`High N`**, **`High P`**, **`Low Ca`**, **`Low Mg`**, or any live block (`G1–G6`) to inspect Synergy, Antagonism, and Tank-Mix rules.
 
 ---
 
@@ -114,7 +112,7 @@ Benchmarks implemented in `apps/web/src/lib/tomatoFinance.ts` (`4,085 ៛ / USD`
 | **Total per Tomato Plant** | **`$0.75` (`~3,065 ៛`)** | **`$1.02` (`~4,165 ៛`)** | **`$0.27` (`~1,100 ៛`)** | **26% saved** |
 
 - **Expected Yield & Margin per Plant:** `~4.5 kg` yield × `$0.80/kg` = **`$3.60` (`~14,700 ៛`) revenue** → **`$2.85` (`~11,635 ៛`) net profit** (`79% margin`).
-- **Crop Loss Prevention:** Each early-caught alert in `Health` preserves an estimated `$10.80` (`~44,100 ៛`, ~3 neighboring plants) in potential spread loss (`7` farm alerts = **`$75.60` / `~308,700 ៛`** prevented).
+- **Crop Loss Prevention:** Each caught alert preserves `~1` fruiting plant (`$3.60 / ~14,700 ៛` → `7` active alerts = **`$25.20` / `~102,900 ៛`** prevented, synced identically across `Today` and `Finance`).
 
 ---
 

@@ -15,7 +15,8 @@ AgriRover autonomously scans tomato beds (`G1–G6`), pairs **plant-level AI Vis
 
 | Document | Contents |
 |---|---|
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | End-to-end Tomato platform workflow, read-only UX, telemetry-linked 4-step treatments, and unit economics. |
+| [docs/architecture/frontend-backend-db.md](docs/architecture/frontend-backend-db.md) | **Standard Architecture Guide:** Why PostgreSQL 16 + `JSONB` (vs. MongoDB), 3-tier request flow, `camelCase` ↔ `snake_case` conventions, and full-stack feature checklist. |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | End-to-end Tomato platform workflow, read-only UX, Mulder's Chart Fast-Focus treatments, and unit economics. |
 | [docs/SCHEMA.md](docs/SCHEMA.md) | Complete PostgreSQL schema (`0001–0010` entities & indexes) plus Migration `0011` Tomato Backend Upgrade Blueprint. |
 | [docs/BACKEND-DOCKER-GUIDE.md](docs/BACKEND-DOCKER-GUIDE.md) | Docker Compose stack (`db`, `broker`, `api`, `web`, `sim`), Alembic & DB ops commands, `.env` reference, and `/api/v1/*` API contract checklist. |
 | [apps/api/README.md](apps/api/README.md) | FastAPI server architecture, migrations, and service modules. |

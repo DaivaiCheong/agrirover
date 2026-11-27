@@ -6,7 +6,7 @@ import { Empty, Kpis, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
 import { num } from "../lib/format";
 import { buildDemoTomatoFarm } from "../lib/roverDemo";
-import { buildAllBlockEconomics, usdAndRiel } from "../lib/tomatoFinance";
+import { buildAllBlockEconomics, UNIT_TOTAL_COST_RIEL, UNIT_TOTAL_COST_USD, usdAndRiel } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
 
 export default function CopSummary() {
@@ -84,7 +84,7 @@ export default function CopSummary() {
         right={
           <div className="rv-right">
             <SyncBadge />
-            <span className="small muted">$0.75 (~3,065 ៛) budget per active tomato plant</span>
+            <span className="small muted">{usdAndRiel(UNIT_TOTAL_COST_USD, UNIT_TOTAL_COST_RIEL)} budget per active tomato plant</span>
           </div>
         }
       >
@@ -92,7 +92,7 @@ export default function CopSummary() {
           <Empty>No tomato blocks found.</Empty>
         ) : (
           <div className="tablewrap">
-            <table className="tbl fold">
+            <table className="tbl fold fin-sub-tbl">
               <thead>
                 <tr>
                   <th>Block &amp; Variety</th>
@@ -109,16 +109,16 @@ export default function CopSummary() {
               <tbody>
                 {blocks.map((b) => (
                   <tr key={b.zone}>
-                    <td>
+                    <td className="fin-col-wide">
                       <b>{b.label}</b>
                       <div className="small muted">{b.variety} · {num(b.areaM2, 0)} m²</div>
                     </td>
                     <td data-label="Plants" className="r nowrap">
                       {b.plantCount > 0 ? <b>{b.plantCount}</b> : <span className="muted">0 (ready)</span>}
                     </td>
-                    <td data-label="Stage">
+                    <td data-label="Stage" className="fin-col-stage">
                       {b.day > 0 ? (
-                        <>Day {b.day}<div className="small muted">{b.stageTitle}</div></>
+                        <><b>Day {b.day}</b><div className="small muted">{b.stageTitle}</div></>
                       ) : (
                         <span className="muted">Prepared bed</span>
                       )}
@@ -132,10 +132,10 @@ export default function CopSummary() {
                         <Tag kind="ok">Optimal</Tag>
                       )}
                     </td>
-                    <td data-label="Water Today" className="r nowrap">
+                    <td data-label="Water Today" className="r nowrap fin-num">
                       {b.plantCount > 0 ? `${num(b.waterTodayL, 0)} L` : "—"}
                     </td>
-                    <td data-label="Spent / Budget" className="r nowrap">
+                    <td data-label="Spent / Budget" className="r nowrap fin-num">
                       {b.plantCount > 0 ? (
                         <>
                           <b>${b.spentToDateUsd.toFixed(2)}</b> / ${b.budgetUsd.toFixed(2)}
@@ -145,14 +145,14 @@ export default function CopSummary() {
                         <span className="muted">$0.00</span>
                       )}
                     </td>
-                    <td data-label="Saved vs Trad." className="r nowrap">
+                    <td data-label="Saved vs Trad." className="r nowrap fin-num">
                       {b.plantCount > 0 ? (
                         <b className="rv-save-num">{usdAndRiel(b.savedTotalUsd, b.savedTotalRiel)}</b>
                       ) : (
                         "—"
                       )}
                     </td>
-                    <td data-label="Proj. Profit" className="r nowrap">
+                    <td data-label="Proj. Profit" className="r nowrap fin-num">
                       {b.plantCount > 0 ? (
                         <>
                           <b>${b.projectedProfitUsd.toFixed(2)}</b>

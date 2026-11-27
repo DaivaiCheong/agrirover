@@ -6,7 +6,7 @@ import { Empty, Metric, PageHead, Panel, Tag } from "../components/ui";
 import { api, type Cop } from "../lib/api";
 import { num, riel, usd } from "../lib/format";
 import { buildDemoTomatoFarm } from "../lib/roverDemo";
-import { buildAllBlockEconomics, KHR_PER_USD } from "../lib/tomatoFinance";
+import { buildAllBlockEconomics, KHR_PER_USD, UNIT_TOTAL_COST_USD } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
 
 export default function CycleCop() {
@@ -35,10 +35,10 @@ export default function CycleCop() {
     const kgLost = hs.reduce((s, h) => s + h.kgLost, 0);
     const revenueUsd = ss.reduce((s, x) => s + x.amountUsd, 0);
     const lines = [
-      { category: "seed", label: "Seedling, Substrate & Labor", amountUsd: Number((b.plantCount * 0.42).toFixed(2)), sharePct: 56, estimate: false },
-      { category: "fertilizer", label: "Nutrients & Soil Amendments (NPK + Calcium)", amountUsd: Number((b.plantCount * 0.18).toFixed(2)), sharePct: 24, estimate: false },
-      { category: "pesticide", label: "Targeted Disease & Pest Treatment", amountUsd: Number((b.plantCount * 0.09).toFixed(2)), sharePct: 12, estimate: false },
-      { category: "water_energy", label: "Water (Precision Drip via Rover)", amountUsd: Number((b.plantCount * 0.06).toFixed(2)), sharePct: 8, estimate: false },
+      { category: "seed", label: "Seedlings, Substrate & Scouting Labor", amountUsd: Number((b.plantCount * 0.41).toFixed(2)), sharePct: 50, estimate: false },
+      { category: "fertilizer", label: "Fertilizers & Soil Amendments", amountUsd: Number((b.plantCount * 0.187).toFixed(2)), sharePct: 23, estimate: false },
+      { category: "water_energy", label: "Precision Drip Water & Pump Power", amountUsd: Number((b.plantCount * 0.133).toFixed(2)), sharePct: 16, estimate: false },
+      { category: "pesticide", label: "Targeted Bio-Treatments", amountUsd: Number((b.plantCount * 0.09).toFixed(2)), sharePct: 11, estimate: false },
     ];
     return {
       cycle,
@@ -103,7 +103,7 @@ export default function CycleCop() {
               <Metric label="Expected / Logged Harvest" value={num(c?.forecast?.kgMid ?? report.kgMarketable, 1)} unit="kg"
                 note={`${num(report.kgTotal, 1)} kg picked so far`} />
               <Metric label="Cost per tomato plant" value={report.costPerPlant === null ? "—" : usd(report.costPerPlant, 2)}
-                note={`${riel(report.costPerPlant ?? 0.75, report.khrPerUsd)} per plant`} />
+                note={`${riel(report.costPerPlant ?? UNIT_TOTAL_COST_USD, report.khrPerUsd)} per plant`} />
             </div>
 
             {c?.forecast && (

@@ -1,26 +1,12 @@
 import { useState } from "react";
 import { ArrowRight, Camera, Eye, EyeOff, History, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
+import { FastFocusBlocks } from "./FastFocusCard";
 import RoverVisionPhoto from "./RoverVisionPhoto";
 import { Modal, Notice, Tag } from "./ui";
 import { photoImageUrl } from "../lib/api";
 import type { MetricRating, PlantSoilRow, SoilTargets } from "../lib/soil";
-import { buildPlantCarePlan, type CareStep } from "../lib/treatments";
-
-export function CareStepList({ steps }: { steps: CareStep[] }) {
-  return (
-    <ol className="rv-step-list small">
-      {steps.map((s) => (
-        <li key={s.step} className="rv-step-item">
-          <span className="rv-step-badge">Step {s.step}</span>
-          <div className="rv-step-copy">
-            <b>{s.label}:</b> {s.action}
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
+import { evaluateAgronomyAction } from "../utils/agronomyEngine";
 
 function ratingClass(state: MetricRating): string {
   return state === "low" || state === "high" ? "ts-item ts-off" : "ts-item";
@@ -49,6 +35,7 @@ export default function PlantSoilModal({
   plant,
   blockLabel,
   targets,
+  blockPlants,
   liveFrame,
   onClose,
   onViewHistory,
@@ -56,6 +43,7 @@ export default function PlantSoilModal({
   plant: PlantSoilRow;
   blockLabel: string;
   targets: SoilTargets;
+  blockPlants?: PlantSoilRow[];
   liveFrame?: string | null;
   onClose: () => void;
   onViewHistory: (plant: PlantSoilRow) => void;
@@ -71,7 +59,7 @@ export default function PlantSoilModal({
       ? photoImageUrl(savedPhoto.id)
       : null;
 
-  const carePlan = buildPlantCarePlan(plant, targets);
+  const fastCard = evaluateAgronomyAction(plant, targets, { blockPlants, blockLabel });
 
   const statusTag =
     plant.status === "optimal"
@@ -215,33 +203,24 @@ export default function PlantSoilModal({
           </p>
         </div>
 
-        {/* Live-Telemetry-Linked Recommended Care & Step-by-Step Procedure */}
-        {carePlan && (
+        {/* Fast-Focus Recommended Care powered by Mulder's Chart & Live Soil Probe */}
+        {fastCard && (
           <div className="erp-section rv-care-card">
             <div className="erp-section-header">
               <span className="erp-section-title">
-                <ShieldCheck size={14} aria-hidden />Recommended care &amp; treatment · {carePlan.title}
+                <ShieldCheck size={14} aria-hidden />Recommended care · {fastCard.title}
               </span>
               <Link
                 className="linkbtn small rowflex"
                 style={{ gap: 4 }}
-                to={`/crop?tab=guide&zone=${encodeURIComponent(plant.zone)}&plant=${encodeURIComponent(plant.name)}#${carePlan.guideId}`}
+                to={`/crop?tab=guide&zone=${encodeURIComponent(plant.zone)}&plant=${encodeURIComponent(plant.name)}#${fastCard.guideId}`}
                 state={{ plant, blockLabel, targets }}
                 onClick={onClose}
               >
                 View full treatment guide <ArrowRight size={13} aria-hidden />
               </Link>
             </div>
-            <div className="rv-care-body">
-              <div className="rv-care-diag">
-                <span className="ts-k">Live probe diagnosis ({plant.name})</span>
-                <p className="small">{carePlan.diagnosisNote}</p>
-              </div>
-              <div>
-                <span className="ts-k">Step-by-step care procedure</span>
-                <CareStepList steps={carePlan.steps} />
-              </div>
-            </div>
+            <FastFocusBlocks card={fastCard} />
           </div>
         )}
       </div>

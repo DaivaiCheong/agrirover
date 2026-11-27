@@ -50,7 +50,7 @@ export function roundPlan(cycles: Cycle[], start: string, advice: Advice[], toda
     const a = byZone.get(c.zone);
     const doneToday = a?.surveyedAt && new Date(a.surveyedAt).toLocaleDateString("sv-SE") === today ? a.surveyedAt : null;
     out.push({ zone: c.zone, label: c.bedLabel, start: `${String(Math.floor(at / 60) % 24).padStart(2, "0")}:${String(Math.round(at % 60)).padStart(2, "0")}`,
-               stops: est.trees, metres: est.distanceM, seconds: est.seconds, doneAt: doneToday, partial: Boolean(a?.partial && doneToday) });
+               stops: c.plantCount ?? est.trees, metres: est.distanceM, seconds: est.seconds, doneAt: doneToday, partial: Boolean(a?.partial && doneToday) });
     at += est.seconds / 60;
   }
   return out;

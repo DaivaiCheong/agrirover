@@ -472,6 +472,7 @@ export default function Rover() {
         <PlantSoilModal
           plant={selectedPlant}
           blockLabel={blockLabel}
+          blockPlants={allPlants}
           targets={targets}
           liveFrame={liveFrame.data?.frame ?? (activeMission?.cell?.[0] === selectedPlant.row && activeMission?.cell?.[1] === selectedPlant.col ? activeMission.frame : null)}
           onClose={() => setDetailOpen(false)}

@@ -1211,6 +1211,68 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 /* ---------- Finance unit optimizer, Crops cycle cards & Today alerts ---------- */
 .rv-save-num{color:var(--brand)}
 .rv-total-row{background:var(--surface-alt)}
+.fin-strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);border-radius:0}
+.fin-sec-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 14px;background:var(--surface-alt);border-bottom:1px solid var(--line);
+  font-size:12px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--ink)}
+.fin-ledger-tbl td,.fin-ledger-tbl th{vertical-align:top}
+.fin-side-tbl th:first-child,.fin-side-tbl td:first-child{width:31%}
+.fin-side-tbl th:last-child,.fin-side-tbl td:last-child{width:27%}
+.fin-sub-tbl .fin-col-wide{min-width:170px}
+.fin-sub-tbl .fin-col-stage{min-width:145px}
+
+/* ---------- Excel-style Finance Spreadsheet Workbook ---------- */
+.xl-legend{display:flex;align-items:center;gap:12px;margin-left:auto;flex-wrap:wrap}
+.xl-legend-chip{display:inline-flex;align-items:center;gap:5px}
+.xl-dot-input,.xl-dot-fx{display:inline-block;width:11px;height:11px;border-radius:3px}
+.xl-dot-input{background:#eaf3ff;border:1px solid #9ec2ef}
+.xl-dot-fx{background:#f7f9f7;border:1px solid var(--line)}
+
+.xl-formula-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 14px;
+  background:#f4f7f5;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:12.5px}
+.xl-cell-ref{min-width:44px;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-weight:700;padding:2px 7px;background:#fff;border:1px solid var(--line);border-radius:4px;color:var(--ink)}
+.xl-fx-badge{font-style:italic;font-weight:800;color:var(--brand);font-family:Georgia,serif;font-size:13.5px}
+.xl-fx-code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;color:var(--ink);
+  background:#fff;padding:2px 8px;border:1px solid #dce3dd;border-radius:4px}
+.xl-fx-eval{color:var(--ink-muted);font-variant-numeric:tabular-nums}
+
+.xl-sheet-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 14px;background:var(--surface-alt);border-bottom:1px solid var(--line);
+  font-size:12px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--ink)}
+
+.xl-table th,.xl-table td{vertical-align:middle}
+.xl-col-letters th{background:#eef2ee;color:var(--ink-muted);font-size:11px;font-weight:800;text-align:center;
+  padding:4px 8px;border-bottom:1px solid var(--line)}
+.xl-col-letters th.r{text-align:right}
+.xl-row-idx{width:34px;text-align:center!important;background:#eef2ee;color:var(--ink-muted);font-size:11px;font-weight:700;
+  border-right:1px solid var(--line);padding:4px 6px!important}
+.xl-param-row th{background:#f8faf8;font-weight:600;border-bottom:1px solid var(--line);padding:6px 8px}
+.xl-param-lbl{font-size:12px;color:var(--ink);white-space:nowrap}
+.xl-param-field{display:inline-flex;align-items:center;justify-content:flex-end;gap:6px;font-size:12px}
+
+.xl-edit-wrap{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px}
+.xl-input{width:76px;padding:4px 6px;border-radius:4px;border:1px solid #9ec2ef;background:#eaf3ff;
+  color:#0f2942;font:inherit;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;
+  transition:border-color .12s,box-shadow .12s}
+.xl-input-rate{width:68px}
+.xl-input-bold{width:80px;color:var(--brand);border-color:#84b898;background:#e8f5ec}
+.xl-input:focus{outline:none;border-color:#2563a8;box-shadow:0 0 0 2px rgba(37,99,168,.2);background:#fff}
+.xl-unit{font-size:11.5px;color:var(--ink-muted);min-width:30px;text-align:left}
+
+.xl-fx-cell{cursor:pointer}
+.xl-cell-selected{box-shadow:inset 0 0 0 2px var(--brand);background:#f3fbf5!important}
+.xl-sum-row td{border-top:2px solid var(--line)}
+.xl-unit-row td{background:#fafcfa}
+.xl-highlight-profit td{background:#f5fbf6}
+.xl-inline-fx{display:inline-block;margin:0 6px;padding:1px 6px;border-radius:4px;background:#eef2ee;
+  border:1px solid #dce3dd;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;color:var(--ink-muted)}
+.xl-tag-in{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700;
+  background:#eaf3ff;color:#1d4e89;border:1px solid #bdd6f5}
+.xl-sheet2 th:first-child,.xl-sheet2 td:first-child{width:34px}
+.fin-num{font-variant-numeric:tabular-nums}
+.fin-khr{font-size:11px;color:var(--ink-muted);line-height:1.25}
+.fin-unit{font-size:11px;font-weight:500;color:var(--ink-muted)}
 .rv-fin-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .rv-profit-tile{border-color:#c3dccb;background:#f4fbf6}
 .rv-loss-banner{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;
@@ -1225,6 +1287,46 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .rv-budget-box{display:grid;gap:6px;padding:10px;border-radius:var(--r-sm);background:var(--surface-alt);border:1px solid var(--line)}
 .rv-budget-head,.rv-budget-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .rv-cycle-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* ---------- Fast-Focus Treatment Cards & Mulder's Chart Quick Check ---------- */
+.ff-grid{display:grid;gap:8px}
+.ff-box{padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--line);background:#fff;display:grid;gap:2px}
+.ff-do{border-left:3.5px solid var(--ok);background:#f7fcf8}
+.ff-avoid{border-left:3.5px solid #c94a38;border-color:#efc2bc;background:#fff7f6}
+.ff-result{border-left:3.5px solid #0d9488;background:#f4fbfa}
+.ff-tank{border-left:3.5px solid var(--warn);background:#fffcf4}
+.ff-k{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;letter-spacing:.03em;color:var(--brand);text-transform:uppercase}
+.ff-k-avoid{color:#b03526}
+.ff-k-result{color:#0f766e}
+.ff-k-tank{color:#9a5b0c}
+.ff-v{margin:0;font-size:12.8px;line-height:1.42;color:var(--ink)}
+.ff-why{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;padding:6px 10px;border-radius:var(--r-sm);
+  background:var(--surface-alt);border:1px solid var(--line);font-size:12px;color:var(--ink-muted)}
+.ff-why-lbl{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:800;letter-spacing:.03em;color:var(--ink)}
+
+.rx-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.rx-recipe{border-left:3.5px solid var(--brand);background:#f3fbf5}
+.rx-tank{border-left:3.5px solid #0d9488;background:#f2faf9}
+.rx-steps{margin:4px 0 0 18px;padding:0;display:grid;gap:3px;font-size:12.8px;line-height:1.42;color:var(--ink)}
+.rx-avoid-list{margin:4px 0 0 16px;padding:0;display:grid;gap:2px;font-size:12.5px;line-height:1.4;color:#7f2217}
+.rx-formula{display:grid;gap:3px;padding:7px 10px;border-radius:var(--r-sm);
+  background:var(--surface-alt);border:1px solid var(--line);font-size:12px}
+.rx-formula-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px}
+.rx-formula code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--ink)}
+.rv-gallery-rx{font-size:11.5px;line-height:1.35;color:var(--brand);background:#f4fbf6;border:1px solid #d5eadc;
+  border-radius:var(--r-sm);padding:5px 7px}
+@media (max-width:700px){
+  .rx-pair{grid-template-columns:1fr}
+}
+
+.mulder-card{border-color:#c3dccb}
+.mulder-controls{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.mulder-blocks{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mulder-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+
+@media (max-width:860px){
+  .mulder-cols{grid-template-columns:1fr}
+}
 
 @media (max-width:640px){
   .rv-guide-grid{grid-template-columns:1fr}

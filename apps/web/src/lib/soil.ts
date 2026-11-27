@@ -395,10 +395,11 @@ export function buildBlockSoilRows(input: {
   advice?: Advice;
   photos?: SavedPhoto[];
   profile: BlockSoilProfile;
+  stageN?: number | null;
   capturedAt?: string | null;
 }): PlantSoilRow[] {
-  const { zone, rows, cols, cells, conditions, advice, photos = [], profile, capturedAt = null } = input;
-  const stageN = conditions?.stage?.n ?? advice?.stage?.n ?? null;
+  const { zone, rows, cols, cells, conditions, advice, photos = [], profile, stageN: stageOverride = null, capturedAt = null } = input;
+  const stageN = stageOverride ?? conditions?.stage?.n ?? advice?.stage?.n ?? null;
   const effectiveCapturedAt = capturedAt ?? advice?.surveyedAt ?? conditions?.recordedAt ?? null;
   const targets = targetsFromConditions(conditions);
   const adviceByKey = new Map((advice?.trees ?? []).filter(Boolean).map((t) => [`${t.row},${t.col}`, t]));

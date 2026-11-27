@@ -123,27 +123,27 @@ export default function Harvest() {
             <Empty>Selected beds are in flowering or fruit-sizing stage (no harvest logged yet).</Empty>
           ) : (
             <div className="tablewrap">
-              <table className="tbl fold">
+              <table className="tbl fold fin-sub-tbl">
                 <thead>
                   <tr>
                     <th>Date</th>
                     <th>Block</th>
-                    <th className="r">Picked kg</th>
-                    <th className="r">Marketable kg</th>
-                    <th className="r">Lost kg</th>
+                    <th className="r">Picked</th>
+                    <th className="r">Marketable</th>
+                    <th className="r">Lost</th>
                   </tr>
                 </thead>
                 <tbody>
                   {harvestRows.map((h, i) => (
                     <tr key={`${h.zone}-${i}`}>
                       <td className="nowrap"><b>{h.date}</b></td>
-                      <td data-label="Block">
+                      <td data-label="Block" className="fin-col-stage">
                         <b>{h.label}</b>
                         <div className="small muted">{h.variety}{h.note ? ` · ${h.note}` : ""}</div>
                       </td>
-                      <td data-label="Picked kg" className="r">{num(h.kgTotal, 1)}</td>
-                      <td data-label="Marketable kg" className="r"><b>{num(h.kgMarketable, 1)}</b></td>
-                      <td data-label="Lost kg" className="r"><Tag kind="ok">{num(h.kgLost, 1)} kg</Tag></td>
+                      <td data-label="Picked" className="r nowrap fin-num">{num(h.kgTotal, 1)} kg</td>
+                      <td data-label="Marketable" className="r nowrap fin-num"><b>{num(h.kgMarketable, 1)} kg</b></td>
+                      <td data-label="Lost" className="r nowrap fin-num"><Tag kind="ok">{num(h.kgLost, 1)} kg</Tag></td>
                     </tr>
                   ))}
                 </tbody>
@@ -157,7 +157,7 @@ export default function Harvest() {
             <Empty>No sales logged yet for this block selection.</Empty>
           ) : (
             <div className="tablewrap">
-              <table className="tbl fold">
+              <table className="tbl fold fin-sub-tbl">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -171,13 +171,13 @@ export default function Harvest() {
                   {saleRows.map((s, i) => (
                     <tr key={`${s.zone}-${i}`}>
                       <td className="nowrap"><b>{s.date}</b></td>
-                      <td data-label="Block & Buyer">
+                      <td data-label="Block & Buyer" className="fin-col-stage">
                         <b>{s.label}</b>
                         <div className="small muted">{s.buyer ?? "Direct buyer"}</div>
                       </td>
-                      <td data-label="Sold kg" className="r">{num(s.kg, 1)}</td>
-                      <td data-label="Price / kg" className="r">${s.pricePerKg.toFixed(2)}</td>
-                      <td data-label="Total" className="r nowrap">
+                      <td data-label="Sold kg" className="r nowrap fin-num">{num(s.kg, 1)} kg</td>
+                      <td data-label="Price / kg" className="r nowrap fin-num">${s.pricePerKg.toFixed(2)}</td>
+                      <td data-label="Total" className="r nowrap fin-num">
                         <b>${s.amountUsd.toFixed(2)}</b>
                         <div className="small muted">~{usdToRiel(s.amountUsd).toLocaleString()} ៛</div>
                       </td>

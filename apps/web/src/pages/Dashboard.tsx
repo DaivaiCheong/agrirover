@@ -7,10 +7,12 @@ import { Kpis, PageHead, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
 import { litres, longToday } from "../lib/format";
 import { buildDemoTomatoFarm } from "../lib/roverDemo";
-import { buildAllBlockEconomics, computeFinanceView, usdAndRiel } from "../lib/tomatoFinance";
+import { targetsFromConditions } from "../lib/soil";
+import { buildAllBlockEconomics, computeFinanceView, UNIT_SAVED_RIEL, UNIT_SAVED_USD, UNIT_TOTAL_COST_RIEL, UNIT_TOTAL_COST_USD, usdAndRiel } from "../lib/tomatoFinance";
 import { matchTreatmentForCondition } from "../lib/treatments";
 import { useData } from "../lib/useData";
 import { usePoll } from "../lib/usePoll";
+import { evaluateAgronomyAction } from "../utils/agronomyEngine";
 
 export default function Dashboard() {
   const cycles = useData(api.cycles);
@@ -29,7 +31,6 @@ export default function Dashboard() {
   const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
   const activeConds = previewMode ? demo.conditions : (conditions.data ?? demo.conditions);
   const activeAdvice = previewMode ? demo.advice : (advice.data ?? demo.advice);
-  const todayTasks = useMemo(() => demo.buildSchedule(7).events.slice(0, 4), [demo]);
 
   const { blocks, allRows } = useMemo(
     () =>
@@ -48,6 +49,15 @@ export default function Dashboard() {
   );
 
   const totalWaterToday = activeAdvice.reduce((s, a) => s + a.water.litres, 0);
+  const rowsByZone = useMemo(() => {
+    const map = new Map<string, typeof allRows>();
+    for (const row of allRows) {
+      const list = map.get(row.zone);
+      if (list) list.push(row);
+      else map.set(row.zone, [row]);
+    }
+    return map;
+  }, [allRows]);
   const alertPlants = allRows.filter((r) => r.plant && (r.vision.status === "alert" || r.status === "attention"));
   const blockMap = new Map(blocks.map((b) => [b.zone, b]));
   const condOf = new Map(activeConds.map((b) => [b.zone, b]));
@@ -91,8 +101,8 @@ export default function Dashboard() {
             },
             {
               k: "Cost per tomato plant",
-              v: "$0.75 (~3,065 ៛)",
-              d: <Link className="linkbtn small" to="/finance">$0.27 (~1,100 ៛) saved / plant →</Link>,
+              v: usdAndRiel(UNIT_TOTAL_COST_USD, UNIT_TOTAL_COST_RIEL),
+              d: <Link className="linkbtn small" to="/finance">+${UNIT_SAVED_USD.toFixed(2)} (~{UNIT_SAVED_RIEL.toLocaleString()} ៛) saved / plant →</Link>,
             },
           ]}
         />
@@ -151,26 +161,40 @@ export default function Dashboard() {
               <table className="tbl">
                 <thead>
                   <tr>
-                    <th>Block</th>
-                    <th>Recommended Action</th>
+                    <th>Block &amp; Plant</th>
+                    <th>Fast-Focus Care (Action → Avoid → Why)</th>
                     <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {todayTasks.map((t, idx) => (
-                    <tr key={`${t.zone}-${idx}`}>
-                      <td className="nowrap"><b>{t.label}</b></td>
-                      <td className="small">
-                        <b>{t.title}</b>
-                        {t.detail && <div className="muted">{t.detail}</div>}
-                      </td>
-                      <td className="nowrap">
-                        <Tag kind={t.state === "due" ? "warn" : "ok"}>
-                          {t.state === "due" ? "Due today" : "Scheduled"}
-                        </Tag>
-                      </td>
-                    </tr>
-                  ))}
+                  {alertPlants.slice(0, 4).map((p) => {
+                    const block = blockMap.get(p.zone);
+                    const fast = evaluateAgronomyAction(p, targetsFromConditions(condOf.get(p.zone)), {
+                      blockPlants: rowsByZone.get(p.zone),
+                      blockLabel: block?.label ?? p.zone,
+                    });
+                    if (!fast) return null;
+                    return (
+                      <tr key={`task-${p.zone}-${p.name}`}>
+                        <td className="nowrap">
+                          <b>{block?.label ?? p.zone}</b>
+                          <div className="small muted">{p.name}</div>
+                        </td>
+                        <td className="small">
+                          <div><b>⚡ Recipe:</b> {fast.prescription.recipeSummaryLine}</div>
+                          <div className="ff-k-avoid" style={{ fontSize: 11.5, marginTop: 2 }}>
+                            <b>🚫 Avoid:</b> {fast.doNotMixList[0]}
+                          </div>
+                          <div className="muted" style={{ fontSize: 11, marginTop: 2, fontFamily: "ui-monospace,monospace" }}>
+                            🧮 {fast.prescription.formulaMathLine}
+                          </div>
+                        </td>
+                        <td className="nowrap">
+                          <Tag kind="warn">Due today</Tag>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -214,7 +238,7 @@ export default function Dashboard() {
                     </span>
                     <span className="cc-sep" />
                     <span>
-                      Cost: <b>$0.75/plant</b>
+                      Cost: <b>${UNIT_TOTAL_COST_USD.toFixed(2)}/plant</b>
                     </span>
                     <Link className="linkbtn cc-open" to={`/cycles/${c.id}/tomato`}>
                       Block details <ArrowRight size={13} aria-hidden />

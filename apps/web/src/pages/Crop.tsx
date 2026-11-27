@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Camera, Eye, EyeOff } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import PlantSoilModal, { CareStepList } from "../components/PlantSoilModal";
+import PlantSoilModal from "../components/PlantSoilModal";
+import { FastFocusBlocks, MulderQuickCheck } from "../components/FastFocusCard";
 import RoverVisionPhoto from "../components/RoverVisionPhoto";
 import { Empty, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
-import { buildDemoOrchardData } from "../lib/roverDemo";
+import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import {
   buildBlockSoilRows,
   getBlockSoilProfile,
@@ -14,9 +15,10 @@ import {
   type PlantSoilRow,
   type SoilTargets,
 } from "../lib/soil";
-import { buildPlantCarePlan, TOMATO_TREATMENTS } from "../lib/treatments";
+import { TOMATO_TREATMENTS } from "../lib/treatments";
 import { useData } from "../lib/useData";
 import { ago } from "../lib/usePoll";
+import { evaluateAgronomyAction, FAST_GUIDE_CARDS } from "../utils/agronomyEngine";
 
 type GalleryItem = {
   blockLabel: string;
@@ -48,7 +50,7 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
   const photos = useData(() => api.photos("all"));
 
   const previewMode = Boolean(zones.error && zones.data === null);
-  const demo = useMemo(() => buildDemoOrchardData(), []);
+  const demo = useMemo(() => buildDemoTomatoFarm(), []);
 
   const [zoneFilter, setZoneFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "alerts" | "healthy">("all");
@@ -143,28 +145,46 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
     targets?: SoilTargets;
   } | null;
 
+  const rowsByZone = useMemo(() => {
+    const map = new Map<string, PlantSoilRow[]>();
+    for (const item of allItems) {
+      const list = map.get(item.plant.zone);
+      if (list) list.push(item.plant);
+      else map.set(item.plant.zone, [item.plant]);
+    }
+    return map;
+  }, [allItems]);
+
+  const mulderBlocks = useMemo(
+    () => beds.filter((b) => (rowsByZone.get(b.zone)?.length ?? 0) > 0).map((b) => ({ zone: b.zone, label: b.label ?? b.zone })),
+    [beds, rowsByZone],
+  );
+
   const contextMatch = useMemo(() => {
     if (!contextZone || !contextPlant) return null;
     if (routeState?.plant?.zone === contextZone && routeState.plant.name === contextPlant) {
-      const plan = buildPlantCarePlan(
+      const zoneRows = rowsByZone.get(contextZone);
+      const card = evaluateAgronomyAction(
         routeState.plant,
         routeState.targets ?? targetsFromConditions(undefined),
+        { blockPlants: zoneRows, blockLabel: routeState.blockLabel ?? contextZone },
       );
-      if (plan) {
+      if (card) {
         return {
           item: { blockLabel: routeState.blockLabel ?? contextZone, plant: routeState.plant },
-          plan,
+          card,
         };
       }
     }
     const found = allItems.find((i) => i.plant.zone === contextZone && i.plant.name === contextPlant);
     if (!found) return null;
-    const plan = buildPlantCarePlan(
+    const card = evaluateAgronomyAction(
       found.plant,
       targetsFromConditions(condList.find((c) => c.zone === found.plant.zone)),
+      { blockPlants: rowsByZone.get(found.plant.zone), blockLabel: found.blockLabel },
     );
-    return plan ? { item: found, plan } : null;
-  }, [allItems, condList, contextZone, contextPlant, routeState]);
+    return card ? { item: found, card } : null;
+  }, [allItems, condList, contextZone, contextPlant, routeState, rowsByZone]);
 
   function handleViewHistory(plant: PlantSoilRow) {
     setInspected(null);
@@ -252,6 +272,14 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
                 {visibleItems.map(({ blockLabel, plant }) => {
                   const v = plant.vision;
                   const r = plant.readings;
+                  const cardRx =
+                    v.status === "alert"
+                      ? evaluateAgronomyAction(
+                          plant,
+                          targetsFromConditions(condList.find((c) => c.zone === plant.zone)),
+                          { blockPlants: rowsByZone.get(plant.zone), blockLabel },
+                        )
+                      : null;
                   return (
                     <button
                       key={`${plant.zone}-${plant.name}`}
@@ -282,79 +310,81 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
                         </span>
                       </div>
                       {v.linkedNote && <div className="rv-gallery-note small">{v.linkedNote}</div>}
+                      {cardRx && (
+                        <div className="rv-gallery-rx">
+                          <b>Rx:</b> {cardRx.prescription.recipeSummaryLine}
+                        </div>
+                      )}
                     </button>
                   );
                 })}
               </div>
             )}
           </Panel>
+          <MulderQuickCheck blocks={mulderBlocks} rowsByZone={rowsByZone} />
         </>
       ) : (
-        <Panel
-          title="Tomato Disease & Treatment Guide"
-          icon={BookOpen}
-          pad={false}
-          right={
-            <div className="rv-right">
-              {previewMode && <Tag>Sample data · Synced with AgriRover</Tag>}
-              <span className="small muted">Practical cultural, organic &amp; targeted care</span>
+        <>
+          <MulderQuickCheck blocks={mulderBlocks} rowsByZone={rowsByZone} />
+          <Panel
+            title="Tomato Disease & Treatment Guide"
+            icon={BookOpen}
+            pad={false}
+            right={
+              <div className="rv-right">
+                {previewMode && <Tag>Sample data · Synced with AgriRover</Tag>}
+                <span className="small muted">Fast-Focus Action · Mulder Antagonism · Expected Result</span>
+              </div>
+            }
+          >
+            <div className="rv-guide-list">
+              {TOMATO_TREATMENTS.map((t) => {
+                const isFocused = highlightedId === t.id;
+                const liveMatch = contextMatch?.card.guideId === t.id ? contextMatch : null;
+                const cardToShow = liveMatch ? liveMatch.card : FAST_GUIDE_CARDS[t.id];
+                return (
+                  <article key={t.id} id={t.id} className={`rv-guide-card${isFocused ? " rv-guide-card-focus" : ""}`}>
+                    <div className="rv-guide-head">
+                      <div>
+                        <h3>{t.title}</h3>
+                        <span className="small muted">{t.severityHint}</span>
+                      </div>
+                      <Tag kind={isFocused ? "ok" : "warn"}>
+                        {liveMatch ? `Selected for ${liveMatch.item.plant.name}` : isFocused ? "Highlighted condition" : "Tomato care"}
+                      </Tag>
+                    </div>
+                    {liveMatch && (
+                      <div className="small muted">
+                        Tailored to live probe on <b>{liveMatch.item.blockLabel} · {liveMatch.item.plant.name}</b>
+                      </div>
+                    )}
+                    <div className="rv-guide-grid">
+                      <div>
+                        <span className="ts-k">Symptoms</span>
+                        <p className="small">{t.symptoms}</p>
+                      </div>
+                      <div>
+                        <span className="ts-k">Common causes</span>
+                        <p className="small">{t.causes}</p>
+                      </div>
+                    </div>
+                    <FastFocusBlocks card={cardToShow} />
+                    <div className="rv-guide-prev small">
+                      <b>Prevention:</b> {t.prevention}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
-          }
-        >
-          <div className="rv-guide-list">
-            {TOMATO_TREATMENTS.map((t) => {
-              const isFocused = highlightedId === t.id;
-              const livePlan = contextMatch?.plan.guideId === t.id ? contextMatch : null;
-              const stepsToShow = livePlan ? livePlan.plan.steps : t.steps;
-              return (
-                <article key={t.id} id={t.id} className={`rv-guide-card${isFocused ? " rv-guide-card-focus" : ""}`}>
-                  <div className="rv-guide-head">
-                    <div>
-                      <h3>{t.title}</h3>
-                      <span className="small muted">{t.severityHint}</span>
-                    </div>
-                    <Tag kind={isFocused ? "ok" : "warn"}>
-                      {livePlan ? `Selected for ${livePlan.item.plant.name}` : isFocused ? "Highlighted condition" : "Tomato care"}
-                    </Tag>
-                  </div>
-                  {livePlan && (
-                    <div className="rv-care-diag">
-                      <span className="ts-k">
-                        Live probe telemetry · {livePlan.item.blockLabel} · {livePlan.item.plant.name}
-                      </span>
-                      <p className="small">{livePlan.plan.diagnosisNote}</p>
-                    </div>
-                  )}
-                  <div className="rv-guide-grid">
-                    <div>
-                      <span className="ts-k">Symptoms</span>
-                      <p className="small">{t.symptoms}</p>
-                    </div>
-                    <div>
-                      <span className="ts-k">Common causes</span>
-                      <p className="small">{t.causes}</p>
-                    </div>
-                  </div>
-                  <div className="rv-guide-steps">
-                    <span className="ts-k">
-                      {livePlan ? `Step-by-step care procedure (tailored to ${livePlan.item.plant.name})` : "Step-by-step care procedure"}
-                    </span>
-                    <CareStepList steps={stepsToShow} />
-                  </div>
-                  <div className="rv-guide-prev small">
-                    <b>Prevention:</b> {t.prevention}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </Panel>
+          </Panel>
+        </>
       )}
 
       {inspected && (
         <PlantSoilModal
           plant={inspected.plant}
           blockLabel={inspected.blockLabel}
+          blockPlants={rowsByZone.get(inspected.plant.zone)}
           targets={targetsFromConditions(condList.find((c) => c.zone === inspected.plant.zone))}
           onClose={() => setInspected(null)}
           onViewHistory={handleViewHistory}

@@ -8,7 +8,7 @@ import { Kpis, PageHead, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
 import { num } from "../lib/format";
 import { buildDemoTomatoFarm } from "../lib/roverDemo";
-import { buildAllBlockEconomics, usdAndRiel } from "../lib/tomatoFinance";
+import { buildAllBlockEconomics, UNIT_TOTAL_COST_RIEL, UNIT_TOTAL_COST_USD, usdAndRiel } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
 
 export default function Cycles() {
@@ -89,7 +89,7 @@ export default function Cycles() {
             { k: "Active tomato blocks", v: `${growing.length} of ${blocks.length}`, d: `${blocks.length - growing.length} ready for next planting` },
             { k: "Total active tomato plants", v: totalPlants, d: "Scanned daily by AgriRover" },
             { k: "Live AI vision alerts", v: totalAlerts, d: "Synced from Health gallery" },
-            { k: "Operation spent / budget", v: `$${totalSpentUsd.toFixed(2)}`, d: `of $${totalBudgetUsd.toFixed(2)} target ($0.75/plant)` },
+            { k: "Operation spent / budget", v: `$${totalSpentUsd.toFixed(2)}`, d: `of $${totalBudgetUsd.toFixed(2)} target ($${UNIT_TOTAL_COST_USD.toFixed(2)}/plant)` },
           ]}
         />
 
@@ -162,7 +162,7 @@ export default function Cycles() {
                     </>
                   ) : (
                     <div className="rv-cycle-actions">
-                      <span className="small muted">Standard tomato budget: $0.75 (~3,065 ៛) / plant</span>
+                      <span className="small muted">Standard tomato budget: {usdAndRiel(UNIT_TOTAL_COST_USD, UNIT_TOTAL_COST_RIEL)} / plant</span>
                       <button
                         type="button"
                         className="btn btn-sm btn-ghost"
