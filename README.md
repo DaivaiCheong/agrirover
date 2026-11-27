@@ -16,7 +16,7 @@ A person always acts: the rover never waters or feeds. Everything runs on the fa
 - Water is given by the block on a habit, not by what each tree's soil and stage need.
 - Rural internet is weak; cloud-only tools stop working when it drops.
 
-Plan: [docs/PLAN.md](docs/PLAN.md) · Evidence: [docs/GUAVA-RESEARCH.md](docs/GUAVA-RESEARCH.md) · Procedure: [docs/ROVER-SOP.md](docs/ROVER-SOP.md)
+How it works, end to end: [docs/WORKFLOW.md](docs/WORKFLOW.md) · Plan: [docs/PLAN.md](docs/PLAN.md) · Evidence: [docs/GUAVA-RESEARCH.md](docs/GUAVA-RESEARCH.md) · Procedure: [docs/ROVER-SOP.md](docs/ROVER-SOP.md)
 
 ## Status
 
