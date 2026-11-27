@@ -1,326 +1,483 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CircleCheck, Circle, OctagonX, Play } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import PlantSoilModal from "../components/PlantSoilModal";
 import RoverMap, { RoverLegend } from "../components/RoverMap";
-import { TreePhotoCheck } from "../components/TreePhoto";
-import Farm3D from "../components/Farm3D";
-import { farmBlocks, photoKeys, roverBlock } from "../lib/farm3d";
-import { EF, Kpis, More, Notice, Panel, Tag, Toolbar } from "../components/ui";
+import SoilCad3D from "../components/SoilCad3D";
+import { Notice, Panel, Tag } from "../components/ui";
 import { api, loadProblem, type RoverCell } from "../lib/api";
-import { todayIso } from "../lib/format";
-import { ROVER, STATUS_WORD, cellName, estimate, fullLitresOf, headingAt, litresOf, minutes, roundPlan, serpentine, stopInfo } from "../lib/rover";
+import { cellName, headingAt, serpentine } from "../lib/rover";
+import { buildDemoOrchardData } from "../lib/roverDemo";
+import {
+  buildBlockSoilRows,
+  getBlockSoilProfile,
+  getRoverContext,
+  parsePlantLabel,
+  resolveBlockGrid,
+  setRoverContext,
+  summarizePlantSoil,
+  targetsFromConditions,
+  type PlantSoilRow,
+} from "../lib/soil";
 import { useData } from "../lib/useData";
 import { ago, usePoll } from "../lib/usePoll";
 
-type Simulate = "normal" | "rain" | "low_battery";
-
-const MANUAL = ["Rows clear of people, animals and hoses", "Rover at the first tree, facing along row 1", "Camera clean, probe tip clean"];
-const SIMULATE: Record<Simulate, string> = { normal: "Normal round", rain: "Rain starts on the way", low_battery: "Battery runs low on the way" };
-const LABEL: Record<string, string> = {
-  soil_moisture: "Moisture %", soil_ec: "EC mS/cm", soil_ph: "pH", soil_temperature: "Soil °C",
-  nitrogen: "N (trend)", phosphorus: "P (trend)", potassium: "K (trend)", air_temperature: "Air °C", air_humidity: "RH %",
-};
-
-function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
-  return <li className={ok ? "chk chk-ok" : "chk"}>{ok ? <CircleCheck size={15} aria-hidden /> : <Circle size={15} aria-hidden />}{children}</li>;
+function StatusDot({ status }: { status: PlantSoilRow["status"] }) {
+  const label = status === "optimal" ? "Optimal" : status === "attention" ? "Needs attention" : "Unrecorded";
+  const cls = status === "optimal" ? "soil-dot soil-dot-ok" : status === "attention" ? "soil-dot soil-dot-warn" : "soil-dot soil-dot-gray";
+  return <span className={cls} title={label} aria-label={label} />;
 }
 
-/** One tree as the rover found it: the photo if one came with the round, what the probe read, and what it should get today. */
-function CellView({ cell, frame, held }: { cell?: RoverCell; frame?: string | null; held?: boolean }) {
-  if (!cell) return <p className="small muted">The rover's photos and readings appear here during a round.</p>;
-  const a = cell.advice;
-  return (
-    <div className={frame ? "rc-cam" : undefined}>
-      {frame && <img src={`data:image/jpeg;base64,${frame}`} alt={`Photo of ${cellName(cell.row, cell.col)}`} />}
-      <table className="tbl kv"><tbody>
-        <tr><th scope="row">Tree</th><td><b>{cellName(cell.row, cell.col)}</b>{!cell.plant && " · no tree seen"}</td></tr>
-        {a && cell.plant && <tr><th scope="row">Water today</th><td>{held ? <span className="muted">Held: induction stress</span> : <><b>{a.litres} L</b> of {a.fullLitres} L full demand</>}</td></tr>}
-        {cell.plant && <tr><th scope="row">Leaf cover</th><td>{Math.round((cell.canopy ?? 0) * 100)} %{cell.flagged && <> <Tag kind="warn">Yellow {Math.round((cell.chlorosis ?? 0) * 100)} %</Tag></>}</td></tr>}
-        {Object.keys(LABEL).filter((k) => cell.readings?.[k] !== undefined).map((k) => (
-          <tr key={k}><th scope="row">{LABEL[k]}</th><td>{cell.readings[k]}</td></tr>
-        ))}
-      </tbody></table>
-    </div>
-  );
+function VisionConditionBadge({ plant }: { plant: PlantSoilRow }) {
+  const v = plant.vision;
+  if (v.status === "healthy") return <Tag kind="ok">{v.badgeLabel}</Tag>;
+  if (v.status === "alert") return <Tag kind="warn">{v.badgeLabel}</Tag>;
+  return <Tag>{v.badgeLabel}</Tag>;
 }
 
-/** Every tree of the round: the table behind the map. */
-export function TreeTable({ cells, picked, onPick, held }: { cells: RoverCell[]; picked?: [number, number] | null; onPick?: (r: number, c: number) => void; held?: boolean }) {
-  const trees = cells.filter((c) => c.plant);
-  const given = litresOf(cells), full = fullLitresOf(cells);
-  const hasAdvice = cells.some((c) => c.advice);
-  return (
-    <Panel title={`Trees (${trees.length})`} pad={false}
-           right={!hasAdvice ? undefined : held ? <span className="small muted">Water held: induction stress</span>
-             : <span className="small muted">Water today {given.toFixed(0)} L of {full.toFixed(0)} L full demand</span>}>
-      {trees.length === 0 ? <p className="panel-pad small muted">Nothing yet.</p> : (
-        <div className="tablewrap rc-list">
-          <table className="tbl">
-            <thead><tr><th>Tree</th>{hasAdvice && <th className="r">Water L</th>}<th className="r">Moisture %</th><th className="r">EC</th><th className="r">pH</th><th className="r">Leaf %</th><th>Note</th></tr></thead>
-            <tbody>
-              {trees.map((c) => {
-                const notes = [...(c.advice?.notes ?? [])];
-                if (!c.advice && c.flagged) notes.push("Yellow leaves");
-                return (
-                  <tr key={`${c.row}-${c.col}`} className={`pickable${picked?.[0] === c.row && picked?.[1] === c.col ? " picked" : ""}`} onClick={() => onPick?.(c.row, c.col)}>
-                    <td className="nowrap"><b>{cellName(c.row, c.col)}</b></td>
-                    {hasAdvice && <td className="r">{held ? <span className="muted">Hold</span> : <b>{c.advice?.litres ?? "—"}</b>}</td>}
-                    <td className="r">{c.readings?.soil_moisture ?? "—"}</td>
-                    <td className="r">{c.readings?.soil_ec ?? "—"}</td>
-                    <td className="r">{c.readings?.soil_ph ?? "—"}</td>
-                    <td className="r">{c.canopy === undefined || c.canopy === null ? "—" : Math.round(c.canopy * 100)}</td>
-                    <td className="small">{notes.join(" · ").replace(/: look/g, "")}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-/** The block in 3D fills the first screen, with the round beside it. What to look at across the farm is on Today and Health,
- *  and the schedule is on Plan, so neither is repeated here. */
 export default function Rover() {
-  const { data, error } = usePoll(api.roverLive, 1000);
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialCtx = useMemo(() => {
+    const qZone = searchParams.get("zone");
+    const qPlant = searchParams.get("plant");
+    if (qZone) return { zone: qZone, plant: qPlant };
+    return getRoverContext();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const zones = useData(api.zones);
+  const previewMode = Boolean(zones.error && zones.data === null);
+  const demo = useMemo(() => buildDemoOrchardData(), []);
+
+  const { data: liveData, error: liveError } = usePoll(api.roverLive, previewMode ? 30000 : 1500);
   const cycles = useData(api.cycles);
+  const conditions = usePoll(api.conditions, 30000);
   const adviceNow = usePoll(api.advice, 30000);
-  const rover = data?.rover, live = data?.mission ?? null;
-
-  const [zone, setZone] = useState("");
-  const [rows, setRows] = useState("4");
-  const [cols, setCols] = useState("4");
-  const [rowM, setRowM] = useState("3");
-  const [treeM, setTreeM] = useState("3");
-  const [simulate, setSimulate] = useState<Simulate>("normal");
-  const [ticked, setTicked] = useState<boolean[]>(MANUAL.map(() => false));
-  const [problem, setProblem] = useState<string | null>(null);
-  const [picked, setPicked] = useState<[number, number] | null>(null);
-  const [view, setView] = useState<"3d" | "map">("3d");
-  const scene = useRef<HTMLDivElement>(null);
-
-  const beds = zones.data ?? [];
-  const growing = (cycles.data ?? []).filter((c) => c.status === "active");
-  const bed = zone || growing[0]?.zone || beds[0]?.zone || "";
-  const cycle = growing.find((c) => c.zone === bed);
-
-  // the block's own rows and spacing, from its setup and tree count
-  const grid = cycle?.grid;
-  useEffect(() => {
-    if (!grid) return;
-    setRows(String(grid.rows)); setCols(String(grid.cols)); setRowM(String(grid.rowM)); setTreeM(String(grid.treeM));
-  }, [bed, grid?.rows, grid?.cols, grid?.rowM, grid?.treeM]);
-
-  // the live round if there is one here; otherwise this block's newest stored round
-  const m = live && (live.status === "queued" || live.status === "running" || live.zoneId === bed) ? live : null;
-  const history = useData(api.surveys, [live?.missionId, live?.status]);
-  const last = m ? undefined : (history.data ?? []).find((s) => s.zone === bed && (s.status === "completed" || s.status === "aborted"));
-  const lastRound = useData(() => (last ? api.survey(last.id) : Promise.resolve(null)), [last?.id]);
-  const adviceList = adviceNow.data ?? [];
-  const blockAdvice = adviceList.find((a) => a.zone === bed);
-  const adviceOf = new Map((blockAdvice?.trees ?? []).map((t) => [`${t.row},${t.col}`, t]));
-  const storedCells: RoverCell[] = (last && lastRound.data?.id === last.id ? lastRound.data.cells : []).map((x) => ({ ...x, advice: adviceOf.get(`${x.row},${x.col}`) ?? null }));
-  const slots = roundPlan(growing, "07:00", adviceList, todayIso());
-  // during induction stress no water is the plan, not a zero: say "held"
-  const shownZone = m?.zoneId ?? bed;
-  const held = Boolean(adviceList.find((a) => a.zone === shownZone)?.water.paused);
-  // trees someone has photographed, for a mark on the map: the camera on the rover is not built, so a person is the camera for now
   const savedPhotos = useData(() => api.photos("all"));
-  const photographed = new Set((savedPhotos.data?.photos ?? []).filter((p) => p.zone === shownZone && p.tree)
-    .map((p) => { const [r, t] = p.tree!.replace(/[RT]/g, "").split(" ").map(Number); return `${r - 1},${t - 1}`; }));
-  // the same count of trees to look at as Plant health shows
-  const looks = useMemo(() => new Map(farmBlocks(adviceNow.data ?? [], cycles.data ?? [], photoKeys(savedPhotos.data?.photos ?? []))
-    .map((b) => [b.zone, b.trees.filter((t) => t.alert === "look").length])), [adviceNow.data, cycles.data, savedPhotos.data]);
 
-  const r = Number(rows), c = Number(cols), rm = Number(rowM), tm = Number(treeM);
-  const sizeOk = Number.isInteger(r) && Number.isInteger(c) && r >= 1 && c >= 1 && r <= 40 && c <= 40 && r * c <= ROVER.maxTrees && rm >= 0.2 && rm <= 10 && tm >= 0.2 && tm <= 10;
-  const est = sizeOk ? estimate(r, c, rm, tm) : null;
+  const [zone, setZone] = useState<string>(initialCtx?.zone ?? "");
+  const [filter, setFilter] = useState<"all" | "attention" | "vision">("all");
+  const [view, setView] = useState<"3d" | "map">("3d");
+  const [selected, setSelected] = useState<[number, number] | null>(() => parsePlantLabel(initialCtx?.plant));
+  const [focusSeq, setFocusSeq] = useState(0);
+  const [detailOpen, setDetailOpen] = useState(false);
 
-  const running = m?.status === "queued" || m?.status === "running";
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  const beds = previewMode ? demo.zones : (zones.data ?? []);
+  const growing = (previewMode ? demo.cycles : (cycles.data ?? [])).filter((c) => c.status === "active");
+  const activeZone = zone || growing[0]?.zone || beds[0]?.zone || "";
+  const activeBed = beds.find((b) => b.zone === activeZone);
+  const activeCycle = growing.find((c) => c.zone === activeZone);
+  const blockLabel = activeBed?.label ?? activeCycle?.bedLabel ?? activeZone ?? "";
+
+  const liveMission = previewMode ? null : (liveData?.mission ?? null);
+  const activeMission =
+    liveMission && (liveMission.status === "queued" || liveMission.status === "running" || liveMission.zoneId === activeZone)
+      ? liveMission
+      : null;
+
+  const history = useData(api.surveys, [liveMission?.missionId, liveMission?.status]);
+  const surveyList = previewMode ? demo.surveys : (history.data ?? []);
+  const lastSurvey = activeMission
+    ? undefined
+    : surveyList.find((s) => s.zone === activeZone && (s.status === "completed" || s.status === "aborted"));
+  const lastRound = useData(
+    () => (previewMode || !lastSurvey ? Promise.resolve(null) : api.survey(lastSurvey.id)),
+    [previewMode, lastSurvey?.id],
+  );
+
+  const adviceList = previewMode ? demo.advice : (adviceNow.data ?? []);
+  const blockAdvice = adviceList.find((a) => a.zone === activeZone);
+  const blockConditions = (previewMode ? demo.conditions : (conditions.data ?? [])).find((c) => c.zone === activeZone);
+  const targets = useMemo(() => targetsFromConditions(blockConditions), [blockConditions]);
+
+  const storedCells: RoverCell[] = useMemo(() => {
+    if (!lastSurvey) return [];
+    const roundDetail = previewMode ? demo.roundsById.get(lastSurvey.id) : (lastRound.data?.id === lastSurvey.id ? lastRound.data : null);
+    if (!roundDetail) return [];
+    const adviceByKey = new Map((blockAdvice?.trees ?? []).map((t) => [`${t.row},${t.col}`, t]));
+    return roundDetail.cells.map((c) => ({ ...c, advice: c.advice ?? adviceByKey.get(`${c.row},${c.col}`) ?? null }));
+  }, [lastSurvey, previewMode, demo.roundsById, lastRound.data, blockAdvice]);
+
+  const cells = activeMission?.cells ?? storedCells;
+  const grid = resolveBlockGrid({
+    rows: activeMission?.rows ?? lastSurvey?.rows,
+    cols: activeMission?.cols ?? lastSurvey?.cols,
+    rowM: activeMission?.rowM ?? activeCycle?.grid?.rowM,
+    cellM: activeMission?.cellM ?? lastSurvey?.cellM ?? activeCycle?.grid?.treeM,
+    cycle: activeCycle,
+    zone: activeBed,
+  });
+
+  const blockProfile = getBlockSoilProfile(activeZone);
+  const capturedAt = activeMission
+    ? new Date().toISOString()
+    : (lastSurvey?.finishedAt ?? lastSurvey?.startedAt ?? null);
+
+  const allPlants = useMemo(() => {
+    if (!activeZone) return [];
+    return buildBlockSoilRows({
+      zone: activeZone,
+      rows: grid.rows,
+      cols: grid.cols,
+      cells,
+      conditions: blockConditions,
+      advice: blockAdvice,
+      photos: previewMode ? [] : (savedPhotos.data?.photos ?? []),
+      profile: blockProfile,
+      capturedAt,
+    });
+  }, [activeZone, grid.rows, grid.cols, cells, blockConditions, blockAdvice, previewMode, savedPhotos.data, blockProfile, capturedAt]);
+
+  const summary = useMemo(() => summarizePlantSoil(allPlants), [allPlants]);
+  const visiblePlants = useMemo(() => {
+    if (filter === "attention") return allPlants.filter((p) => p.status === "attention");
+    if (filter === "vision") return allPlants.filter((p) => p.vision.status === "alert");
+    return allPlants;
+  }, [allPlants, filter]);
+
+  useEffect(() => {
+    if (!activeZone) return;
+    const plantLabel = selected ? cellName(selected[0], selected[1]) : null;
+    setRoverContext({ zone: activeZone, plant: plantLabel });
+    const next = new URLSearchParams();
+    next.set("zone", activeZone);
+    if (plantLabel) next.set("plant", plantLabel);
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [activeZone, selected]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectedPlant = useMemo(
+    () => (selected ? allPlants.find((p) => p.row === selected[0] && p.col === selected[1]) ?? null : null),
+    [allPlants, selected],
+  );
+
+  const blockAttentionCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of adviceList) {
+      const n = a.trees.filter(
+        (t) =>
+          t.plant &&
+          t.notes.some(
+            (note) =>
+              note !== "Yellow leaves: expected" &&
+              note !== "No probe reading" &&
+              note !== "No tree seen" &&
+              note !== "No plant seen",
+          ),
+      ).length;
+      if (n > 0) map.set(a.zone, n);
+    }
+    if (activeZone) map.set(activeZone, summary.attention);
+    return map;
+  }, [adviceList, activeZone, summary.attention]);
+
+  const liveFrame = useData(
+    () => (!previewMode && detailOpen && selected && activeMission ? api.roverFrame(selected[0], selected[1]) : Promise.resolve(null)),
+    [previewMode, detailOpen, selected?.[0], selected?.[1], activeMission?.missionId],
+  );
+
+  const running = activeMission?.status === "queued" || activeMission?.status === "running";
+  const roverPos = useMemo(() => {
+    if (!running || !activeMission?.cell || activeMission.zoneId !== activeZone) return null;
+    const path = serpentine(grid.rows, grid.cols);
+    const step = path.findIndex(([r, c]) => r === activeMission.cell![0] && c === activeMission.cell![1]);
+    return {
+      row: activeMission.cell[0],
+      col: activeMission.cell[1],
+      heading: step >= 0 ? headingAt(path, step) : 0,
+    };
+  }, [running, activeMission?.cell, activeMission?.zoneId, activeZone, grid.rows, grid.cols]);
+
+  const photographedKeys = useMemo(() => {
+    const set = new Set<string>();
+    if (previewMode) return set;
+    for (const p of savedPhotos.data?.photos ?? []) {
+      if (p.zone !== activeZone) continue;
+      const rc = parsePlantLabel(p.tree);
+      if (rc) set.add(`${rc[0]},${rc[1]}`);
+    }
+    return set;
+  }, [previewMode, savedPhotos.data, activeZone]);
+
   const raining = beds.some((b) => b.rain === true);
-  const online = rover?.status === "online";
-  const released = !rover?.estop;
-  const ready = online && released && !raining && ticked.every(Boolean) && sizeOk && Boolean(bed) && !running;
+  const isSmallScreen = typeof window !== "undefined" && window.innerWidth <= 640;
+  const sceneHeight = isSmallScreen ? 340 : 440;
+  const pageError = previewMode ? null : (liveError ?? zones.error ?? conditions.error);
 
-  // a new round starts by following the rover again
-  const missionId = m?.missionId;
-  useEffect(() => setPicked(null), [missionId]);
-
-  const frame = useData(() => (picked ? api.roverFrame(picked[0], picked[1]) : Promise.resolve(null)), [picked?.[0], picked?.[1], missionId]);
-  const cells = m?.cells ?? storedCells;
-  const shownCell = picked ? cells.find((x) => x.row === picked[0] && x.col === picked[1])
-    : m?.cell ? cells.find((x) => x.row === m.cell![0] && x.col === m.cell![1]) : undefined;
-  const shownFrame = picked && m ? frame.data?.frame : m?.frame;
-
-  async function start() {
-    setProblem(null);
-    try {
-      await api.startSurvey({ zoneId: bed, rows: r, cols: c, cellM: tm, rowM: rm, simulate });
-      setTicked(MANUAL.map(() => false));            // the checks are for each round
-    } catch (e) { setProblem((e as Error).message); }
-  }
-  async function estop(engaged: boolean) {
-    setProblem(null);
-    try { await api.roverEstop(engaged); } catch (e) { setProblem((e as Error).message); }
+  function selectBlock(nextZone: string) {
+    setZone(nextZone);
+    setSelected(null);
+    setDetailOpen(false);
   }
 
-  const stop = m && (m.status === "aborted" || m.status === "rejected" || m.status === "lost" || m.status === "failed") ? stopInfo(m.reason) : null;
-  const word = live && (live.status === "queued" || live.status === "running" || m) ? STATUS_WORD[live.status] ?? [undefined, live.status] : [undefined, "Idle"];
-  const flagged = cells.filter((x) => x.flagged).length;
-  const trees = cells.filter((x) => x.plant).length;
-  const hasRound = Boolean(m || last);
-  const scanned = m?.cellsScanned ?? last?.cellsScanned ?? null;
-  const planned = m?.cellsTotal ?? ((last?.rows ?? 0) * (last?.cols ?? 0));
-
-  // the block and the round fit the window, so nothing important needs scrolling to
-  const oneColumn = window.innerWidth <= 900;
-  const sceneH = oneColumn ? 340 : Math.max(420, window.innerHeight - 310);
-
-  function pickFromTable(row: number, col: number) {
-    setPicked([row, col]);
-    scene.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  function applyFilter(next: "all" | "attention" | "vision") {
+    setFilter(next);
+    if (next === "attention" && selectedPlant && selectedPlant.status !== "attention") {
+      setSelected(null);
+      setDetailOpen(false);
+    } else if (next === "vision" && selectedPlant && selectedPlant.vision.status !== "alert") {
+      setSelected(null);
+      setDetailOpen(false);
+    }
   }
+
+  function handleSelectFrom3D(row: number, col: number) {
+    setSelected([row, col]);
+    setDetailOpen(true);
+  }
+
+  function handleSelectFromTable(row: number, col: number) {
+    setSelected([row, col]);
+    setFocusSeq((n) => n + 1);
+    viewportRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function handleOpenDetail(row: number, col: number) {
+    setSelected([row, col]);
+    setDetailOpen(true);
+  }
+
+  function handleViewHistory(plant: PlantSoilRow) {
+    setDetailOpen(false);
+    setRoverContext({ zone: plant.zone, plant: plant.name });
+    navigate(`/rover/history?zone=${encodeURIComponent(plant.zone)}&plant=${encodeURIComponent(plant.name)}`);
+  }
+
+  const autoStatusText = running
+    ? `AgriRover scanning automatically · ${activeMission?.cellsScanned ?? 0} of ${activeMission?.cellsTotal ?? grid.rows * grid.cols} plants`
+    : lastSurvey
+      ? `Monitored automatically by AgriRover · Last updated ${ago(lastSurvey.finishedAt ?? lastSurvey.startedAt)}`
+      : "Monitored automatically by AgriRover";
 
   return (
-    <>
-      <Toolbar>
-        <span className="tb-left">
-          <Tag kind={online ? "ok" : rover?.status === "offline" ? "alert" : "wip"}>{rover?.code ?? "Rover"} {rover?.status ?? "…"}</Tag>
-          <Tag kind={word[0]}>{word[1]}</Tag>
-          <Tag>Simulated wheels, camera and probe</Tag>
-        </span>
-        {rover?.estop
-          ? <><Tag kind="alert">E-stop engaged</Tag><button className="btn btn-sm btn-ghost" onClick={() => estop(false)}>Release</button></>
-          : <button className="btn btn-sm btn-alert" onClick={() => estop(true)}><OctagonX size={16} aria-hidden />E-stop</button>}
-      </Toolbar>
-      <main className="main stack">
-        {error && <Notice kind="alert">{loadProblem(error)}</Notice>}
-        {problem && <Notice kind="alert">{problem}</Notice>}
-        {raining && !running && <Notice kind="warn">It is raining on a field node. The rover will not start, and no bed needs water today.</Notice>}
-        {stop && <Notice kind="warn"><b>{word[1]}: {stop.label}.</b> {m!.cellsScanned} of {m!.cellsTotal} stops done. {stop.next}</Notice>}
+    <main className="main stack" style={{ paddingTop: 12 }}>
+      {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
+      {raining && !running && <Notice kind="warn">Rain detected in the tomato plots. Watering and rover rounds are paused today.</Notice>}
 
-        <div ref={scene}>
-          <Panel title={`Block · ${beds.find((b) => b.zone === shownZone)?.label ?? bed}`} pad={false}
-                 right={<span className="rv-right">
-                   {m ? <span className="small muted">Generated orchard{running ? ` · ${ROVER.simSpeedup}× real speed` : ""}</span>
-                     : last ? <span className="small muted">Last round {ago(last.finishedAt ?? last.startedAt)}{last.simulated ? " · simulated" : ""}</span> : null}
-                   <span className="seg" role="group" aria-label="View">
-                     <button type="button" className={view === "3d" ? "on" : ""} aria-pressed={view === "3d"} onClick={() => setView("3d")}>3D</button>
-                     <button type="button" className={view === "map" ? "on" : ""} aria-pressed={view === "map"} onClick={() => setView("map")}>Map</button>
-                   </span>
-                 </span>}>
-            <div className="rv-blocks" role="group" aria-label="Block">
-              {beds.map((b) => {
-                const n = looks.get(b.zone) ?? 0;
-                const slot = slots.find((s) => s.zone === b.zone);
+      <div ref={viewportRef}>
+        <Panel
+          title={blockLabel ? `Block · ${blockLabel}` : "Block"}
+          pad={false}
+          right={
+            <span className="rv-right">
+              {previewMode && <Tag>Sample data · Synced with AgriRover</Tag>}
+              <span className="small muted">{autoStatusText}</span>
+              <span className="seg" role="group" aria-label="Land view mode">
+                <button type="button" className={view === "3d" ? "on" : ""} aria-pressed={view === "3d"} onClick={() => setView("3d")}>
+                  3D CAD
+                </button>
+                <button type="button" className={view === "map" ? "on" : ""} aria-pressed={view === "map"} onClick={() => setView("map")}>
+                  2D Map
+                </button>
+              </span>
+            </span>
+          }
+        >
+          <div className="rv-blocks" role="group" aria-label="Block">
+            {beds.length === 0 ? (
+              <span className="small muted">{zones.data === null && !zones.error ? "Loading blocks…" : "No blocks available."}</span>
+            ) : (
+              beds.map((b) => {
+                const attn = blockAttentionCounts.get(b.zone) ?? 0;
+                const isOn = b.zone === activeZone;
                 return (
-                  <button key={b.zone} type="button" className={`f3-chip${b.zone === shownZone ? " on" : ""}`} aria-pressed={b.zone === shownZone}
-                          onClick={() => { setZone(b.zone); setPicked(null); }}>
-                    {b.label ?? b.zone}{n ? ` · ${n}` : ""}{slot && !slot.doneAt && <span className="muted"> · Not yet</span>}
+                  <button
+                    key={b.zone}
+                    type="button"
+                    className={`f3-chip${isOn ? " on" : ""}`}
+                    aria-pressed={isOn}
+                    onClick={() => selectBlock(b.zone)}
+                  >
+                    {b.label ?? b.zone}
+                    {attn > 0 && <span className="rv-chip-warn"> · {attn}</span>}
                   </button>
                 );
-              })}
+              })
+            )}
+          </div>
+
+          <div className="rv-action-bar">
+            <div className="seg" role="group" aria-label="Plant condition filter">
+              <button
+                type="button"
+                className={filter === "all" ? "on" : ""}
+                aria-pressed={filter === "all"}
+                onClick={() => applyFilter("all")}
+              >
+                All plants <span className="rv-filter-count">{summary.total}</span>
+              </button>
+              <button
+                type="button"
+                className={filter === "attention" ? "on" : ""}
+                aria-pressed={filter === "attention"}
+                onClick={() => applyFilter("attention")}
+              >
+                Needs attention <span className={`rv-filter-count${summary.attention > 0 ? " rv-count-warn" : ""}`}>{summary.attention}</span>
+              </button>
+              <button
+                type="button"
+                className={filter === "vision" ? "on" : ""}
+                aria-pressed={filter === "vision"}
+                onClick={() => applyFilter("vision")}
+              >
+                Vision alerts <span className={`rv-filter-count${summary.visionAlerts > 0 ? " rv-count-warn" : ""}`}>{summary.visionAlerts}</span>
+              </button>
             </div>
-            <div className="hf">
-              <div className="hf-scene">
-                {view === "3d" ? (() => {
-                  const rowsNow = m?.rows ?? last?.rows ?? (sizeOk ? r : 4), colsNow = m?.cols ?? last?.cols ?? (sizeOk ? c : 4);
-                  const rowMNow = m?.rowM ?? cycle?.grid?.rowM ?? (rm || 3), treeMNow = m?.cellM ?? cycle?.grid?.treeM ?? (tm || 3);
-                  const block = roverBlock(shownZone, beds.find((b) => b.zone === shownZone)?.label ?? shownZone, rowsNow, colsNow, rowMNow, treeMNow,
-                                           cells, photoKeys(savedPhotos.data?.photos ?? []));
-                  const path = serpentine(rowsNow, colsNow);
-                  const step = m?.cell ? path.findIndex(([a, b]) => a === m.cell![0] && b === m.cell![1]) : -1;
-                  return (
-                    <>
-                      <Farm3D blocks={[block]} focus={shownZone} height={sceneH}
-                              selected={picked ? { zone: shownZone, row: picked[0], col: picked[1] } : null}
-                              onPick={(t) => setPicked([t.row, t.col])}
-                              rover={running && m?.cell ? { zone: shownZone, row: m.cell[0], col: m.cell[1], heading: step >= 0 ? headingAt(path, step) : 0 } : null} />
-                      <div className="f3-legend"><span><i className="lg-bang" />Look at</span><span><i className="lg-yellow" />Yellow leaves</span><span><i className="lg-photo" />Photo saved</span></div>
-                      {hasRound && !running && <div className="f3-hint">Drag to turn · click a tree</div>}
-                    </>
-                  );
-                })() : (
-                  <div className="rv-map" style={{ minHeight: sceneH }}>
-                    <div className="rm-wrap">
-                      <RoverMap rows={m?.rows ?? last?.rows ?? (sizeOk ? r : 4)} cols={m?.cols ?? last?.cols ?? (sizeOk ? c : 4)} cells={cells}
-                                at={m ? m.cell ?? [0, 0] : last ? undefined : [0, 0]} selected={picked} onPick={(a, b) => setPicked([a, b])} photos={photographed} />
-                    </div>
-                    <div className="panel-foot rm-foot"><RoverLegend />{hasRound && !running && <span className="small muted">Tap a tree</span>}</div>
-                  </div>
-                )}
+            <span className="small muted">Click a plant in 3D to inspect AI camera analysis &amp; soil status</span>
+          </div>
+
+          {!previewMode && zones.data === null ? (
+            <div className="cad-loading" style={{ height: sceneHeight }}>Loading land plot…</div>
+          ) : !activeZone ? (
+            <div className="cad-loading" style={{ height: sceneHeight }}>No land blocks configured yet.</div>
+          ) : view === "3d" ? (
+            <SoilCad3D
+              zone={activeZone}
+              blockLabel={blockLabel}
+              rows={grid.rows}
+              cols={grid.cols}
+              rowM={grid.rowM}
+              treeM={grid.treeM}
+              plants={allPlants}
+              filter={filter}
+              selected={selected ? { row: selected[0], col: selected[1] } : null}
+              focusSeq={focusSeq}
+              onSelect={handleSelectFrom3D}
+              rover={roverPos}
+              soilProfile={blockProfile}
+              height={sceneHeight}
+            />
+          ) : (
+            <div className="rv-map" style={{ minHeight: sceneHeight }}>
+              <div className="rm-wrap">
+                <RoverMap
+                  rows={grid.rows}
+                  cols={grid.cols}
+                  cells={cells}
+                  at={activeMission?.cell ?? (lastSurvey ? undefined : [0, 0])}
+                  selected={selected}
+                  onPick={handleSelectFrom3D}
+                  photos={photographedKeys}
+                />
               </div>
-
-              <aside className="hf-list" aria-label={running ? "At this tree" : picked ? "The tree" : "Today's round"} style={{ maxHeight: oneColumn ? undefined : sceneH }}>
-                {running ? (
-                  <div className="hf-tree">
-                    <div className="hf-tree-head"><b>At this tree</b></div>
-                    <CellView cell={shownCell} frame={shownFrame} held={held} />
-                  </div>
-                ) : picked && shownCell ? (
-                  <div className="hf-tree">
-                    <div className="hf-tree-head">
-                      <button type="button" className="linkbtn small" onClick={() => setPicked(null)}><ArrowLeft size={14} aria-hidden /> Today's round</button>
-                    </div>
-                    <CellView cell={shownCell} frame={shownFrame} held={held} />
-                    {shownCell.plant && (
-                      <TreePhotoCheck key={`${shownZone}-${shownCell.row}-${shownCell.col}`} zone={shownZone} row={shownCell.row} col={shownCell.col}
-                                      soil={false} onSaved={() => savedPhotos.reload()} />
-                    )}
-                  </div>
-                ) : (
-                  <div className="panel-pad erp-form">
-                    <div className="rv-round-head"><b>Today's round</b><Link className="linkbtn small" to="/plan">Schedule</Link></div>
-                    <p className="erp-hint">{cycle ? `${cycle.plantCount} trees · ${cycle.setupLabel ?? "no setup"}` : "Nothing growing here: readings only, no advice"}</p>
-                    <More label={<span className="small">{rows} rows × {cols} trees · {rowM} × {treeM} m{simulate !== "normal" ? ` · ${SIMULATE[simulate]}` : ""}</span>}>
-                      <div className="erp-form rv-options">
-                        <div className="erp-grid-2 rc-grid2">
-                          <EF label="Rows"><input className="erp-input" type="number" min={1} max={40} value={rows} onChange={(e) => setRows(e.target.value)} /></EF>
-                          <EF label="Trees a row"><input className="erp-input" type="number" min={1} max={40} value={cols} onChange={(e) => setCols(e.target.value)} /></EF>
-                          <EF label="Row to row (m)"><input className="erp-input" type="number" min={0.2} max={10} step={0.5} value={rowM} onChange={(e) => setRowM(e.target.value)} /></EF>
-                          <EF label="Tree to tree (m)"><input className="erp-input" type="number" min={0.2} max={10} step={0.5} value={treeM} onChange={(e) => setTreeM(e.target.value)} /></EF>
-                        </div>
-                        <EF label="Simulate">
-                          <select className="erp-select" value={simulate} onChange={(e) => setSimulate(e.target.value as Simulate)}>
-                            {Object.entries(SIMULATE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                          </select>
-                        </EF>
-                      </div>
-                    </More>
-                    <p className="erp-hint">{est ? `${est.trees} stops · ${est.distanceM.toFixed(0)} m · about ${minutes(est.seconds)} on a real rover (probe time is an estimate)` : `At most ${ROVER.maxTrees} trees, 40 a side, spacing 0.2 to 10 m`}</p>
-                    <div>
-                      <div className="erp-label" style={{ marginBottom: 4 }}>Before starting</div>
-                      <ul className="chks">
-                        <Check ok={online}>Rover online</Check>
-                        <Check ok={released}>E-stop released</Check>
-                        <Check ok={!raining}>No rain on the field nodes</Check>
-                      </ul>
-                      {MANUAL.map((text, i) => (
-                        <label key={text} className="chk-man">
-                          <input type="checkbox" checked={ticked[i]} onChange={(e) => setTicked(ticked.map((t, j) => (j === i ? e.target.checked : t)))} />{text}
-                        </label>
-                      ))}
-                    </div>
-                    <button className="btn" disabled={!ready} onClick={start}><Play size={16} aria-hidden />Start round</button>
-                  </div>
-                )}
-              </aside>
+              <div className="panel-foot rm-foot">
+                <RoverLegend />
+              </div>
             </div>
-          </Panel>
-        </div>
+          )}
+        </Panel>
+      </div>
 
-        <Kpis items={[
-          { k: "Stops", v: hasRound && scanned !== null ? `${scanned} of ${planned}` : "—" },
-          { k: "Trees seen", v: hasRound ? trees : "—" },
-          { k: "Water today", v: !hasRound ? "—" : held ? "Held: stress" : `${litresOf(cells).toFixed(0)} L` },
-          { k: "Yellow leaves", v: hasRound ? flagged : "—" },
-          { k: `Battery (stops at ${ROVER.batteryStopV} V)`, v: m?.battery != null ? `${m.battery.toFixed(2)} V` : "—" },
-        ]} />
-        {hasRound && <TreeTable cells={cells} held={held} picked={picked} onPick={pickFromTable} />}
-      </main>
-    </>
+      <Panel
+        title={blockLabel ? `Soil readings · ${blockLabel}` : "Soil readings"}
+        pad={false}
+        right={
+          <span className="small muted">
+            {summary.optimal} optimal · {summary.attention} needs attention · {summary.visionAlerts} vision {summary.visionAlerts === 1 ? "alert" : "alerts"} · {blockProfile.texture}, {blockProfile.drainage}, {blockProfile.rootingDepthCm} cm depth
+          </span>
+        }
+      >
+        {visiblePlants.length === 0 ? (
+          <p className="panel-pad small muted">
+            {filter === "vision"
+              ? "No AI Vision alerts detected in this block."
+              : filter === "attention"
+                ? "No plants need attention in this block."
+                : "No soil survey readings recorded for this block yet."}
+          </p>
+        ) : (
+          <div className="tablewrap">
+            <table className="tbl soil-tbl">
+              <thead>
+                <tr>
+                  <th>Plant</th>
+                  <th>Plant condition</th>
+                  <th className="r">Moisture</th>
+                  <th className="r">Soil pH</th>
+                  <th>Nutrients (N · P · K mg/kg)</th>
+                  <th className="r">EC</th>
+                  <th className="act" aria-label="Details" />
+                </tr>
+              </thead>
+              <tbody>
+                {visiblePlants.map((p) => {
+                  const isPicked = selected?.[0] === p.row && selected?.[1] === p.col;
+                  const r = p.readings;
+                  const npk =
+                    r.n !== null || r.p !== null || r.k !== null
+                      ? `N ${r.n !== null ? Math.round(r.n) : "—"} · P ${r.p !== null ? Math.round(r.p) : "—"} · K ${r.k !== null ? Math.round(r.k) : "—"}`
+                      : "—";
+                  return (
+                    <tr
+                      key={p.name}
+                      className={`pickable${isPicked ? " picked" : ""}`}
+                      onClick={() => handleSelectFromTable(p.row, p.col)}
+                    >
+                      <td className="nowrap">
+                        <div className="soil-plant-cell">
+                          <StatusDot status={p.status} />
+                          <div>
+                            <b>{p.name}</b>
+                            <div className="small muted">
+                              {!p.reached
+                                ? "Unrecorded"
+                                : !p.plant
+                                  ? "No plant detected"
+                                  : p.vision.linkedNote
+                                    ? p.vision.linkedNote
+                                    : p.issues.length > 0
+                                      ? p.issues[0]
+                                      : "Optimal"}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="nowrap">
+                        <VisionConditionBadge plant={p} />
+                      </td>
+                      <td className={`r num${p.states.moisture !== "ok" && p.states.moisture !== "none" ? " soil-val-warn" : ""}`}>
+                        {r.moisture !== null ? `${r.moisture.toFixed(1)} %` : "—"}
+                      </td>
+                      <td className={`r num${p.states.ph !== "ok" && p.states.ph !== "none" ? " soil-val-warn" : ""}`}>
+                        {r.ph !== null ? r.ph.toFixed(2) : "—"}
+                      </td>
+                      <td className="nowrap num small">{npk}</td>
+                      <td className={`r num${p.states.ec !== "ok" && p.states.ec !== "none" ? " soil-val-warn" : ""}`}>
+                        {r.ec !== null ? `${r.ec.toFixed(2)} mS/cm` : "—"}
+                      </td>
+                      <td className="act">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenDetail(p.row, p.col);
+                          }}
+                        >
+                          Inspect
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      {detailOpen && selectedPlant && (
+        <PlantSoilModal
+          plant={selectedPlant}
+          blockLabel={blockLabel}
+          targets={targets}
+          liveFrame={liveFrame.data?.frame ?? (activeMission?.cell?.[0] === selectedPlant.row && activeMission?.cell?.[1] === selectedPlant.col ? activeMission.frame : null)}
+          onClose={() => setDetailOpen(false)}
+          onViewHistory={handleViewHistory}
+        />
+      )}
+    </main>
   );
 }

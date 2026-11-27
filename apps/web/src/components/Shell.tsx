@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BRAND } from "../lib/brand";
 import {
-  BookOpen, Bot, CalendarDays, Calculator, Camera, ChartColumn, ClipboardList, Cpu, History, Images, Info, Leaf, MapPin, Package, Receipt, Scale, Settings,
-  Sprout, Sun, Tractor, TrendingUp, Wallet, Wheat, Wrench, type LucideIcon,
+  BookOpen, Bot, CalendarDays, Calculator, Camera, Cpu, History, Leaf, MapPin, Package, Scale, Settings,
+  Sprout, Sun, Tractor, Wallet, Wheat, Wrench, type LucideIcon,
 } from "lucide-react";
 
 type Tab = { to: string; label: string; icon: LucideIcon };
@@ -13,22 +13,19 @@ export const SECTIONS = {
   today:   { to: "/",         label: "Today",    icon: Sun,         title: "Today", tabs: [] as Tab[] },
   plan:    { to: "/plan",     label: "Plan",     icon: CalendarDays, title: "Plan", tabs: [] as Tab[] },
   rover:   { to: "/rover",    label: "Rover",    icon: Bot,         title: "Rover",
-             tabs: [{ to: "/rover", label: "Daily round", icon: Bot }, { to: "/rover/about", label: "What it does", icon: Info },
-                    { to: "/rover/growth", label: "Growth", icon: TrendingUp }, { to: "/rover/sop", label: "SOP", icon: ClipboardList },
+             tabs: [{ to: "/rover", label: "Today", icon: Sprout },
                     { to: "/rover/history", label: "History", icon: History }] },
-  health:  { to: "/crop",     label: "Health",   icon: Camera,      title: "Plant health",
-             tabs: [{ to: "/crop", label: "Check a photo", icon: Camera }, { to: "/leaf-tests", label: "Leaf tests", icon: Leaf },
-                    { to: "/guide", label: "Disease guide", icon: BookOpen },
-                    { to: "/photos", label: "Photo library", icon: Images }] },
+  health:  { to: "/crop",     label: "Health",   icon: Camera,      title: "Tomato Vision & Plant Health",
+             tabs: [{ to: "/crop", label: "Rover Vision Gallery", icon: Camera },
+                    { to: "/guide", label: "Tomato Disease & Treatment Guide", icon: BookOpen }] },
   crops:   { to: "/cycles",   label: "Crops",    icon: Sprout,      title: "My crops", tabs: [] as Tab[] },
-  finance: { to: "/finance",  label: "Finance",  icon: Wallet,      title: "Finance",
-             tabs: [{ to: "/finance", label: "Overview", icon: ChartColumn }, { to: "/costs", label: "Costs", icon: Receipt },
-                    { to: "/harvest", label: "Harvest and sales", icon: Wheat },
-                    { to: "/cop", label: "Cost of production", icon: Calculator },
-                    { to: "/compare", label: "Compare blocks", icon: Scale }] },
+  finance: { to: "/finance",  label: "Finance",  icon: Wallet,      title: "Tomato Unit Economics & Finance",
+             tabs: [{ to: "/finance", label: "Unit Cost & Savings", icon: Calculator },
+                    { to: "/cop", label: "Block Breakdown (G1–G6)", icon: Scale },
+                    { to: "/harvest", label: "Harvest & Revenue", icon: Wheat }] },
   farm:    { to: "/beds",     label: "Farm",     icon: Tractor,     title: "Farm",
              tabs: [{ to: "/beds", label: "Beds & Land", icon: MapPin },
-                    { to: "/stock", label: "Stock", icon: Package },
+                    { to: "/stock", label: "Water & Input Stock", icon: Package },
                     { to: "/equipment", label: "Equipment", icon: Wrench },
                     { to: "/devices", label: "Devices", icon: Cpu },
                     { to: "/settings", label: "Settings", icon: Settings }] },

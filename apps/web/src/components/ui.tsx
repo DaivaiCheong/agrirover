@@ -7,8 +7,8 @@ export const Led = ({ kind, children }: { kind: LedKind; children: ReactNode }) 
   <span className={`led led-${kind}`}><i /><span>{children}</span></span>
 );
 
-export const Tag = ({ kind, children }: { kind?: string; children: ReactNode }) => (
-  <span className={`tag${kind ? ` tag-${kind}` : ""}`}>{children}</span>
+export const Tag = ({ kind, className, children }: { kind?: string; className?: string; children: ReactNode }) => (
+  <span className={`tag${kind ? ` tag-${kind}` : ""}${className ? ` ${className}` : ""}`}>{children}</span>
 );
 
 export const Panel = ({ title, icon: Icon, right, children, pad = true }:
@@ -73,9 +73,15 @@ export const Empty = ({ children, icon: Icon }: { children: ReactNode; icon?: Lu
 );
 
 /** The key figures of a list or record, in one row. */
-export const Kpis = ({ items }: { items: { k: string; v: ReactNode }[] }) => (
+export const Kpis = ({ items }: { items: { k: string; v: ReactNode; d?: ReactNode }[] }) => (
   <div className="erp-summary-banner">
-    {items.map((i) => <div key={i.k} className="erp-summary-item"><span className="k">{i.k}</span><span className="v">{i.v}</span></div>)}
+    {items.map((i) => (
+      <div key={i.k} className="erp-summary-item">
+        <span className="k">{i.k}</span>
+        <span className="v">{i.v}</span>
+        {i.d && <span className="small muted">{i.d}</span>}
+      </div>
+    ))}
   </div>
 );
 

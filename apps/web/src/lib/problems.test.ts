@@ -23,7 +23,7 @@ describe("today's problems", () => {
       [{ id: "low_ec", severity: "warning", title: "Nutrients running low", message: "x", metrics: ["soil_ec"] }])],
       [advice("g2", [["Yellow leaves: low feed"], ["Yellow leaves: low feed"], ["Yellow leaves: expected"]])]);
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ problem: "2 trees hungry: yellow leaves", link: { to: "/crop?zone=g2" } });
+    expect(list[0]).toMatchObject({ problem: "2 plants hungry: yellow leaves", link: { to: "/crop?zone=g2" } });
     expect(list[0].evidence?.value).toBe("0.68");
   });
 

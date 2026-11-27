@@ -1,39 +1,179 @@
+import { useMemo } from "react";
+import { Scale } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Empty, Notice, Panel, Toolbar } from "../components/ui";
+import { SyncBadge } from "../components/SampleNotice";
+import { Empty, Kpis, Panel, Tag } from "../components/ui";
 import { api } from "../lib/api";
-import { num, usd } from "../lib/format";
+import { num } from "../lib/format";
+import { buildDemoTomatoFarm } from "../lib/roverDemo";
+import { buildAllBlockEconomics, usdAndRiel } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
 
 export default function CopSummary() {
-  const { data, error } = useData(async () => Promise.all((await api.cycles()).map((c) => api.cop(c.id))));
-  const rows = data ?? [];
+  const zones = useData(api.zones);
+  const cycles = useData(api.cycles);
+  const conditions = useData(api.conditions);
+  const surveys = useData(api.surveys);
+
+  const previewMode = Boolean((zones.error && zones.data === null) || (cycles.error && cycles.data === null));
+  const demo = useMemo(() => buildDemoTomatoFarm(), []);
+
+  const activeZones = previewMode ? demo.zones : (zones.data ?? demo.zones);
+  const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
+  const activeConds = previewMode ? demo.conditions : (conditions.data ?? demo.conditions);
+  const surveyList = previewMode ? demo.surveys : (surveys.data ?? []);
+
+  const liveRoundIds = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of surveyList) {
+      if ((s.status === "completed" || s.status === "aborted") && !map.has(s.zone)) {
+        map.set(s.zone, s.id);
+      }
+    }
+    return map;
+  }, [surveyList]);
+
+  const roundKey = [...liveRoundIds.values()].join(",");
+  const fetchedRounds = useData(async () => {
+    if (previewMode || !roundKey) return new Map();
+    const pairs = await Promise.all([...liveRoundIds.entries()].map(async ([z, id]) => [z, await api.survey(id)] as const));
+    return new Map(pairs);
+  }, [previewMode, roundKey]);
+
+  const roundsByZone = useMemo(() => {
+    if (previewMode) return demo.roundsByZone;
+    const map = new Map(demo.roundsByZone);
+    fetchedRounds.data?.forEach((v, k) => map.set(k, v));
+    return map;
+  }, [previewMode, demo.roundsByZone, fetchedRounds.data]);
+
+  const { blocks } = useMemo(
+    () =>
+      buildAllBlockEconomics({
+        cycles: activeCycles,
+        zones: activeZones,
+        conditions: activeConds,
+        roundsByZone,
+      }),
+    [activeCycles, activeZones, activeConds, roundsByZone],
+  );
+
+  const totalPlants = blocks.reduce((s, b) => s + b.plantCount, 0);
+  const totalSpentUsd = blocks.reduce((s, b) => s + b.spentToDateUsd, 0);
+  const totalSpentRiel = blocks.reduce((s, b) => s + b.spentToDateRiel, 0);
+  const totalSavedUsd = blocks.reduce((s, b) => s + b.savedTotalUsd, 0);
+  const totalSavedRiel = blocks.reduce((s, b) => s + b.savedTotalRiel, 0);
+  const totalPreventedUsd = blocks.reduce((s, b) => s + b.preventedLossUsd, 0);
+  const totalPreventedRiel = blocks.reduce((s, b) => s + b.preventedLossRiel, 0);
 
   return (
-    <>
-      <Toolbar><a className="btn btn-ghost btn-sm" href={api.copCsvUrl}>Download CSV</a></Toolbar>
-      <main className="main stack">
-        {error && <Notice kind="alert">{error}</Notice>}
-        <Panel title="All cycles" pad={false}>
-          {rows.length === 0 ? <Empty>No crops yet.</Empty> : (
-            <div className="tablewrap"><table className="tbl">
-              <thead><tr><th>Block</th><th>Crop</th><th>Status</th><th className="r">Total cost</th><th className="r">Kg to sell</th>
-                <th className="r">Cost per kg</th><th className="r">Profit</th><th /></tr></thead>
+    <main className="main stack" style={{ paddingTop: 12 }}>
+      <Kpis
+        items={[
+          { k: "Active tomato plants", v: totalPlants, d: `Across ${blocks.filter((b) => b.plantCount > 0).length} growing beds` },
+          { k: "Operation spent to date", v: `$${totalSpentUsd.toFixed(2)}`, d: `~${totalSpentRiel.toLocaleString()} ៛` },
+          { k: "Cycle cost savings", v: `$${totalSavedUsd.toFixed(2)}`, d: `~${totalSavedRiel.toLocaleString()} ៛ vs. traditional` },
+          { k: "Crop loss prevented", v: `$${totalPreventedUsd.toFixed(2)}`, d: `~${totalPreventedRiel.toLocaleString()} ៛` },
+        ]}
+      />
+
+      <Panel
+        title="Block Breakdown (G1–G6)"
+        icon={Scale}
+        pad={false}
+        right={
+          <div className="rv-right">
+            <SyncBadge />
+            <span className="small muted">$0.75 (~3,065 ៛) budget per active tomato plant</span>
+          </div>
+        }
+      >
+        {blocks.length === 0 ? (
+          <Empty>No tomato blocks found.</Empty>
+        ) : (
+          <div className="tablewrap">
+            <table className="tbl fold">
+              <thead>
+                <tr>
+                  <th>Block &amp; Variety</th>
+                  <th className="r">Plants</th>
+                  <th>Stage</th>
+                  <th>Health Alerts</th>
+                  <th className="r">Water Today</th>
+                  <th className="r">Spent / Budget</th>
+                  <th className="r">Saved vs Trad.</th>
+                  <th className="r">Proj. Profit</th>
+                  <th />
+                </tr>
+              </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.cycle.id}>
-                    <td><b>{r.cycle.bedLabel}</b></td><td>{r.cycle.cropName}</td>
-                    <td>{r.open ? "Open" : <span className="muted">Closed</span>}</td>
-                    <td className="r">{usd(r.totalCostUsd)}</td><td className="r">{num(r.kgMarketable, 1)}</td>
-                    <td className="r"><b>{r.copPerKg === null ? "no harvest" : usd(r.copPerKg)}</b></td>
-                    <td className="r">{r.marginUsd === null ? "—" : usd(r.marginUsd)}</td>
-                    <td className="act"><Link className="linkbtn" to={`/cycles/${r.cycle.id}`}>Details</Link></td>
+                {blocks.map((b) => (
+                  <tr key={b.zone}>
+                    <td>
+                      <b>{b.label}</b>
+                      <div className="small muted">{b.variety} · {num(b.areaM2, 0)} m²</div>
+                    </td>
+                    <td data-label="Plants" className="r nowrap">
+                      {b.plantCount > 0 ? <b>{b.plantCount}</b> : <span className="muted">0 (ready)</span>}
+                    </td>
+                    <td data-label="Stage">
+                      {b.day > 0 ? (
+                        <>Day {b.day}<div className="small muted">{b.stageTitle}</div></>
+                      ) : (
+                        <span className="muted">Prepared bed</span>
+                      )}
+                    </td>
+                    <td data-label="Health Alerts" className="nowrap">
+                      {b.plantCount === 0 ? (
+                        <Tag>Idle bed</Tag>
+                      ) : b.visionAlertCount > 0 ? (
+                        <Tag kind="warn">{b.visionAlertCount} vision · {b.soilAttentionCount} total</Tag>
+                      ) : (
+                        <Tag kind="ok">Optimal</Tag>
+                      )}
+                    </td>
+                    <td data-label="Water Today" className="r nowrap">
+                      {b.plantCount > 0 ? `${num(b.waterTodayL, 0)} L` : "—"}
+                    </td>
+                    <td data-label="Spent / Budget" className="r nowrap">
+                      {b.plantCount > 0 ? (
+                        <>
+                          <b>${b.spentToDateUsd.toFixed(2)}</b> / ${b.budgetUsd.toFixed(2)}
+                          <div className="small muted">~{b.spentToDateRiel.toLocaleString()} ៛</div>
+                        </>
+                      ) : (
+                        <span className="muted">$0.00</span>
+                      )}
+                    </td>
+                    <td data-label="Saved vs Trad." className="r nowrap">
+                      {b.plantCount > 0 ? (
+                        <b className="rv-save-num">{usdAndRiel(b.savedTotalUsd, b.savedTotalRiel)}</b>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td data-label="Proj. Profit" className="r nowrap">
+                      {b.plantCount > 0 ? (
+                        <>
+                          <b>${b.projectedProfitUsd.toFixed(2)}</b>
+                          <div className="small muted">~{b.projectedProfitRiel.toLocaleString()} ៛</div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="act nowrap">
+                      {b.plantCount > 0 && (
+                        <Link className="linkbtn" to={`/cycles/${b.cycleId}`}>Details</Link>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
-            </table></div>
-          )}
-        </Panel>
-      </main>
-    </>
+            </table>
+          </div>
+        )}
+      </Panel>
+    </main>
   );
 }

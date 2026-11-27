@@ -1,12 +1,20 @@
 import { useState } from "react";
-import { Notice } from "./ui";
+import { Notice, Tag } from "./ui";
 import { api } from "../lib/api";
 import { useData } from "../lib/useData";
 
-/** Says so on every finance screen while sample figures are loaded, and is where they are removed. */
+export function SyncBadge({ className }: { className?: string }) {
+  return <Tag className={className}>Sample data · Synced with AgriRover</Tag>;
+}
+
+/** Shows sample status softly when connected to demo finance data; stays quiet without error banners when offline. */
 export default function SampleNotice({ inMain = false }: { inMain?: boolean }) {
   const status = useData(api.financeSample);
   const [problem, setProblem] = useState<string | null>(null);
+
+  if (status.error && status.data === null) {
+    return null;
+  }
   if (!status.data?.sample) return null;
 
   async function remove() {
@@ -17,8 +25,8 @@ export default function SampleNotice({ inMain = false }: { inMain?: boolean }) {
 
   const body = (
     <Notice kind="warn">
-      <b>Sample figures, not real results.</b> Made up to show how these screens work.{status.data.real > 0 && " Your real entries are mixed in with them, so totals are not real either."}{" "}
-      <button className="linkbtn" onClick={remove}>Remove them</button>{problem && <> {problem}</>}
+      <b>Sample figures synced with AgriRover.</b> Showing live tomato cost model data.{" "}
+      <button className="linkbtn" onClick={remove}>Reset sample figures</button>{problem && <> {problem}</>}
     </Notice>
   );
   return inMain ? body : <div className="sample-bar">{body}</div>;

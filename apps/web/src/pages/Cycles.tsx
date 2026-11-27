@@ -1,124 +1,190 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Calculator, Pencil, Plus, Sprout, Square, X } from "lucide-react";
-import { Empty, Notice, PageHead, Panel, Tag } from "../components/ui";
-import { api, loadProblem, type Cycle } from "../lib/api";
-import { dayLabel, dayMonthYear, suggestedArea } from "../lib/format";
-import { useData } from "../lib/useData";
-import RowMenu from "../components/RowMenu";
+import { ArrowRight, Bot, Camera, Calculator, Plus, Sprout } from "lucide-react";
+import { Link } from "react-router-dom";
 import AddCropModal from "../components/AddCropModal";
+import { SyncBadge } from "../components/SampleNotice";
+import { Kpis, PageHead, Panel, Tag } from "../components/ui";
+import { api } from "../lib/api";
+import { num } from "../lib/format";
+import { buildDemoTomatoFarm } from "../lib/roverDemo";
+import { buildAllBlockEconomics, usdAndRiel } from "../lib/tomatoFinance";
+import { useData } from "../lib/useData";
 
 export default function Cycles() {
   const [qs, setQs] = useSearchParams();
   const [showAdd, setShowAdd] = useState(qs.get("add") === "true");
   const cycles = useData(api.cycles);
-  const crops = useData(api.crops);
+  const zones = useData(api.zones);
+  const conditions = useData(api.conditions);
+  const surveys = useData(api.surveys);
 
-  const [msg, setMsg] = useState<{ kind: "ok" | "alert"; text: string } | null>(null);
+  const demo = useMemo(() => buildDemoTomatoFarm(), []);
+  const previewMode = Boolean((cycles.error && cycles.data === null) || (zones.error && zones.data === null));
 
-  // fix the plant count and area of a crop that is already running
-  const [editing, setEditing] = useState<string | null>(null);
-  const [ePlants, setEPlants] = useState("");
-  const [eArea, setEArea] = useState("");
-  const [areaTouched, setAreaTouched] = useState(false);
+  const activeZones = previewMode ? demo.zones : (zones.data ?? demo.zones);
+  const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
+  const activeConds = previewMode ? demo.conditions : (conditions.data ?? demo.conditions);
+  const surveyList = previewMode ? demo.surveys : (surveys.data ?? []);
 
-  const perPlant = (c: Cycle) => (crops.data ?? []).find((x) => x.slug === c.crop)?.defaultAreaPerPlantM2 ?? 0.5;
-
-  function startEdit(c: Cycle) {
-    setEditing(c.id); setAreaTouched(c.areaM2 !== null);
-    setEPlants(c.plantCount?.toString() ?? ""); setEArea(c.areaM2?.toString() ?? "");
-  }
-
-  // typing the plant count suggests the bed area until the farmer types an area of their own
-  function plantsChanged(c: Cycle, v: string) {
-    setEPlants(v);
-    const n = Number(v);
-    if (!areaTouched && Number.isInteger(n) && n > 0) setEArea(String(suggestedArea(n, perPlant(c))));
-  }
-
-  async function end(id: string, label: string) {
-    if (!window.confirm(`End the crop on ${label} today? Its costs and harvest stay, and you can still read its cost report.`)) return;
-    try { await api.closeCycle(id); cycles.reload(); } catch (err) { setMsg({ kind: "alert", text: (err as Error).message }); }
-  }
-
-  async function saveEdit(id: string) {
-    try {
-      await api.updateCycle(id, { plantCount: ePlants === "" ? undefined : Number(ePlants),
-                                  areaM2: eArea === "" ? undefined : Number(eArea) });
-      setEditing(null);
-      cycles.reload();
-    } catch (err) {
-      setMsg({ kind: "alert", text: (err as Error).message });
+  const liveRoundIds = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of surveyList) {
+      if ((s.status === "completed" || s.status === "aborted") && !map.has(s.zone)) {
+        map.set(s.zone, s.id);
+      }
     }
-  }
+    return map;
+  }, [surveyList]);
 
-  const rows = cycles.data ?? [];
+  const roundKey = [...liveRoundIds.values()].join(",");
+  const fetchedRounds = useData(async () => {
+    if (previewMode || !roundKey) return new Map();
+    const pairs = await Promise.all([...liveRoundIds.entries()].map(async ([z, id]) => [z, await api.survey(id)] as const));
+    return new Map(pairs);
+  }, [previewMode, roundKey]);
+
+  const roundsByZone = useMemo(() => {
+    if (previewMode) return demo.roundsByZone;
+    const map = new Map(demo.roundsByZone);
+    fetchedRounds.data?.forEach((v, k) => map.set(k, v));
+    return map;
+  }, [previewMode, demo.roundsByZone, fetchedRounds.data]);
+
+  const { blocks } = useMemo(
+    () =>
+      buildAllBlockEconomics({
+        cycles: activeCycles,
+        zones: activeZones,
+        conditions: activeConds,
+        roundsByZone,
+      }),
+    [activeCycles, activeZones, activeConds, roundsByZone],
+  );
+
+  const growing = blocks.filter((b) => b.plantCount > 0);
+  const totalPlants = growing.reduce((s, b) => s + b.plantCount, 0);
+  const totalAlerts = growing.reduce((s, b) => s + b.visionAlertCount, 0);
+  const totalSpentUsd = growing.reduce((s, b) => s + b.spentToDateUsd, 0);
+  const totalBudgetUsd = growing.reduce((s, b) => s + b.budgetUsd, 0);
 
   return (
     <>
-      <PageHead icon={Sprout} title="My crops"
-                actions={<button className="btn btn-sm" onClick={() => setShowAdd(true)}><Plus size={16} aria-hidden />Start a cycle</button>} />
+      <PageHead
+        icon={Sprout}
+        title="Tomato Crop Cycles"
+        sub="Active tomato plantings synced with Rover soil probes, Health vision alerts & cycle budgets"
+        actions={
+          <>
+            {previewMode && <SyncBadge />}
+            <button className="btn btn-sm" onClick={() => setShowAdd(true)}>
+              <Plus size={16} aria-hidden />Start a tomato cycle
+            </button>
+          </>
+        }
+      />
       <main className="main stack">
-        {cycles.error && <Notice kind="alert">{loadProblem(cycles.error)}</Notice>}
-        {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
+        <Kpis
+          items={[
+            { k: "Active tomato blocks", v: `${growing.length} of ${blocks.length}`, d: `${blocks.length - growing.length} ready for next planting` },
+            { k: "Total active tomato plants", v: totalPlants, d: "Scanned daily by AgriRover" },
+            { k: "Live AI vision alerts", v: totalAlerts, d: "Synced from Health gallery" },
+            { k: "Operation spent / budget", v: `$${totalSpentUsd.toFixed(2)}`, d: `of $${totalBudgetUsd.toFixed(2)} target ($0.75/plant)` },
+          ]}
+        />
 
-        <Panel pad={false}>
-          {cycles.data === null ? (
-            <p className="panel-pad muted">{cycles.error ? "Could not be loaded just now." : "Loading…"}</p>
-          ) : rows.length === 0 ? (
-            <Empty icon={Sprout}>
-              Nothing is growing yet.
-              <button className="btn btn-sm" onClick={() => setShowAdd(true)}><Plus size={16} aria-hidden />Start a guava cycle</button>
-            </Empty>
-          ) : (
-            <div className="tablewrap">
-              <table className="tbl crops fold">
-                <thead><tr><th>Bed</th><th>Crop</th><th className="nowrap">Cycle started</th><th>Status</th><th className="r nowrap">Trees</th>
-                  <th className="r nowrap">Area m²</th><th /></tr></thead>
-                <tbody>
-                  {rows.map((c) => (
-                    <tr key={c.id}>
-                      <td><b>{c.bedLabel}</b>{c.trialArm && <> <Tag>{c.trialArm}</Tag></>}</td>
-                      <td data-label="Crop">{c.cropName}{c.variety ? ` (${c.variety})` : ""}
-                        {c.setupLabel && <div className="mono-sm muted">{c.setupLabel}</div>}</td>
-                      <td data-label="Started" className="nowrap">{dayMonthYear(c.plantedOn)}</td>
-                      <td data-label="Status" className="nowrap">{c.status === "active" ? dayLabel(c) : <span className="muted">Closed {c.endedOn}</span>}</td>
-                      <td data-label="Trees" className="r nowrap">{editing === c.id
-                        ? <input className="cell-input" type="number" min={1} value={ePlants} autoFocus
-                                 onChange={(e) => plantsChanged(c, e.target.value)} aria-label="Trees" />
-                        : c.plantCount ?? <Tag kind="warn">Add trees</Tag>}</td>
-                      <td data-label="Area m²" className="r nowrap">{editing === c.id
-                        ? <input className="cell-input" type="number" min={0} step="any" value={eArea}
-                                 onChange={(e) => { setEArea(e.target.value); setAreaTouched(true); }} aria-label="Area" />
-                        : c.areaM2 ?? <span className="muted">—</span>}</td>
-                      <td className="act">
-                        {/* while editing, only Save and Cancel: nothing else can be pressed by mistake */}
-                        {editing === c.id ? (
-                          <div className="rowactions">
-                            <button className="btn btn-sm" onClick={() => saveEdit(c.id)}>Save</button>
-                            <button className="btn btn-sm btn-ghost" onClick={() => setEditing(null)}><X size={15} aria-hidden />Cancel</button>
-                          </div>
-                        ) : (
-                          <RowMenu items={[
-                            { label: "Trees and area", icon: Pencil, onSelect: () => startEdit(c) },
-                            { label: "Open this cycle", icon: Sprout, to: `/cycles/${c.id}/orchard` },
-                            { label: "Cost report", icon: Calculator, to: `/cycles/${c.id}` },
-                            c.status === "active" && "separator",
-                            c.status === "active" && { label: "End crop", icon: Square, danger: true, onSelect: () => end(c.id, c.bedLabel) },
-                          ]} />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
+        <div className="grid g2">
+          {blocks.map((b) => {
+            const pct = b.budgetUsd > 0 ? Math.min(100, Math.round((b.spentToDateUsd / b.budgetUsd) * 100)) : 0;
+            const hasAlerts = b.visionAlertCount > 0 || b.soilAttentionCount > 0;
+            return (
+              <Panel
+                key={b.zone}
+                title={b.label}
+                right={
+                  b.plantCount === 0 ? (
+                    <Tag>Ready · 0 plants</Tag>
+                  ) : hasAlerts ? (
+                    <Tag kind="warn">
+                      {b.visionAlertCount} vision alert{b.visionAlertCount === 1 ? "" : "s"}
+                      {b.soilAttentionCount > b.visionAlertCount ? ` · ${b.soilAttentionCount - b.visionAlertCount} soil` : ""}
+                    </Tag>
+                  ) : (
+                    <Tag kind="ok">Optimal health</Tag>
+                  )
+                }
+              >
+                <div className="stack">
+                  <div className="rv-cycle-meta">
+                    <div>
+                      <b>{b.variety}</b>
+                      <div className="small muted">
+                        {b.plantCount > 0
+                          ? `Day ${b.day} · ${b.stageTitle}`
+                          : "Bed cleared & soil rested · Ready for transplanting"}
+                      </div>
+                    </div>
+                    <div className="r">
+                      <b>{b.plantCount} tomato plants</b>
+                      <div className="small muted">{num(b.areaM2, 0)} m² bed</div>
+                    </div>
+                  </div>
+
+                  {b.plantCount > 0 ? (
+                    <>
+                      <div className="rv-budget-box">
+                        <div className="rv-budget-head small">
+                          <span>Operation cost spent vs. budget</span>
+                          <b>
+                            {usdAndRiel(b.spentToDateUsd, b.spentToDateRiel)} / ${b.budgetUsd.toFixed(2)}
+                          </b>
+                        </div>
+                        <div className="bar" aria-label={`${pct}% of cycle budget spent`}>
+                          <i style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="rv-budget-foot small muted">
+                          <span>Saved {usdAndRiel(b.savedTotalUsd, b.savedTotalRiel)} vs. traditional</span>
+                          <span>Expected yield: {num(b.expectedYieldKg, 1)} kg</span>
+                        </div>
+                      </div>
+
+                      <div className="rv-cycle-actions">
+                        <Link className="btn btn-sm btn-ghost" to="/rover">
+                          <Bot size={14} aria-hidden />Rover 3D
+                        </Link>
+                        <Link className="btn btn-sm btn-ghost" to="/crop">
+                          <Camera size={14} aria-hidden />Health Vision
+                        </Link>
+                        <Link className="linkbtn small rowflex" style={{ gap: 4, marginLeft: "auto" }} to={`/cycles/${b.cycleId}`}>
+                          <Calculator size={13} aria-hidden />Cost report <ArrowRight size={13} aria-hidden />
+                        </Link>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rv-cycle-actions">
+                      <span className="small muted">Standard tomato budget: $0.75 (~3,065 ៛) / plant</span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        style={{ marginLeft: "auto" }}
+                        onClick={() => setShowAdd(true)}
+                      >
+                        <Plus size={14} aria-hidden />Plant tomato block
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            );
+          })}
+        </div>
       </main>
       <AddCropModal
         isOpen={showAdd}
-        onClose={() => { setShowAdd(false); setQs({}, { replace: true }); }}
+        onClose={() => {
+          setShowAdd(false);
+          setQs({}, { replace: true });
+        }}
         onAdded={() => cycles.reload()}
       />
     </>

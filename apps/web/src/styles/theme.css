@@ -1014,8 +1014,225 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .hf-tree .ts-grid{gap:6px}
 .hf-tree .ts-v{font-size:15px}
 @media (max-width:900px){.hf{grid-template-columns:minmax(0,1fr)}}
-/* ---------- rover: the block and the round on the first screen ---------- */
+/* ---------- rover: 3D CAD land view, action bar, soil table & detail modal ---------- */
 .rv-blocks{display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line)}
+.rv-chip-warn{color:var(--warn);font-weight:700}
+.rv-action-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:8px 14px;border-bottom:1px solid var(--line);background:var(--surface-alt)}
+.rv-action-btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rv-filter-count{display:inline-block;margin-left:3px;font-variant-numeric:tabular-nums;color:var(--ink-muted)}
+.rv-count-warn{color:var(--warn);font-weight:700}
 .rv-round-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .rv-options{margin-top:8px}
 .rv-map{display:flex;flex-direction:column;justify-content:space-between}
+
+.cad-wrap{position:relative;width:100%;overflow:hidden;background:#f4f7f2}
+.cad-loading{display:grid;place-items:center;color:var(--ink-muted);font-size:13.5px;background:#f4f7f2}
+.cad-host{position:absolute;inset:0}
+.cad-host canvas{display:block}
+.cad-labels{position:absolute;inset:0;cursor:grab;touch-action:pan-y}
+.cad-labels:active{cursor:grabbing}
+.cad-row-tag{font-size:11px;font-weight:700;color:var(--ink);background:rgba(255,255,255,.92);
+  border:1px solid var(--line-strong);border-radius:4px;padding:1px 6px;pointer-events:none;white-space:nowrap}
+.cad-dim-lbl{font-size:10.5px;font-weight:600;color:var(--brand-deep);background:rgba(244,247,242,.92);
+  border:1px solid var(--line);border-radius:4px;padding:1px 5px;pointer-events:none;font-variant-numeric:tabular-nums}
+.cad-badges{display:flex;gap:4px;align-items:center}
+.cad-bang{pointer-events:auto;cursor:pointer;width:22px;height:22px;border-radius:50%;border:2px solid #fff;
+  background:var(--warn);color:#fff;font-weight:800;font-size:13px;line-height:1;display:grid;place-items:center;
+  box-shadow:0 1px 4px rgba(0,0,0,.22)}
+.cad-bang:hover{transform:scale(1.12)}
+.cad-sel-pill{font-size:11px;font-weight:700;background:var(--brand-deep);color:#fff;
+  border-radius:var(--r-pill);padding:2px 8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.18)}
+
+.cad-hud-top-left{position:absolute;left:12px;top:10px;z-index:2;pointer-events:none}
+.cad-pill{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.92);border:1px solid var(--line);
+  border-radius:var(--r-pill);padding:4px 11px;font-size:12px;color:var(--ink)}
+.cad-compass{position:absolute;right:12px;top:10px;z-index:2;background:none;border:0;padding:0;cursor:pointer;border-radius:50%}
+.cad-compass:hover circle{stroke:var(--brand)}
+.cad-legend{position:absolute;left:12px;bottom:10px;z-index:2;display:flex;gap:12px;flex-wrap:wrap;
+  font-size:11.5px;color:var(--ink-muted);background:rgba(255,255,255,.92);border:1px solid var(--line);
+  border-radius:var(--r-pill);padding:4px 11px;pointer-events:none}
+.cad-legend span{display:inline-flex;align-items:center;gap:5px}
+.cad-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.cad-dot-ok{background:#2e7d4f}
+.cad-dot-warn{background:#d98a24}
+.cad-dot-gray{background:#9aa49e}
+
+.cad-hud-controls{position:absolute;right:12px;bottom:10px;z-index:2;display:flex;align-items:center;gap:6px}
+.cad-hint{font-size:11px;color:var(--ink-muted);background:rgba(255,255,255,.9);border:1px solid var(--line);
+  border-radius:var(--r-pill);padding:4px 10px;pointer-events:none}
+.cad-ctrl-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:30px;height:30px;padding:0 8px;
+  border:1px solid var(--line-strong);border-radius:var(--r-sm);background:rgba(255,255,255,.95);
+  color:var(--ink);font-size:12px;font-weight:600;cursor:pointer}
+.cad-ctrl-btn:hover{background:var(--surface-alt);border-color:var(--brand);color:var(--brand-deep)}
+.cad-ctrl-reset{padding:0 10px}
+
+.cad-svg-stage{width:100%;height:100%;display:grid;place-items:center;overflow:hidden;padding:12px}
+.cad-svg{max-width:100%;max-height:100%;transition:transform .15s ease;transform-origin:center}
+.cad-svg-row{font-size:11px;font-weight:700;fill:var(--ink-muted);font-family:var(--font)}
+.cad-svg-cell{font-size:9px;font-weight:700;fill:var(--ink);font-family:var(--font)}
+.cad-svg-dim{font-size:10px;font-weight:600;fill:var(--brand-deep);font-family:var(--font)}
+
+.soil-tbl td{vertical-align:middle}
+.soil-tbl tr.picked td{background:var(--brand-soft)}
+.soil-tbl tr.picked td:first-child{box-shadow:inset 3px 0 0 var(--brand)}
+.soil-plant-cell{display:flex;align-items:center;gap:9px}
+.soil-dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px;display:inline-block}
+.soil-dot-ok{background:var(--ok)}
+.soil-dot-warn{background:var(--warn)}
+.soil-dot-gray{background:var(--idle)}
+.soil-val-warn{color:var(--warn);font-weight:700}
+
+.psm-top{display:flex;flex-direction:column;gap:8px}
+.psm-status-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.psm-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.psm-cam-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.psm-cam-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--ink-muted)}
+.psm-cam-meta b{color:var(--ink)}
+.psm-photos{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+
+/* ---------- compact, light-surface plot grid card (Round plot map / 2D Map) ---------- */
+.pm-grid-wrap{padding:14px;background:var(--surface);overflow-x:auto}
+.pm-rows{display:flex;flex-direction:column;gap:8px;min-width:max-content}
+.pm-row{display:flex;align-items:center;gap:10px}
+.pm-row-lbl{width:26px;flex:0 0 26px;font-size:11.5px;font-weight:700;color:var(--ink-muted);text-align:right}
+.pm-cells{display:grid;gap:8px;flex:1}
+.pm-card{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:var(--r);border:1px solid var(--line);
+  background:var(--surface);text-align:left;font:inherit;color:var(--ink);transition:border-color .15s,background .15s}
+.pm-pickable{cursor:pointer}
+.pm-pickable:hover{border-color:var(--brand);background:var(--surface-alt)}
+.pm-ok{border-color:#c6decb;background:#f7fbf8}
+.pm-warn{border-color:#e5c285;background:#fffaf0}
+.pm-empty{border-color:var(--line);background:var(--surface-alt);color:var(--ink-muted)}
+.pm-pending{border-style:dashed;border-color:var(--line-strong);background:var(--surface);color:var(--ink-muted)}
+.pm-picked{border-color:var(--brand);background:var(--brand-soft);box-shadow:inset 0 0 0 1px var(--brand)}
+.pm-at{box-shadow:0 0 0 2px color-mix(in srgb,var(--brand) 30%,transparent)}
+.pm-card-top{display:flex;align-items:center;gap:5px}
+.pm-dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px;background:var(--idle)}
+.pm-ok .pm-dot{background:var(--ok)}
+.pm-warn .pm-dot{background:var(--warn)}
+.pm-name{font-size:12.5px;font-weight:700;color:var(--ink);white-space:nowrap}
+.pm-alert{margin-left:auto;width:16px;height:16px;border-radius:50%;background:var(--warn-soft);color:var(--warn);
+  border:1px solid #e5c285;font-size:10.5px;font-weight:800;display:grid;place-items:center;flex:0 0 16px}
+.pm-photo-dot{margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--ink)}
+.pm-meta{font-size:12px;color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pm-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--ink-muted)}
+.pm-legend span{display:inline-flex;align-items:center;gap:6px}
+.pm-sw{width:14px;height:14px;border-radius:4px;display:inline-grid;place-items:center;font-style:normal;font-size:10px;font-weight:800}
+.pm-sw-ok{background:#f7fbf8;border:1px solid #c6decb}
+.pm-sw-warn{background:#fffaf0;border:1px solid #e5c285;color:var(--warn)}
+.pm-sw-empty{background:var(--surface-alt);border:1px solid var(--line)}
+.pm-sw-pending{background:var(--surface);border:1px dashed var(--line-strong)}
+
+/* ---------- AI Vision photo frame, bounding boxes & diagnosis summary ---------- */
+.rv-vision-grid{display:grid;grid-template-columns:280px minmax(0,1fr);gap:14px;align-items:start}
+.rv-photo-frame{position:relative;width:100%;aspect-ratio:320 / 210;border-radius:var(--r);overflow:hidden;
+  border:1px solid var(--line-strong);background:#e8efe4}
+.rv-photo-compact{aspect-ratio:16 / 10}
+.rv-cam-svg,.rv-cam-img{display:block;width:100%;height:100%;object-fit:cover}
+.rv-box-layer{position:absolute;inset:0;pointer-events:none}
+.rv-box{position:absolute;border-radius:3px;border:1.5px solid var(--ok)}
+.rv-box-foliage{border-color:rgba(46,125,79,.75);background:rgba(46,125,79,.05)}
+.rv-box-stem{border-color:rgba(88,104,94,.7);border-style:dashed;background:transparent}
+.rv-box-fruit{border-color:rgba(13,148,136,.85);background:rgba(13,148,136,.08)}
+.rv-box-flower{border-color:rgba(37,99,168,.85);background:rgba(37,99,168,.08)}
+.rv-box-issue{border-color:rgba(217,138,36,.95);background:rgba(217,138,36,.12);box-shadow:0 0 0 1px rgba(255,255,255,.55)}
+.rv-corner{position:absolute;width:7px;height:7px;border-color:inherit;border-style:solid;border-width:0}
+.rv-c-tl{left:-2px;top:-2px;border-top-width:2.5px;border-left-width:2.5px}
+.rv-c-tr{right:-2px;top:-2px;border-top-width:2.5px;border-right-width:2.5px}
+.rv-c-bl{left:-2px;bottom:-2px;border-bottom-width:2.5px;border-left-width:2.5px}
+.rv-c-br{right:-2px;bottom:-2px;border-bottom-width:2.5px;border-right-width:2.5px}
+.rv-box-lbl{position:absolute;left:-1px;top:-17px;padding:0 5px;border-radius:3px;font-size:10px;font-weight:700;
+  line-height:15px;white-space:nowrap;color:#fff;background:#2e7d4f;max-width:calc(100% + 90px);overflow:hidden;text-overflow:ellipsis}
+.rv-box-lbl.rv-lbl-right{left:auto;right:-1px}
+.rv-box-lbl.rv-lbl-bottom{top:auto;bottom:-17px}
+.rv-photo-compact .rv-box-lbl{font-size:9px;line-height:14px}
+.rv-box-stem .rv-box-lbl{background:#58685e}
+.rv-box-fruit .rv-box-lbl{background:#0d9488}
+.rv-box-flower .rv-box-lbl{background:#2563a8}
+.rv-box-issue .rv-box-lbl{background:#c47918}
+.rv-cam-hud{position:absolute;left:6px;right:6px;bottom:6px;display:flex;justify-content:space-between;gap:6px;
+  font-size:10px;font-weight:700;color:#fff;pointer-events:none}
+.rv-cam-hud span{background:rgba(23,38,29,.68);padding:1px 6px;border-radius:4px}
+
+.rv-vision-summary{display:grid;gap:8px;align-content:start}
+.rv-diag-item{display:flex;flex-direction:column;gap:1px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.rv-diag-val{font-size:13.5px;color:var(--ink)}
+.rv-diag-warn{color:var(--warn)}
+.rv-diag-time{margin-top:2px}
+
+.rv-hist-photos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:12px 14px}
+.rv-hist-card{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--line);
+  border-radius:var(--r);background:var(--surface-alt)}
+.rv-hist-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;font-size:12.5px}
+.rv-hist-head .tag{white-space:normal;max-width:100%}
+.rv-hist-foot{display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap}
+
+@media (max-width:900px){
+  .rv-hist-photos{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  .rv-vision-grid{grid-template-columns:1fr}
+  .rv-hist-photos{grid-template-columns:1fr}
+}
+
+/* ---------- Recommended care, History round modal, Health gallery & disease guide ---------- */
+.rv-care-card{border-color:#e5c285;background:#fffcf6}
+.rv-care-body{display:grid;gap:10px}
+.rv-care-diag{padding:8px 10px;border-radius:var(--r-sm);background:#fff;border:1px solid #ecd4a4;display:grid;gap:2px}
+.rv-care-diag p{margin:0;color:var(--ink)}
+.rv-care-list{margin:3px 0 0 16px;display:grid;gap:3px;color:var(--ink)}
+.rv-step-list{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:7px}
+.rv-step-item{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border-radius:var(--r-sm);background:#fff;border:1px solid var(--line)}
+.rv-step-badge{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:1px 7px;border-radius:4px;
+  font-size:11px;font-weight:700;background:#e8f3eb;color:var(--brand);border:1px solid #c3dccb;margin-top:1px}
+.rv-step-copy{flex:1 1 auto;color:var(--ink);line-height:1.45}
+.rv-round-captures{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+
+.rv-gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;padding:14px}
+.rv-gallery-card{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--line);border-radius:var(--r);
+  background:var(--surface);text-align:left;font:inherit;color:var(--ink);cursor:pointer;transition:border-color .15s,background .15s}
+.rv-gallery-card:hover{border-color:var(--brand);background:var(--surface-alt)}
+.rv-gallery-alert{border-color:#e5c285;background:#fffdf8}
+.rv-gallery-head{display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px}
+.rv-gallery-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.rv-gallery-note{color:var(--warn);font-weight:600}
+
+.rv-guide-list{display:grid;gap:12px;padding:14px}
+.rv-guide-card{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:14px 16px;display:grid;gap:10px}
+.rv-guide-card-focus{border-color:var(--brand);box-shadow:0 0 0 2px rgba(46,125,79,.22);background:#fbfefb}
+.rv-guide-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.rv-guide-head h3{font-size:15.5px;font-weight:700;color:var(--ink)}
+.rv-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.rv-guide-steps{display:grid;gap:4px}
+.rv-guide-prev{padding:8px 10px;border-radius:var(--r-sm);background:var(--surface-alt);border:1px solid var(--line);color:var(--ink-muted)}
+.rv-guide-prev b{color:var(--ink)}
+
+/* ---------- Finance unit optimizer, Crops cycle cards & Today alerts ---------- */
+.rv-save-num{color:var(--brand)}
+.rv-total-row{background:var(--surface-alt)}
+.rv-fin-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.rv-profit-tile{border-color:#c3dccb;background:#f4fbf6}
+.rv-loss-banner{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;
+  padding:12px;border-radius:var(--r-sm);background:#fffcf6;border:1px solid #e5c285}
+.rv-loss-val{font-size:20px;font-weight:700;color:var(--ink);margin:2px 0}
+.rv-alert-chips{display:flex;flex-wrap:wrap;gap:8px}
+.rv-alert-chip{display:inline-flex;flex-direction:column;gap:1px;padding:6px 10px;border-radius:var(--r-sm);
+  border:1px solid #e5c285;background:#fffdf8;text-decoration:none;color:var(--ink);font-size:12px}
+.rv-alert-chip:hover{border-color:var(--brand);background:var(--surface-alt)}
+.rv-alert-chip span{color:var(--warn);font-weight:600}
+.rv-cycle-meta{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.rv-budget-box{display:grid;gap:6px;padding:10px;border-radius:var(--r-sm);background:var(--surface-alt);border:1px solid var(--line)}
+.rv-budget-head,.rv-budget-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.rv-cycle-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+@media (max-width:640px){
+  .rv-guide-grid{grid-template-columns:1fr}
+  .rv-fin-metrics{grid-template-columns:1fr}
+}
+
+@media (max-width:640px){
+  .cad-hint{display:none}
+  .cad-legend{max-width:calc(100% - 170px);gap:8px;font-size:10.5px}
+  .psm-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

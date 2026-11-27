@@ -1,237 +1,127 @@
-import { useState } from "react";
+import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Bot, Calculator, Sprout } from "lucide-react";
+import { ArrowLeft, Bot, Calculator, Camera, Sprout } from "lucide-react";
 import EnvRibbon from "../components/EnvRibbon";
-import { DoneNote, OrchardJobs, StageStrip, type LastDone } from "../components/Orchard";
-import { Kpis, More, Notice, PageHead, Panel, Tag } from "../components/ui";
-import { api, type OrchardCycle as View } from "../lib/api";
-import { trim } from "../lib/conditions";
-import { dayMonth, dayMonthYear, litres, num, riel, usd } from "../lib/format";
+import { SyncBadge } from "../components/SampleNotice";
+import { Kpis, PageHead, Panel, Tag } from "../components/ui";
+import { api } from "../lib/api";
+import { litres, num } from "../lib/format";
+import { buildDemoTomatoFarm } from "../lib/roverDemo";
+import { buildAllBlockEconomics, usdAndRiel } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
-import { ago } from "../lib/usePoll";
 
-type TabId = "jobs" | "trees" | "targets" | "feed" | "forecast" | "questions";
-
-const range = (r: [number, number] | null, unit = "") => (r ? `${trim(r[0])}${r[0] === r[1] ? "" : `–${trim(r[1])}`}${unit}` : "—");
-
-/** The questions the document leaves open that touch this tab: a pointer, not a paragraph. */
-function Open({ ns, go }: { ns: number[]; go: () => void }) {
-  return <button type="button" className="linkbtn small" onClick={go}>Open questions {ns.join(", ")}</button>;
-}
-
-function Targets({ v, go }: { v: View; go: () => void }) {
-  return (
-    <div className="stack">
-      <Panel title="By stage" pad={false} right={<Open ns={[1, 2]} go={go} />}>
-        <div className="tablewrap">
-          <table className="tbl">
-            <thead><tr><th>Stage</th><th className="r">Days</th><th className="r">Moisture %</th><th className="r">EC mS/cm</th><th className="r">% of ETc</th><th className="r">Kc</th></tr></thead>
-            <tbody>
-              {v.stages.map((s) => (
-                <tr key={s.key} className={s.n === v.stage.n ? "picked" : ""}>
-                  <td><b>{s.title}</b></td>
-                  <td className="r nowrap">{s.firstDay}–{s.lastDay}</td>
-                  <td className="r">{range(s.moisture)}</td>
-                  <td className="r">{range(s.ec)}</td>
-                  <td className="r">{s.etcPct ? range(s.etcPct) : "None"}</td>
-                  <td className="r">{s.kc ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-      <Panel title="By reading" pad={false} right={<Open ns={[6, 10]} go={go} />}>
-        <div className="tablewrap">
-          <table className="tbl">
-            <thead><tr><th>Reading</th><th>Target</th><th>Critical</th></tr></thead>
-            <tbody>
-              {v.rules.map((r) => <tr key={r.label}><td><More label={<b>{r.label}</b>}>{r.note}</More></td><td>{r.target}</td><td>{r.critical}</td></tr>)}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
-function Fertigation({ v }: { v: View }) {
-  const f = v.fertigation, feed = v.advice?.feed;
-  const dose = feed?.plannedDose;
-  return (
-    <div className="stack">
-      <Panel title={`Feed: ${f.aim.toLowerCase()}`} pad={false}>
-        <table className="tbl kv"><tbody>
-          {feed && <tr><th scope="row">Today</th><td><b>{feed.reason}</b></td></tr>}
-          {dose && <tr><th scope="row">One run, per tree</th><td>N {dose.perTree.n} g · P {dose.perTree.p} g · K {dose.perTree.k} g <span className="muted">· {dose.runs} runs this stage, 10 days apart</span> <Tag>Starting dose</Tag></td></tr>}
-          {feed?.notes.map((n) => <tr key={n}><th scope="row">Note</th><td><Tag kind="warn">Check</Tag> {n}</td></tr>)}
-          <tr><th scope="row">Nitrogen</th><td>{f.nitrogen}</td></tr>
-          {f.tanks.length === 0 && <tr><th scope="row">Tanks</th><td className="muted">Nothing through the drip</td></tr>}
-          {f.tanks.map((t) => <tr key={t.name}><th scope="row">{t.name}</th><td>{t.products.join(" · ")}</td></tr>)}
-          {f.clash && <tr><th scope="row">Do not mix</th><td><Tag kind="warn">Clash</Tag> {f.clash}</td></tr>}
-          {f.phases.map((p, i) => <tr key={i}><th scope="row">Run step {i + 1}</th><td><b>{p.pct} %</b> {p.label} <span className="muted">· {p.what}</span></td></tr>)}
-          {f.phases.length > 0 && <tr><th scope="row">Water pH</th><td>{f.waterPh}</td></tr>}
-          {f.soil && <tr><th scope="row">Soil</th><td>{f.soil}</td></tr>}
-          {f.foliar.map((x) => <tr key={x.text}><th scope="row">Foliar</th><td>{x.text} {x.confirm && <Tag>Ask an agronomist</Tag>}</td></tr>)}
-          {v.setup?.orchard && <tr><th scope="row">Yearly dose</th><td>{v.setup.orchard.npk}</td></tr>}
-        </tbody></table>
-      </Panel>
-      <Panel title="Leaf test ranges" pad={false} right={<Link className="linkbtn small" to="/leaf-tests">Leaf tests</Link>}>
-        <div className="leaf-grid">
-          {v.leafRanges.map((l) => <div key={l.nutrient}><span className="small muted">{l.nutrient}</span><b>{l.range}</b></div>)}
-        </div>
-      </Panel>
-      <p className="small muted">Leaf ranges: two studies of bearing Paluma orchards, Brazil. A starting reference. The rover's N, P and K are a trend only. A low-cost probe cannot measure them well enough to set a dose. Too much of a feed shows first as high EC, which holds the next run; too little shows in a leaf test.</p>
-    </div>
-  );
-}
-
-function Forecast({ v, go }: { v: View; go: () => void }) {
-  const f = v.cycle.forecast, o = v.setup?.orchard;
-  if (!f || !o || !v.setup) return <Notice>No growing setup chosen.</Notice>;
-  return (
-    <div className="stack">
-      <Panel title={v.setup.label} pad={false} right={<Open ns={[3, 4, 5]} go={go} />}>
-        <table className="tbl kv"><tbody>
-          <tr><th scope="row">Cultivars</th><td>{o.cultivars}</td></tr>
-          <tr><th scope="row">First harvest</th><td>{o.firstBearing}</td></tr>
-          <tr><th scope="row">Harvest a year, {f.plants} trees</th><td><b>{num(f.kgLow, 0)}–{num(f.kgHigh, 0)} kg</b></td></tr>
-          <tr><th scope="row">Per tree a year</th><td>{v.setup.kgPerPlant[0]}–{v.setup.kgPerPlant[1]} kg</td></tr>
-          <tr><th scope="row">Document, per hectare</th><td>{range(o.tPerHa)} t</td></tr>
-          <tr><th scope="row">Document, per 50 m²</th><td>{num(o.kgPer50m2[0], 0)}–{num(o.kgPer50m2[1], 0)} kg</td></tr>
-          <tr><th scope="row">Price</th><td>{f.pricePerKgUsd === null ? "None" : `${usd(f.pricePerKgUsd)} a kg (${riel(f.pricePerKgUsd, 4000)})`}</td></tr>
-          <tr><th scope="row">Revenue a year</th><td><b>{f.revenueLowUsd === null || f.revenueHighUsd === null ? "—" : `${usd(f.revenueLowUsd, 0)}–${usd(f.revenueHighUsd, 0)}`}</b></td></tr>
-          <tr><th scope="row">Drip</th><td>{o.drip}</td></tr>
-          {o.docIssue && <tr><th scope="row">Yield table</th><td><More label={<Tag kind="warn">Does not multiply out</Tag>}>{o.docIssue}</More></td></tr>}
-        </tbody></table>
-      </Panel>
-      <div><Link className="btn btn-sm btn-ghost" to={`/cycles/${v.cycle.id}`}><Calculator size={15} aria-hidden />Cost report</Link></div>
-    </div>
-  );
-}
-
-function Trees({ v }: { v: View }) {
-  const a = v.advice;
-  if (!a || !a.surveyed) return <Notice>No fresh round for this block. <Link to="/rover">Run a round</Link>.</Notice>;
-  return (
-    <Panel title={`Round ${a.surveyedAt ? ago(a.surveyedAt) : ""}${a.partial ? " · stopped early" : ""}`} pad={false}
-           right={<span className="small muted">Water {a.water.litres} L of {a.water.fullLitres} L full demand</span>}>
-      <div className="tablewrap">
-        <table className="tbl">
-          <thead><tr><th>Tree</th><th className="r">Water L</th><th>Note</th></tr></thead>
-          <tbody>{a.trees.map((t) => (
-            <tr key={`${t.row}-${t.col}`}><td className="nowrap"><b>R{t.row + 1} T{t.col + 1}</b></td><td className="r">{t.plant ? t.litres : "—"}</td><td className="small">{t.notes.join(" · ").replace(/: look/g, "")}</td></tr>
-          ))}</tbody>
-        </table>
-      </div>
-    </Panel>
-  );
-}
-
+/** Detailed view of a single tomato block cycle, linked to Rover soil readings, Vision alerts & Cost budget. */
 export default function OrchardCycle() {
   const { id = "" } = useParams();
-  const [tab, setTab] = useState<TabId>("jobs");
-  const { data: v, error, reload } = useData(() => api.orchardCycle(id), [id]);
+  const cycles = useData(api.cycles);
+  const demo = useMemo(() => buildDemoTomatoFarm(), []);
+  const previewMode = Boolean(cycles.error && cycles.data === null);
 
-  const c = v?.cycle, p = c?.perennial, a = v?.advice;
-  const stress = a?.water.paused;
-
-  const [lastDone, setLastDone] = useState<LastDone | null>(null);
-  async function done(job: string) {
-    await api.orchardJobDone(id, job);
-    setLastDone({ cycleId: id, job, title: v?.jobs.find((j) => j.id === job)?.title ?? job });
-    reload();
-  }
-  async function undoDone() {
-    if (!lastDone) return;
-    await api.orchardJobUndo(lastDone.cycleId, lastDone.job);
-    setLastDone(null);
-    reload();
-  }
-  async function fruit(mm: number) { await api.orchardFruitSize(id, mm); reload(); }
-
-  const tabs: { id: TabId; label: string }[] = [
-    { id: "jobs", label: "Tasks" }, { id: "trees", label: "Trees" }, { id: "targets", label: "Targets" }, { id: "feed", label: "Fertilisation" },
-    { id: "forecast", label: "Forecast" }, { id: "questions", label: `Open questions (${v?.docIssues.length ?? 0})` },
-  ];
-  const go = () => setTab("questions");
+  const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
+  const cycle = activeCycles.find((c) => c.id === id || c.zone === id) ?? demo.cycles[0];
+  const cond = demo.conditions.find((c) => c.zone === cycle.zone);
+  const advice = demo.advice.find((a) => a.zone === cycle.zone);
+  const { blocks, allRows } = useMemo(
+    () =>
+      buildAllBlockEconomics({
+        cycles: demo.cycles,
+        zones: demo.zones,
+        conditions: demo.conditions,
+        roundsByZone: demo.roundsByZone,
+      }),
+    [demo],
+  );
+  const blockFin = blocks.find((b) => b.zone === cycle.zone);
+  const plants = allRows.filter((r) => r.zone === cycle.zone && r.plant);
 
   return (
     <>
-      <PageHead icon={Sprout} title={c?.bedLabel ?? "Guava cycle"}
-                sub={c ? `Guava${c.variety ? ` (${c.variety})` : ""} · ${c.plantCount} trees · ${c.setupLabel ?? "no setup"}` : undefined}
-                actions={<>
-                  <Link className="btn btn-ghost btn-sm" to="/rover"><Bot size={16} aria-hidden />Run a round</Link>
-                  <Link className="btn btn-ghost btn-sm" to="/cycles"><ArrowLeft size={16} aria-hidden />My crops</Link>
-                </>} />
-      <main className="main stack">
-        {error && <Notice kind="alert">{error}</Notice>}
-        {v && c && p && (
+      <PageHead
+        icon={Sprout}
+        title={cycle.bedLabel}
+        sub={`Tomato (${cycle.variety ?? "Roma Tomato"}) · ${blockFin?.plantCount ?? cycle.plantCount ?? 0} plants · ${cycle.setupLabel ?? "Drip bed"}`}
+        actions={
           <>
-            <Panel title={`Day ${v.day} of ${v.stages[v.stages.length - 1].lastDay} · ${v.stage.title}`}>
-              <div className="stack">
-                <StageStrip stages={v.stages} day={v.day} />
-                <Kpis items={[
-                  { k: "Trees planted", v: dayMonthYear(p.treesPlantedOn) },
-                  { k: "Tree age", v: `${p.treeAgeYears} years` },
-                  { k: "Started by", v: p.regulationLabel },
-                  { k: "Harvest", v: <>{dayMonth(p.harvestFrom)} – {dayMonth(p.harvestTo)}{p.rainyHarvest && <> <Tag kind="warn">Rainy months</Tag></>}</> },
-                ]} />
-              </div>
-            </Panel>
-
-            <div className="grid g2">
-              <EnvRibbon bed={v.conditions} />
-              <Panel title="Today" pad={false} right={a?.simulated ? <span className="small muted">Simulated round</span> : undefined}>
-                <table className="tbl kv"><tbody>
-                  {!a?.surveyed ? (
-                    <tr><th scope="row">Water</th><td><span className="muted">No fresh round.</span> <Link to="/rover">Run one</Link></td></tr>
-                  ) : stress ? (
-                    <tr><th scope="row">Water</th><td><Tag>Paused for stress</Tag> until day {v.stage.lastDay}, then two priming irrigations</td></tr>
-                  ) : (
-                    <>
-                      <tr><th scope="row">Water</th><td><b>{litres(a.water.litres)}</b> to {a.treesWatered} of {a.treesSeen} trees <span className="muted">· full demand {litres(a.water.fullLitres)}</span></td></tr>
-                      {a.water.hours > 0 && (
-                        <tr><th scope="row">Drip</th><td>Up to <b>{a.water.hours} h</b> a tree at {a.water.emitterLph} L/h{" "}
-                          <Tag kind="warn">Node stops at {a.water.firmwareLimitSeconds} s</Tag></td></tr>
-                      )}
-                    </>
-                  )}
-                  {a && <tr><th scope="row">Feed</th><td>{a.feed.reason}</td></tr>}
-                  <tr><th scope="row">Stage</th><td>{v.stage.water}</td></tr>
-                  <tr><th scope="row">Do</th><td>{v.stage.actions}</td></tr>
-                </tbody></table>
-              </Panel>
-            </div>
-
-            <div className="tabs tabs-in" role="tablist">
-              {tabs.map((t) => (
-                <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`tab${tab === t.id ? " tab-on" : ""}`} onClick={() => setTab(t.id)}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {tab === "jobs" && lastDone && <DoneNote title={lastDone.title} onUndo={undoDone} />}
-            {tab === "jobs" && <Panel pad={false}><OrchardJobs jobs={v.jobs} fruitMm={v.fruitMm} onDone={done} onFruit={fruit} /></Panel>}
-            {tab === "trees" && <Trees v={v} />}
-            {tab === "targets" && <Targets v={v} go={go} />}
-            {tab === "feed" && <Fertigation v={v} />}
-            {tab === "forecast" && <Forecast v={v} go={go} />}
-            {tab === "questions" && (
-              <Panel pad={false}>
-                <div className="tablewrap">
-                  <table className="tbl">
-                    <thead><tr><th className="r">#</th><th>Question</th><th>What the document says</th></tr></thead>
-                    <tbody>
-                      {v.docIssues.map((i) => <tr key={i.n}><td className="r">{i.n}</td><td className="nowrap"><b>{i.title}</b></td><td>{i.detail}</td></tr>)}
-                    </tbody>
-                  </table>
-                </div>
-              </Panel>
-            )}
+            <SyncBadge />
+            <Link className="btn btn-ghost btn-sm" to="/rover">
+              <Bot size={15} aria-hidden />Open Rover 3D
+            </Link>
+            <Link className="btn btn-ghost btn-sm" to={`/cycles/${cycle.id}`}>
+              <Calculator size={15} aria-hidden />Cost report
+            </Link>
+            <Link className="btn btn-ghost btn-sm" to="/cycles">
+              <ArrowLeft size={15} aria-hidden />All crop cycles
+            </Link>
           </>
-        )}
+        }
+      />
+      <main className="main stack">
+        <Kpis
+          items={[
+            { k: "Cycle stage", v: `Day ${cycle.day ?? 1}`, d: cycle.stageTitle ?? "Growing" },
+            { k: "Active tomato plants", v: plants.length, d: `${blockFin?.visionAlertCount ?? 0} vision alerts` },
+            { k: "Drip water today", v: advice ? litres(advice.water.litres) : "—", d: advice ? `${advice.treesWatered} plants irrigated` : "" },
+            { k: "Cycle spend / budget", v: blockFin ? `$${blockFin.spentToDateUsd.toFixed(2)} / $${blockFin.budgetUsd.toFixed(2)}` : "—", d: blockFin ? usdAndRiel(blockFin.spentToDateUsd, blockFin.spentToDateRiel) : "" },
+          ]}
+        />
+
+        <div className="grid g2">
+          {cond && <EnvRibbon bed={cond} />}
+          <Panel
+            title="Live Vision & Soil Summary"
+            right={
+              <Link className="linkbtn small rowflex" style={{ gap: 4 }} to="/crop">
+                <Camera size={13} aria-hidden />View gallery
+              </Link>
+            }
+          >
+            <table className="tbl kv">
+              <tbody>
+                <tr>
+                  <th scope="row">Nutrient status</th>
+                  <td>{advice?.feed.reason ?? "Soil nutrients monitored by Rover probe"}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Expected harvest</th>
+                  <td>{blockFin ? `${num(blockFin.expectedYieldKg, 1)} kg · ${usdAndRiel(blockFin.projectedRevenueUsd, blockFin.projectedRevenueRiel)}` : "—"}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Prevented crop loss</th>
+                  <td>{blockFin ? usdAndRiel(blockFin.preventedLossUsd, blockFin.preventedLossRiel) : "$0.00"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </Panel>
+        </div>
+
+        <Panel title={`Tomato plants in ${cycle.bedLabel}`} pad={false}>
+          <div className="tablewrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Plant</th>
+                  <th>Plant condition (AI Vision)</th>
+                  <th className="r">Soil pH</th>
+                  <th className="r">Moisture</th>
+                  <th className="r">Water today</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plants.map((p) => (
+                  <tr key={p.name}>
+                    <td><b>{p.name}</b></td>
+                    <td>
+                      <Tag kind={p.vision.status === "healthy" ? "ok" : "warn"}>{p.vision.badgeLabel}</Tag>
+                    </td>
+                    <td className="r">{p.readings.ph !== null ? p.readings.ph.toFixed(2) : "—"}</td>
+                    <td className="r">{p.readings.moisture !== null ? `${p.readings.moisture.toFixed(1)}%` : "—"}</td>
+                    <td className="r">{p.waterLitres !== null ? `${p.waterLitres} L` : "0 L"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
       </main>
     </>
   );

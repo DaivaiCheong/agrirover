@@ -53,17 +53,17 @@ export function problems(conditions: BedConditions[], advice: Advice[]): Problem
     const skip = new Set<string>();
     if (yellow.length) {
       const n = yellow.length;
-      const trees = `${n} ${n === 1 ? "tree" : "trees"}`;
+      const plants = `${n} ${n === 1 ? "plant" : "plants"}`;
       const metric = feed ? "soil_ec" : wet ? "soil_moisture" : null;
       if (feed) skip.add("low_ec");
       if (wet) skip.add("saturation");
       out.push({
         key: `${bed.zone}-yellow`, zone: bed.zone, label, severity: "warning",
-        problem: feed ? `${trees} hungry: yellow leaves` : wet ? `${trees} with yellow leaves: soil too wet` : `${trees} with yellow leaves`,
+        problem: feed ? `${plants} hungry: yellow leaves` : wet ? `${plants} with yellow leaves: soil too wet` : `${plants} with yellow leaves`,
         evidence: metric ? evidenceOf(bed, [metric]) : null,
         evidenceText: metric ? null : "Seen on the rover's round; the soil does not explain it",
-        action: feed ? "Feed on schedule · leaf test · no fungicide" : wet ? "Stop watering · check the roots" : "Photograph them: feed or disease?",
-        link: { to: `/crop?zone=${bed.zone}`, text: "Check a photo" },
+        action: feed ? "Feed on schedule · check foliage · no fungicide" : wet ? "Hold drip watering · aerate root zone" : "Open Rover Vision to inspect leaf pattern",
+        link: { to: `/crop?zone=${bed.zone}`, text: "View Rover Vision" },
       });
     }
     for (const al of bed.alerts as CondAlert[]) {

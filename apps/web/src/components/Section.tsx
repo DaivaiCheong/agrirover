@@ -7,9 +7,14 @@ import { SECTIONS, type SectionKey } from "./Shell";
 /** A section's title and its tabs. */
 export default function Section({ id, children }: { id: Exclude<SectionKey, "today" | "plan" | "crops">; children: ReactNode }) {
   const s = SECTIONS[id];
-  const path = useLocation().pathname;
-  // a crop's cost report (/cycles/<id>) sits under "Cost of production"
-  const here = /^\/cycles\/[^/]+/.test(path) ? "/cop" : path;
+  const loc = useLocation();
+  const params = new URLSearchParams(loc.search);
+  // a crop's cost report (/cycles/<id>) sits under "Cost of production"; /crop?tab=guide activates the Guide tab
+  const here = /^\/cycles\/[^/]+/.test(loc.pathname)
+    ? "/cop"
+    : loc.pathname === "/crop" && params.get("tab") === "guide"
+      ? "/guide"
+      : loc.pathname;
   return (
     <>
       <PageHead icon={s.icon} title={s.title} />

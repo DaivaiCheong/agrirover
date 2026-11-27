@@ -1,112 +1,365 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Trees } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
-import AnyPhotoCheck from "../components/AnyPhotoCheck";
-import Farm3D, { type TreeRef } from "../components/Farm3D";
-import { TreePhotoCheck } from "../components/TreePhoto";
-import { Notice, Panel } from "../components/ui";
-import { api, loadProblem } from "../lib/api";
-import { farmBlocks, photoKeys, toLookAt } from "../lib/farm3d";
+import { BookOpen, Camera, Eye, EyeOff } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import PlantSoilModal, { CareStepList } from "../components/PlantSoilModal";
+import RoverVisionPhoto from "../components/RoverVisionPhoto";
+import { Empty, Panel, Tag } from "../components/ui";
+import { api } from "../lib/api";
+import { buildDemoOrchardData } from "../lib/roverDemo";
+import {
+  buildBlockSoilRows,
+  getBlockSoilProfile,
+  setRoverContext,
+  targetsFromConditions,
+  type PlantSoilRow,
+  type SoilTargets,
+} from "../lib/soil";
+import { buildPlantCarePlan, TOMATO_TREATMENTS } from "../lib/treatments";
 import { useData } from "../lib/useData";
 import { ago } from "../lib/usePoll";
 
-const name = (row: number, col: number) => `R${row + 1} T${col + 1}`;
+type GalleryItem = {
+  blockLabel: string;
+  plant: PlantSoilRow;
+};
 
-/** Plant health starts from the farm: the trees this morning's round marked stand out in 3D, a click picks one, and its
- *  photo is read against that tree's own soil. A photo with no tree in mind is folded away below. */
-export default function Crop() {
-  const [search] = useSearchParams();
-  const asked = search.get("zone");
-  const advice = useData(api.advice);
-  const cycles = useData(api.cycles);
-  const photos = useData(() => api.photos("all"));
-  const [picked, setPicked] = useState<TreeRef | null>(null);
-  const [focus, setFocus] = useState<string | null>(asked);
+export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery" | "guide" }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = new URLSearchParams(location.search);
+  const activeTab: "gallery" | "guide" =
+    location.pathname === "/guide" || params.get("tab") === "guide" ? "guide" : initialTab;
+  const highlightedId = location.hash.replace(/^#/, "");
+  const contextZone = params.get("zone");
+  const contextPlant = params.get("plant");
 
-  const blocks = useMemo(() => farmBlocks(advice.data ?? [], cycles.data ?? [], photoKeys(photos.data?.photos ?? [])),
-    [advice.data, cycles.data, photos.data]);
-  const list = toLookAt(blocks);
-  const looks = list.filter((x) => x.tree.alert === "look");
-  const block = picked ? blocks.find((b) => b.zone === picked.zone) : undefined;
-  const tree = picked ? block?.trees.find((t) => t.row === picked.row && t.col === picked.col) : undefined;
-  const newest = (advice.data ?? []).map((a) => a.surveyedAt).filter((x): x is string => Boolean(x)).sort().pop();
-  const loading = advice.data === null || cycles.data === null;
-
-  // from Today's "Check a photo" on a block: frame that block and pick its first tree to look at
   useEffect(() => {
-    if (!asked || picked || !blocks.length) return;
-    const first = list.find((x) => x.block.zone === asked && x.tree.alert === "look");
-    if (first) setPicked({ zone: asked, row: first.tree.row, col: first.tree.col });
-  }, [asked, looks.length]);     // eslint-disable-line react-hooks/exhaustive-deps   (the marks come with the advice, after the blocks)
+    if (activeTab !== "guide" || !highlightedId) return;
+    const el = document.getElementById(highlightedId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [activeTab, highlightedId]);
 
-  function pick(t: TreeRef, frame = false) {
-    setPicked(t);
-    if (frame) setFocus(t.zone);
+  const zones = useData(api.zones);
+  const conditions = useData(api.conditions);
+  const advice = useData(api.advice);
+  const surveys = useData(api.surveys);
+  const photos = useData(() => api.photos("all"));
+
+  const previewMode = Boolean(zones.error && zones.data === null);
+  const demo = useMemo(() => buildDemoOrchardData(), []);
+
+  const [zoneFilter, setZoneFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "alerts" | "healthy">("all");
+  const [showBoxes, setShowBoxes] = useState(true);
+  const [inspected, setInspected] = useState<GalleryItem | null>(null);
+
+  const beds = previewMode ? demo.zones : (zones.data ?? []);
+  const condList = previewMode ? demo.conditions : (conditions.data ?? []);
+  const adviceList = previewMode ? demo.advice : (advice.data ?? []);
+  const surveyList = previewMode ? demo.surveys : (surveys.data ?? []);
+  const savedPhotos = previewMode ? [] : (photos.data?.photos ?? []);
+
+  // Build unified gallery of all rover-captured tomato plants across blocks
+  const latestSurveyByZone = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of surveyList) {
+      if ((s.status === "completed" || s.status === "aborted") && !map.has(s.zone)) {
+        map.set(s.zone, s.id);
+      }
+    }
+    return map;
+  }, [surveyList]);
+
+  const liveRoundIdsKey = [...latestSurveyByZone.values()].join(",");
+  const fetchedRounds = useData(async () => {
+    if (previewMode || !liveRoundIdsKey) return new Map();
+    const entries = await Promise.all(
+      [...latestSurveyByZone.entries()].map(async ([z, id]) => [z, await api.survey(id)] as const),
+    );
+    return new Map(entries);
+  }, [previewMode, liveRoundIdsKey]);
+
+  const allItems = useMemo<GalleryItem[]>(() => {
+    const out: GalleryItem[] = [];
+    for (const b of beds) {
+      const roundId = latestSurveyByZone.get(b.zone);
+      if (!roundId) continue;
+      const round = previewMode
+        ? demo.roundsById.get(roundId)
+        : fetchedRounds.data?.get(b.zone);
+      if (!round?.rows || !round?.cols) continue;
+      const cond = condList.find((c) => c.zone === b.zone);
+      const adv = adviceList.find((a) => a.zone === b.zone);
+      const rows = buildBlockSoilRows({
+        zone: b.zone,
+        rows: round.rows,
+        cols: round.cols,
+        cells: round.cells,
+        conditions: cond,
+        advice: adv,
+        photos: savedPhotos,
+        profile: getBlockSoilProfile(b.zone),
+        capturedAt: round.finishedAt ?? round.startedAt,
+      });
+      for (const p of rows) {
+        if (!p.reached || !p.plant) continue;
+        out.push({ blockLabel: b.label ?? b.zone, plant: p });
+      }
+    }
+    // Sort vision alerts first so farmers immediately see plants needing care
+    return out.sort((a, b) => Number(b.plant.vision.status === "alert") - Number(a.plant.vision.status === "alert"));
+  }, [beds, latestSurveyByZone, previewMode, demo.roundsById, fetchedRounds.data, condList, adviceList, savedPhotos]);
+
+  const zoneItems = useMemo(
+    () => (zoneFilter === "all" ? allItems : allItems.filter((item) => item.plant.zone === zoneFilter)),
+    [allItems, zoneFilter],
+  );
+
+  const counts = useMemo(() => {
+    let alerts = 0;
+    let healthy = 0;
+    for (const item of zoneItems) {
+      if (item.plant.vision.status === "alert") alerts++;
+      else if (item.plant.vision.status === "healthy") healthy++;
+    }
+    return { all: zoneItems.length, alerts, healthy };
+  }, [zoneItems]);
+
+  const visibleItems = useMemo(() => {
+    return zoneItems.filter((item) => {
+      if (statusFilter === "alerts") return item.plant.vision.status === "alert";
+      if (statusFilter === "healthy") return item.plant.vision.status === "healthy";
+      return true;
+    });
+  }, [zoneItems, statusFilter]);
+
+  const newestAt = surveyList[0]?.finishedAt ?? surveyList[0]?.startedAt ?? null;
+
+  const routeState = (location.state ?? null) as {
+    plant?: PlantSoilRow;
+    blockLabel?: string;
+    targets?: SoilTargets;
+  } | null;
+
+  const contextMatch = useMemo(() => {
+    if (!contextZone || !contextPlant) return null;
+    if (routeState?.plant?.zone === contextZone && routeState.plant.name === contextPlant) {
+      const plan = buildPlantCarePlan(
+        routeState.plant,
+        routeState.targets ?? targetsFromConditions(undefined),
+      );
+      if (plan) {
+        return {
+          item: { blockLabel: routeState.blockLabel ?? contextZone, plant: routeState.plant },
+          plan,
+        };
+      }
+    }
+    const found = allItems.find((i) => i.plant.zone === contextZone && i.plant.name === contextPlant);
+    if (!found) return null;
+    const plan = buildPlantCarePlan(
+      found.plant,
+      targetsFromConditions(condList.find((c) => c.zone === found.plant.zone)),
+    );
+    return plan ? { item: found, plan } : null;
+  }, [allItems, condList, contextZone, contextPlant, routeState]);
+
+  function handleViewHistory(plant: PlantSoilRow) {
+    setInspected(null);
+    setRoverContext({ zone: plant.zone, plant: plant.name });
+    navigate(`/rover/history?zone=${encodeURIComponent(plant.zone)}&plant=${encodeURIComponent(plant.name)}`);
   }
-  // the farm fills the screen, so problem, tree and answer are seen together without scrolling
-  const sceneH = Math.max(window.innerWidth < 600 ? 320 : 420, window.innerHeight - (window.innerWidth < 900 ? 260 : 250));
 
   return (
-    <main className="main stack">
-      {(advice.error || cycles.error) && <Notice kind="alert">{loadProblem(advice.error ?? cycles.error ?? "")}</Notice>}
-
-      <Panel title="Your farm" icon={Trees} pad={false}
-             right={<span className="small muted">{newest ? `Rover ${ago(newest)}` : "No round yet"}{(advice.data ?? []).some((a) => a.simulated) ? " · simulated" : ""}</span>}>
-        <div className="hf">
-          <div className="hf-scene">
-            {loading ? <p className="panel-pad muted">Loading…</p> : (
-              <>
-                <Farm3D blocks={blocks} selected={picked} onPick={(t) => pick(t)} focus={focus} height={sceneH} />
-                <div className="f3-bar">
-                  <button type="button" className={`f3-chip${focus === null ? " on" : ""}`} onClick={() => setFocus(null)}>Whole farm</button>
-                  {blocks.map((b) => {
-                    const n = b.trees.filter((t) => t.alert === "look").length;
-                    return <button key={b.zone} type="button" className={`f3-chip${focus === b.zone ? " on" : ""}`} onClick={() => setFocus(b.zone)}>
-                      {b.label}{n ? ` · ${n}` : ""}</button>;
-                  })}
-                </div>
-                <div className="f3-legend"><span><i className="lg-bang" />Look at</span><span><i className="lg-yellow" />Yellow leaves</span><span><i className="lg-photo" />Photo saved</span></div>
-                <div className="f3-hint">Drag to turn · scroll to zoom</div>
-              </>
-            )}
-          </div>
-          <aside className="hf-list" aria-label={picked ? "The tree" : "Trees to look at"} style={{ maxHeight: window.innerWidth < 900 ? undefined : sceneH }}>
-            {picked && block ? (
-              <div className="hf-tree">
-                <div className="hf-tree-head">
-                  <button type="button" className="linkbtn small" onClick={() => setPicked(null)}><ArrowLeft size={14} aria-hidden /> All trees</button>
-                  <b>{block.label} · {name(picked.row, picked.col)}</b>
-                  {tree?.note && <span className="small muted">{tree.note}</span>}
-                </div>
-                <TreePhotoCheck key={`${picked.zone}-${picked.row}-${picked.col}`} zone={picked.zone} row={picked.row} col={picked.col}
-                                onSaved={() => photos.reload()} />
+    <main className="main stack" style={{ paddingTop: 12 }}>
+      {activeTab === "gallery" ? (
+        <>
+          <Panel
+            title="Rover Vision Gallery"
+            icon={Camera}
+            pad={false}
+            right={
+              <div className="rv-right">
+                {previewMode && <Tag>Sample data · Synced with AgriRover</Tag>}
+                <span className="small muted">
+                  Monitored automatically by AgriRover{newestAt ? ` · Last updated ${ago(newestAt)}` : ""}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  aria-pressed={showBoxes}
+                  onClick={() => setShowBoxes((v) => !v)}
+                >
+                  {showBoxes ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
+                  {showBoxes ? "Hide AI boxes" : "Show AI boxes"}
+                </button>
               </div>
-            ) : (
-              <>
-                <div className="hf-list-head">To look at <b>{looks.length}</b><span className="small muted"> · click one, or a ! on the farm</span></div>
-                {!loading && list.length === 0 && <p className="small muted" style={{ padding: "0 14px" }}>Nothing marked. Run a round from <Link to="/rover">Rover</Link>.</p>}
-                <ul>
-                  {list.map(({ block: b, tree: t }) => (
-                    <li key={`${b.zone}-${t.row}-${t.col}`}>
-                      <button type="button" className={`hf-item${t.alert === "expected" ? " hf-expected" : ""}`}
-                              onClick={() => pick({ zone: b.zone, row: t.row, col: t.col }, true)}>
-                        <span className={t.alert === "look" ? "hf-mark" : "hf-mark hf-mark-ok"}>{t.alert === "look" ? "!" : "i"}</span>
-                        <span><b>{b.label} · {name(t.row, t.col)}</b><span className="small muted">{t.note}</span></span>
-                        {t.photo && <span className="hf-photo" title="Photo saved" />}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </aside>
-        </div>
-      </Panel>
+            }
+          >
+            <div className="rv-blocks" role="group" aria-label="Filter by block">
+              <button
+                type="button"
+                className={`f3-chip${zoneFilter === "all" ? " on" : ""}`}
+                onClick={() => setZoneFilter("all")}
+              >
+                All blocks
+              </button>
+              {beds.map((b) => (
+                <button
+                  key={b.zone}
+                  type="button"
+                  className={`f3-chip${zoneFilter === b.zone ? " on" : ""}`}
+                  onClick={() => setZoneFilter(b.zone)}
+                >
+                  {b.label ?? b.zone}
+                </button>
+              ))}
+            </div>
 
-      <details className="hf-more">
-        <summary>Photo without a tree: a fruit, a branch, or the whole block</summary>
-        <div className="hf-more-body"><AnyPhotoCheck initialZone={asked ?? ""} /></div>
-      </details>
+            <div className="rv-action-bar">
+              <div className="seg" role="group" aria-label="Filter by vision status">
+                <button
+                  type="button"
+                  className={statusFilter === "all" ? "on" : ""}
+                  onClick={() => setStatusFilter("all")}
+                >
+                  All plants <span className="rv-filter-count">{counts.all}</span>
+                </button>
+                <button
+                  type="button"
+                  className={statusFilter === "alerts" ? "on" : ""}
+                  onClick={() => setStatusFilter("alerts")}
+                >
+                  Vision alerts <span className={`rv-filter-count${counts.alerts > 0 ? " rv-count-warn" : ""}`}>{counts.alerts}</span>
+                </button>
+                <button
+                  type="button"
+                  className={statusFilter === "healthy" ? "on" : ""}
+                  onClick={() => setStatusFilter("healthy")}
+                >
+                  Healthy <span className="rv-filter-count">{counts.healthy}</span>
+                </button>
+              </div>
+              <span className="small muted">Click any tomato plant photo to open full AI analysis &amp; recommended care</span>
+            </div>
+
+            {visibleItems.length === 0 ? (
+              <Empty>No captured tomato plant photos match this filter.</Empty>
+            ) : (
+              <div className="rv-gallery-grid">
+                {visibleItems.map(({ blockLabel, plant }) => {
+                  const v = plant.vision;
+                  const r = plant.readings;
+                  return (
+                    <button
+                      key={`${plant.zone}-${plant.name}`}
+                      type="button"
+                      className={`rv-gallery-card${v.status === "alert" ? " rv-gallery-alert" : ""}`}
+                      onClick={() => setInspected({ blockLabel, plant })}
+                    >
+                      <div className="rv-gallery-head">
+                        <b>{blockLabel} · {plant.name}</b>
+                        <Tag kind={v.status === "healthy" ? "ok" : v.status === "alert" ? "warn" : undefined}>
+                          {v.badgeLabel}
+                        </Tag>
+                      </div>
+                      <RoverVisionPhoto
+                        plantName={plant.name}
+                        vision={v}
+                        canopy={plant.canopy}
+                        chlorosis={plant.chlorosis}
+                        soilMoisture={r.moisture}
+                        showBoxes={showBoxes}
+                        compact
+                      />
+                      <div className="rv-gallery-meta small muted">
+                        <span>{v.growthStage ?? "Tomato"}</span>
+                        <span>
+                          Moisture {r.moisture !== null ? `${r.moisture.toFixed(1)}%` : "—"} · pH{" "}
+                          {r.ph !== null ? r.ph.toFixed(2) : "—"}
+                        </span>
+                      </div>
+                      {v.linkedNote && <div className="rv-gallery-note small">{v.linkedNote}</div>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Panel>
+        </>
+      ) : (
+        <Panel
+          title="Tomato Disease & Treatment Guide"
+          icon={BookOpen}
+          pad={false}
+          right={
+            <div className="rv-right">
+              {previewMode && <Tag>Sample data · Synced with AgriRover</Tag>}
+              <span className="small muted">Practical cultural, organic &amp; targeted care</span>
+            </div>
+          }
+        >
+          <div className="rv-guide-list">
+            {TOMATO_TREATMENTS.map((t) => {
+              const isFocused = highlightedId === t.id;
+              const livePlan = contextMatch?.plan.guideId === t.id ? contextMatch : null;
+              const stepsToShow = livePlan ? livePlan.plan.steps : t.steps;
+              return (
+                <article key={t.id} id={t.id} className={`rv-guide-card${isFocused ? " rv-guide-card-focus" : ""}`}>
+                  <div className="rv-guide-head">
+                    <div>
+                      <h3>{t.title}</h3>
+                      <span className="small muted">{t.severityHint}</span>
+                    </div>
+                    <Tag kind={isFocused ? "ok" : "warn"}>
+                      {livePlan ? `Selected for ${livePlan.item.plant.name}` : isFocused ? "Highlighted condition" : "Tomato care"}
+                    </Tag>
+                  </div>
+                  {livePlan && (
+                    <div className="rv-care-diag">
+                      <span className="ts-k">
+                        Live probe telemetry · {livePlan.item.blockLabel} · {livePlan.item.plant.name}
+                      </span>
+                      <p className="small">{livePlan.plan.diagnosisNote}</p>
+                    </div>
+                  )}
+                  <div className="rv-guide-grid">
+                    <div>
+                      <span className="ts-k">Symptoms</span>
+                      <p className="small">{t.symptoms}</p>
+                    </div>
+                    <div>
+                      <span className="ts-k">Common causes</span>
+                      <p className="small">{t.causes}</p>
+                    </div>
+                  </div>
+                  <div className="rv-guide-steps">
+                    <span className="ts-k">
+                      {livePlan ? `Step-by-step care procedure (tailored to ${livePlan.item.plant.name})` : "Step-by-step care procedure"}
+                    </span>
+                    <CareStepList steps={stepsToShow} />
+                  </div>
+                  <div className="rv-guide-prev small">
+                    <b>Prevention:</b> {t.prevention}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
+
+      {inspected && (
+        <PlantSoilModal
+          plant={inspected.plant}
+          blockLabel={inspected.blockLabel}
+          targets={targetsFromConditions(condList.find((c) => c.zone === inspected.plant.zone))}
+          onClose={() => setInspected(null)}
+          onViewHistory={handleViewHistory}
+        />
+      )}
     </main>
   );
 }
