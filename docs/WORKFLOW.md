@@ -4,9 +4,9 @@ How AgriRover works from start to finish: what the rover does, what the farm ser
 
 > **The software is real; the rover hardware is not built.** The wheels, camera, soil probe and orchard are simulated, and every simulated report says `simulated: true`. The rover never waters or feeds: a person always acts.
 
-Checked against the code on 2026-11-27 (commit `2a2889d`).
+Checked against the code on 2026-11-27 (branch `uat`, commit `0751d68`).
 
-**Contents:** [What it is](#what-agrirover-is) · [Problems it solves](#the-problems-it-solves) · [At a glance](#the-workflow-at-a-glance) · [Step by step](#step-by-step-one-day) · [Other flows](#other-flows) · [Safety](#safety-who-can-stop-what) · [AI prompts](#the-ai-prompts) · [Run it](#run-it-on-your-computer) · [Where to change things](#where-to-change-things) · [Real or simulated](#what-is-real-and-what-is-not)
+**Contents:** [What it is](#what-agrirover-is) · [Problems it solves](#the-problems-it-solves) · [Three parts](#three-parts-one-contract) · [At a glance](#the-workflow-at-a-glance) · [Step by step](#step-by-step-one-day) · [Other flows](#other-flows) · [Safety](#safety-who-can-stop-what) · [AI prompts](#the-ai-prompts) · [Run it](#run-it-on-your-computer) · [Where to change things](#where-to-change-things) · [Real or simulated](#what-is-real-and-what-is-not)
 
 ## What AgriRover is
 
@@ -26,6 +26,83 @@ AgriRover is a field rover and a farm server for one crop: **guava**. A person s
 | Not knowing where the money goes | Costs, harvest, sales and cost per kg, block by block | Finance |
 
 None of this is measured in a field yet. The steps to prove it are in [PLAN.md](PLAN.md#step-4-accelerate-weekly-cycles).
+
+## Three parts, one contract
+
+The system is three separate parts. Each has its own folder, its own tests, and its own design doc. They never reach into each other's code. They talk only through the two contracts below.
+
+```mermaid
+flowchart LR
+    subgraph F["1 · Frontend<br>apps/web"]
+        UI["Screens, forms, the Round view"]
+    end
+    subgraph B["2 · Backend<br>apps/api"]
+        API["REST /api/v1<br>missions, advice, photos"]
+        DB[("PostgreSQL")]
+        SVC["Advice rules, photo check"]
+    end
+    subgraph R["3 · Rover<br>edge/"]
+        BRAIN["Rover brain<br>route, stops, guards, report"]
+        FW["ESP32 firmware<br>wheels, safety limits"]
+        CAM["ESP32-CAM<br>photo at each plant"]
+    end
+    MQ(["MQTT broker<br>devices/rover-01/..."])
+
+    UI -->|"contract A: HTTP /api/v1"| API
+    API --- DB
+    API --- SVC
+    API <-->|"contract B: MQTT topics"| MQ
+    BRAIN <-->|"contract B"| MQ
+    MQ <-->|"Wi-Fi"| FW
+    MQ <-->|"Wi-Fi"| CAM
+    CAM -.->|"contract B: photo upload"| API
+```
+
+| | 1 · Frontend | 2 · Backend | 3 · Rover |
+|---|---|---|---|
+| **Folder** | `apps/web` | `apps/api` | `edge/` (`rover-agent`, `rover-motor-controller`, `rover-camera`, `field-node-sim`) |
+| **Job** | Show the farm and take the farmer's actions | Keep the farm's data, decide the advice, talk to the rover and the AI | Drive, stop safely, look at each plant, report what it saw |
+| **Owns** | Screens, view state (which tab, which tree is open), the simulated-round replay | The database, advice rules, round history, photo check, the Telegram message | Motion, speed limits, the path, the battery and rain guards, the on-board report |
+| **Never does** | Talk to MQTT or the rover; decide water or feed amounts; keep farm data in the browser | Drive a motor directly; hold a plant map that only the screen uses | Read the database or call the browser; import backend code |
+| **Talks to** | Backend only, through `apps/web/src/lib/api.ts` | Frontend (contract A), rover and camera (contract B), AI server | Backend only, through MQTT (contract B) and the photo upload |
+| **Design doc** | [architecture/frontend.md](architecture/frontend.md) | [architecture/backend.md](architecture/backend.md) | [architecture/rover-esp32.md](architecture/rover-esp32.md) |
+| **Tests** | `npm test` in `apps/web` | `python -m pytest` in `apps/api` | `python -m pytest` in `edge/rover-agent`; firmware tests in `edge/rover-motor-controller/test` |
+
+**Where the rover brain runs** is a deployment choice, not a layer choice. The plan is to run it on the farm server (rover-brain, [rover-esp32.md](architecture/rover-esp32.md)). Even there it stays part 3: it talks to the backend only through contract B and never imports backend code.
+
+### Contract A: frontend ↔ backend
+
+- Plain HTTP and JSON under `/api/v1`. Every endpoint is listed in the API docs (`http://localhost:8000/docs`).
+- The frontend calls the backend only through `apps/web/src/lib/api.ts`. No other file calls `fetch`.
+- Errors come back as `{detail: "..."}`, and the screen says what happened and what to do next.
+- Shapes change only with the backend design doc updated first ([architecture/backend.md](architecture/backend.md#contract-a-the-api)).
+
+### Contract B: backend and rover ↔ MQTT
+
+- The backend and the rover meet only on MQTT topics under `devices/rover-01/` and `devices/rover-cam-01/`, and on the photo upload endpoint.
+- Topics, bodies, and which are retained are listed in [rover-esp32.md](architecture/rover-esp32.md#mqtt-topics). That table is the one source of truth for contract B.
+- Retained messages are for state that must survive a reboot (the e-stop, the rover's online status). Commands are never retained: a retained drive command would replay at boot.
+- The rover never waits on the backend to stop. Its safety limits live in the firmware and in the rover software.
+
+### Rules for keeping the parts apart
+
+1. **One door per part.** The frontend uses contract A only. The rover uses contract B only. The backend is the only part that holds both.
+2. **Data lives in one place.** Farm data lives in the backend's database. The browser keeps view state only (open tab, last block picked). Any value the browser needs comes from the backend.
+3. **Decisions live in the backend.** Advice, water and feed amounts, and which trees to visit are decided by the backend and shown by the frontend. Known exception: see [known gaps](#known-gaps-today) below.
+4. **Safety lives lowest.** The firmware limits motors whatever the other parts say. The rover software guards every move. The backend sends e-stop and mission orders; it never sends a motor command.
+5. **Simulation is part 3.** A simulated rover is a rover-side program that speaks contract B, like `python -m rover sim`. The browser does not simulate the farm, and the backend does not fake sensor data except through that simulator.
+6. **Change the contract first.** A change to contract A or B is written in its design doc, then built on both sides. The frontend, backend and rover each have their own tests, so a broken contract shows up in the owning part's tests.
+
+### Known gaps today
+
+These break the rules above. They are listed so they get fixed, not forgotten.
+
+| Gap | Breaks | Where it is | Target |
+|---|---|---|---|
+| The Rover page's advice rules and the soil and plant simulation run in the browser | Rules 2, 3, 5 | `apps/web/src/features/rover/sim/` (advice, scout, scenarios, crop hints) | Simulation moves to a rover-side simulator; advice rules move to the backend |
+| The browser's copy of the rover's route planner | Rule 1 | `apps/web/src/lib/rover.ts` (copies `rover/planner.py`) | The backend returns the route; the browser draws it |
+| The daily Telegram message uses the older rule engine, not the rover's advice | Rule 3 | `services/daily_message.py` | Moves to the backend's advice when that exists |
+| The rover's MQTT drive path (`MqttDrive`) is not written; the rover talks to the firmware over USB | Contract B not yet live | `edge/rover-agent/rover/drive.py` | Written as part of [rover-esp32.md](architecture/rover-esp32.md) |
 
 ## The workflow at a glance
 
@@ -68,21 +145,23 @@ In words:
 
 ## Step by step: one day
 
-| # | Step | What happens | Code |
+Each step is run by one part: **F** frontend, **B** backend, **R** rover. The Part column says which.
+
+| # | Part | Step | What happens | Code |
 |---|---|---|---|
-| 0 | Set up the farm (once) | Blocks, tree count, spacing, variety, planting date and growing setup. The first start seeds one tomato block with a plant map (T1, for the rover demo: [TOMATO-DEMO.md](TOMATO-DEMO.md)). With `DEMO_ORCHARD=true` in `.env` it also seeds a guava demo farm: six blocks (G1 to G5 growing guava, G6 empty) and two weeks of simulated rounds | `apps/api/app/services/seed.py`; screens Farm › Beds & Land, Crops |
-| 1 | Get ready | On **Rover**, pick the block and set the **Route**: the start corner and lanes along the rows or across them (or tap a corner dot on the map). The map draws the path and where to place the rover. Start stays locked until three live checks pass (rover online, e-stop released, no rain) and a person ticks three more (rows clear, rover on the start tree facing the next one, camera and probe clean) | `apps/web/src/pages/Rover.tsx`, `components/RoverMap.tsx`, [ROVER-SOP.md](ROVER-SOP.md) |
-| 2 | Send the round | `POST /api/v1/missions {zoneId, rows, cols, cellM, rowM, start, along}`. Refused if the rover is busy, offline or e-stopped. Published to MQTT `devices/rover-01/mission/set` | `apps/api/app/routers/missions.py` |
-| 3 | Plan the path | The rover checks the round (at most 400 trees, 40 a side, spacing 0.2 to 10 m) and plans a serpentine path from the start corner: every tree once, in moves of at most 1 m | `edge/rover-agent/rover/planner.py` (`route`), `mission.py` |
-| 4 | At each tree | Check the guards (e-stop, rain, battery below 11.1 V, lost link) → drive → photograph → leaf cover and yellowing from colour (over 8 % yellow is flagged) → soil probe and air sensor → record | `rover/safety.py`, `drive.py`, `vision.py`, `probe.py` |
-| 5 | Live progress | Each tree goes out on `mission/state`. The server keeps the live round in memory, and the Rover screen reads it from `GET /api/v1/missions/live` | `apps/api/app/services/rover_live.py` |
-| 6 | Store the round | The full report goes out on `mission/result`. The server stores it in `survey_mission` and `survey_finding` (one row per tree), and the block's averages in `sensor_reading`. The rover also writes `reports/<mission>/report.json` and `field-map.svg` on its own disk | `apps/api/app/workers/mqtt_ingest.py`, `rover_live.store_report` |
-| 7 | Work out the advice | For each growing block, the newest round from the last 36 hours becomes: litres per tree, feed / hold / flush, and trees to look at. Pure functions with tests; nothing here opens a valve | `services/advice.py` (reads the database), `services/advisor.py` (the rules); `GET /api/v1/advice` |
-| 8 | Show it | **Today** reads left to right: **Read** (trees read, blocks done today) → **Find** (problems, each with its number against the target) → **Act** (litres of water, blocks to feed). Below it, one list of jobs, most urgent first | `apps/web/src/pages/Dashboard.tsx`, `lib/today.ts`, `lib/problems.ts` |
-| 9 | The farmer acts | Gives the water, feeds only where Today says feed, and goes to each marked tree. **Done** ticks a job off, and can be undone | Today |
-| 10 | Look closer | **Health**: click a marked tree in the 3D farm, add a photo, **Check photo**. The answer card gives the problem, the likely cause from that tree's soil, and what to do. **Save** keeps the photo with the tree's readings | `pages/Crop.tsx`, `POST /api/v1/photos/check`, `services/tree_check.py` |
-| 11 | Confirm photos | An expert confirms saved photos in Health › Photo library. Only confirmed photos may train or test a model | [PHOTO-LABELLING.md](PHOTO-LABELLING.md) |
-| 12 | Leaf test (once a cycle) | At flowering (the task falls on day 86 to 94), pick leaves the standard way, send them to a lab, and enter the results under Health › Leaf tests. Each figure is rated low / OK / high, and Blocks compared puts the blocks side by side. Advice does not read them yet | `pages/LeafTests.tsx`, `services/leaf_tests.py`, [leaf sample how-to](ROVER-SOP.md#leaf-sample-how-to) |
+| 0 | B | Set up the farm (once) | Blocks, tree count, spacing, variety, planting date and growing setup. The first start seeds one tomato block with a plant map (T1, for the rover demo: [TOMATO-DEMO.md](TOMATO-DEMO.md)). With `DEMO_ORCHARD=true` in `.env` it also seeds a guava demo farm: six blocks (G1 to G5 growing guava, G6 empty) and two weeks of simulated rounds | `apps/api/app/services/seed.py`; screens Farm › Beds & Land, Crops |
+| 1 | F | Get ready | On **Rover**, the Field log shows the block. The route (start corner, lanes) and the camera are set once on the **Setup** tab, where a corner dot on the map also sets the start. Start stays locked until three live checks pass (rover online, e-stop released, no rain) and a person ticks three more (rows clear, rover on the start tree facing the next one, camera and probe clean) | `apps/web/src/pages/Rover.tsx`, `components/RoverMap.tsx`, [ROVER-SOP.md](ROVER-SOP.md) |
+| 2 | B | Send the round | `POST /api/v1/missions {zoneId, rows, cols, cellM, rowM, start, along}`. Refused if the rover is busy, offline or e-stopped. Published to MQTT `devices/rover-01/mission/set` | `apps/api/app/routers/missions.py` |
+| 3 | R | Plan the path | The rover checks the round (at most 400 trees, 40 a side, spacing 0.2 to 10 m) and plans a serpentine path from the start corner: every tree once, in moves of at most 1 m | `edge/rover-agent/rover/planner.py` (`route`), `mission.py` |
+| 4 | R | At each tree | Check the guards (e-stop, rain, battery below 11.1 V, lost link) → drive → photograph → leaf cover and yellowing from colour (over 8 % yellow is flagged) → soil probe and air sensor → record | `rover/safety.py`, `drive.py`, `vision.py`, `probe.py` |
+| 5 | B | Live progress | Each tree goes out on `mission/state`. The server keeps the live round in memory, and the Rover screen reads it from `GET /api/v1/missions/live` | `apps/api/app/services/rover_live.py` |
+| 6 | B | Store the round | The full report goes out on `mission/result`. The server stores it in `survey_mission` and `survey_finding` (one row per tree), and the block's averages in `sensor_reading`. The rover also writes `reports/<mission>/report.json` and `field-map.svg` on its own disk | `apps/api/app/workers/mqtt_ingest.py`, `rover_live.store_report` |
+| 7 | B | Work out the advice | For each growing block, the newest round from the last 36 hours becomes: litres per tree, feed / hold / flush, and trees to look at. Pure functions with tests; nothing here opens a valve | `services/advice.py` (reads the database), `services/advisor.py` (the rules); `GET /api/v1/advice` |
+| 8 | F | Show it | **Today** reads left to right: **Read** (trees read, blocks done today) → **Find** (problems, each with its number against the target) → **Act** (litres of water, blocks to feed). Below it, one list of jobs, most urgent first | `apps/web/src/pages/Dashboard.tsx`, `lib/today.ts`, `lib/problems.ts` |
+| 9 | F | The farmer acts | Gives the water, feeds only where Today says feed, and goes to each marked tree. **Done** ticks a job off, and can be undone | Today |
+| 10 | F + B | Look closer | **Health**: click a marked tree in the 3D farm, add a photo, **Check photo**. The answer card gives the problem, the likely cause from that tree's soil, and what to do. **Save** keeps the photo with the tree's readings | `pages/Crop.tsx`, `POST /api/v1/photos/check`, `services/tree_check.py` |
+| 11 | F + B | Confirm photos | An expert confirms saved photos in Health › Photo library. Only confirmed photos may train or test a model | [PHOTO-LABELLING.md](PHOTO-LABELLING.md) |
+| 12 | F + B | Leaf test (once a cycle) | At flowering (the task falls on day 86 to 94), pick leaves the standard way, send them to a lab, and enter the results under Health › Leaf tests. Each figure is rated low / OK / high, and Blocks compared puts the blocks side by side. Advice does not read them yet | `pages/LeafTests.tsx`, `services/leaf_tests.py`, [leaf sample how-to](ROVER-SOP.md#leaf-sample-how-to) |
 
 **When a round stops early** (e-stop, rain, low battery, lost link, edge of block, bumper), the rover ends stopped and sends a partial report. Today then says how many trees were not reached, and does not call the block fine. A round cannot resume: run the block again from the first tree. What to do for each reason: [ROVER-SOP.md](ROVER-SOP.md#when-it-stops).
 
@@ -188,7 +267,7 @@ You need **Docker Desktop**. Python and Node are only needed to run a part outsi
 
 **Walk the workflow in five minutes:**
 
-1. **Rover:** pick a block chip, tick the three checks, **Start round**. It goes tree by tree, forty times faster than a real rover (about 30 s).
+1. **Rover:** pick the block, tick the three checks, **Start round**. It goes tree by tree, forty times faster than a real rover (about 30 s). Then open **Needs you** and walk the flagged trees.
 2. **Today:** Read → Find → Act. Open a problem to see its number against the target.
 3. **Health:** click a tree marked **!** in the 3D farm, add a leaf photo, **Check photo**, then **Save**.
 4. **Health › Leaf tests:** where lab results go. Leave it empty until a real one comes; never type in made-up figures.
@@ -216,16 +295,20 @@ from plant to plant on a block's plant map: [TOMATO-DEMO.md](TOMATO-DEMO.md).
 
 ## Where to change things
 
-| To change | Edit | Tests |
-|---|---|---|
-| Water per tree, feed, trees to look at | `apps/api/app/services/advisor.py` | `apps/api/tests/test_advisor.py` |
+| To change | Part | Edit | Tests |
+|---|---|---|---|
+| Water per tree, feed, trees to look at | Backend | `apps/api/app/services/advisor.py` | `apps/api/tests/test_advisor.py` |
+| How a screen looks or behaves | Frontend | `apps/web/src/pages/`, `apps/web/src/components/`, `apps/web/src/features/rover/ui/` | `apps/web/src/**/*.test.ts` |
+| Rover page: advice cards, field map, plant records | Frontend (today also holds the twin, see [known gaps](#known-gaps-today)) | `apps/web/src/features/rover/ui/` | `apps/web/src/features/rover/sim/__tests__/` |
+| The API's shape (what the screens ask for) | Backend, then Frontend | `apps/api/app/routers/`, then `apps/web/src/lib/api.ts` | `apps/api/tests/` |
 | Guava stages, targets, tasks, leaf ranges | `apps/api/app/services/guava.py` | `test_advisor.py`, `test_schedule.py`, `test_leaf_tests.py` |
 | When water may run (valve rules) | `apps/api/app/services/rule_engine.py` | `test_rule_engine.py` |
-| How the rover plans, drives, guards and sees | `edge/rover-agent/rover/` | `edge/rover-agent/tests/` |
-| Sending rounds, live state, storing reports | `routers/missions.py`, `services/rover_live.py`, `workers/mqtt_ingest.py` | `test_missions_and_ingest.py`, `test_rover_live.py` |
-| Photo AI prompts and the disease guide | `services/disease.py`, `services/guava_diseases.py` | `scripts/eval_photo_check.py` |
-| Screens | `apps/web/src/pages/`, with their logic in `apps/web/src/lib/` | `apps/web/src/lib/*.test.ts` |
-| Database tables | `apps/api/app/models/entities.py`, plus a new migration in `apps/api/alembic/versions/` | `test_migrations.py`; design in [SCHEMA.md](SCHEMA.md) |
+| How the rover plans, drives, guards and sees | Rover | `edge/rover-agent/rover/` | `edge/rover-agent/tests/` |
+| Sending rounds, live state, storing reports | Backend (contract A and B) | `routers/missions.py`, `services/rover_live.py`, `workers/mqtt_ingest.py` | `test_missions_and_ingest.py`, `test_rover_live.py` |
+| Photo AI prompts and the disease guide | Backend | `services/disease.py`, `services/guava_diseases.py` | `scripts/eval_photo_check.py` |
+| Screens | Frontend | `apps/web/src/pages/`, with their logic in `apps/web/src/lib/` | `apps/web/src/lib/*.test.ts` |
+| Database tables | Backend | `apps/api/app/models/entities.py`, plus a new migration in `apps/api/alembic/versions/` | `test_migrations.py`; design in [SCHEMA.md](SCHEMA.md) |
+| MQTT topics and the drive frames | Contract B | [rover-esp32.md](architecture/rover-esp32.md#mqtt-topics), then both sides | each side's own tests |
 
 ## What is real and what is not
 
@@ -248,7 +331,10 @@ Status per part, with paths: [README](../README.md#status). What comes next: [PL
 | Doc | For |
 |---|---|
 | [PLAN.md](PLAN.md) | What we sell, the plan and the risks |
-| [architecture/rover.md](architecture/rover.md) | The rover's design, MQTT topics, parts and limits |
+| [architecture/frontend.md](architecture/frontend.md) | Part 1: the dashboard's layout, routes, rules and gaps |
+| [architecture/backend.md](architecture/backend.md) | Part 2: the farm server's API, data ownership and decisions |
+| [architecture/rover-esp32.md](architecture/rover-esp32.md) | Part 3: the rover, its firmware and the MQTT contract |
+| [architecture/rover.md](architecture/rover.md) | The earlier Raspberry Pi rover design, and the mission flow |
 | [architecture/control-hierarchy.md](architecture/control-hierarchy.md) | Who decides when water runs |
 | [ROVER-SOP.md](ROVER-SOP.md) | Running a round, and taking leaf samples |
 | [DEMO-SCRIPT.md](DEMO-SCRIPT.md) | The five-minute demo |

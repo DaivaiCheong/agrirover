@@ -4,6 +4,8 @@
 `rover_motor_controller.ino` over USB and answers the PC (tested). Nothing on this page beyond that is built yet.
 It replaces the Raspberry Pi in [rover.md](rover.md): there is no computer on the rover, only the ESP32.
 
+**This is part 3 of the system.** It talks to the backend only through the MQTT topics below and the photo upload, and never through the frontend. The rules for keeping the three parts apart are in [WORKFLOW.md](../WORKFLOW.md#three-parts-one-contract).
+
 ## The idea in one line
 
 **The ESP32 is the rover's spinal cord, the farm server is its brain.** The ESP32 moves the wheels and keeps the
