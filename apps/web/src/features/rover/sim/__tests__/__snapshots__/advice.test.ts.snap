@@ -1,0 +1,124 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`advice scenarios (13–18) > 13 Dry row: one card, water 6 plants in row 3, 5.3 L each, 32 L, today; 32 L against 517 L 1`] = `
+[
+  {
+    "action": "Water 6 plants in row 3",
+    "confidence": "high",
+    "detail": "5.3 L each, 32 L total, about 2 h 40 min drip",
+    "diagnosis": undefined,
+    "kind": "water",
+    "outcome": undefined,
+    "urgency": "today",
+    "where": "R3-P05 to R3-P10",
+    "why": "Below the refill point (0.19 < 0.21)",
+  },
+]
+`;
+
+exports[`advice scenarios (13–18) > 14 Rain coming: 3.9 L each, marked rain expected; with 45 mm, hold watering 1`] = `
+[
+  [
+    {
+      "action": "Water 6 plants in row 3",
+      "confidence": "high",
+      "detail": "3.9 L each, 23 L total, about 1 h 57 min drip; rain expected",
+      "diagnosis": undefined,
+      "kind": "water",
+      "outcome": undefined,
+      "urgency": "today",
+      "where": "R3-P05 to R3-P10",
+      "why": "Below the refill point (0.19 < 0.21)",
+    },
+  ],
+  [
+    {
+      "action": "Hold watering in row 3",
+      "confidence": "high",
+      "detail": "Rain should cover it: rain expected (45 mm, 70 %)",
+      "diagnosis": undefined,
+      "kind": "water",
+      "outcome": undefined,
+      "urgency": "today",
+      "where": "R3-P05 to R3-P10",
+      "why": "Below the refill point (0.19 < 0.21)",
+    },
+  ],
+]
+`;
+
+exports[`advice scenarios (13–18) > 15 Yellow leaves: look at R2-P07, likely low nitrogen, too much water ruled out 1`] = `
+[
+  {
+    "action": "Look at plant R2-P07",
+    "confidence": "medium",
+    "detail": "Yellow lower leaves. Likely low nitrogen",
+    "diagnosis": {
+      "couldAlso": "Low magnesium",
+      "firstStep": "Check the fertiliser plan with an agronomist",
+      "likely": "Likely low nitrogen",
+      "ruledOut": "Too much water ruled out: soil is normal (0.24)",
+    },
+    "kind": "lookAt",
+    "outcome": undefined,
+    "urgency": "today",
+    "where": "R2-P07",
+    "why": "Yellow lower leaves in one photo, 99 % sure",
+  },
+]
+`;
+
+exports[`advice scenarios (13–18) > 16 Spreading blight: ranked first, cultural steps, an agronomist, no chemical 1`] = `
+[
+  {
+    "action": "Spreading in row 2",
+    "confidence": "medium",
+    "detail": "Spots with rings on 3 plants. Likely early blight",
+    "diagnosis": {
+      "couldAlso": "Septoria leaf spot",
+      "firstStep": "Remove affected lower leaves; help leaves dry quickly. Ask an agronomist or extension officer; send the round report",
+      "likely": "Likely early blight",
+      "ruledOut": undefined,
+    },
+    "kind": "spreading",
+    "outcome": undefined,
+    "urgency": "today",
+    "where": "R2-P06 to R2-P08",
+    "why": "Spots with rings on 3 neighbouring plants",
+  },
+]
+`;
+
+exports[`advice scenarios (13–18) > 17 Follow-up: watered row 3 recovered on the next round 1`] = `
+[
+  {
+    "action": "Look at plant R2-P01",
+    "confidence": "medium",
+    "detail": "Spots with rings. Likely early blight",
+    "diagnosis": {
+      "couldAlso": "Septoria leaf spot",
+      "firstStep": "Remove affected lower leaves; help leaves dry quickly",
+      "likely": "Likely early blight",
+      "ruledOut": undefined,
+    },
+    "kind": "lookAt",
+    "outcome": undefined,
+    "urgency": "today",
+    "where": "R2-P01",
+    "why": "Spots with rings in one photo, 51 % sure",
+  },
+  {
+    "action": "Recovered: 6 plants in row 3",
+    "confidence": "high",
+    "detail": undefined,
+    "diagnosis": undefined,
+    "kind": "recheck",
+    "outcome": "recovered",
+    "urgency": "canWait",
+    "where": "R3-P05 to R3-P10",
+    "why": "Watered last round; now 0.26 or wetter",
+  },
+]
+`;
+
+exports[`advice scenarios (13–18) > 18 Upper-leaf virus: the rover misses it, the Lab counts it, the hardware hint says why 1`] = `[]`;
