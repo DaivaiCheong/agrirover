@@ -1,11 +1,10 @@
 """Sample finance figures: in proportion to the block, always marked, never mixed with or removed from real ones."""
-from datetime import date
-
 import pgdb
 from sqlalchemy import select
 
 from app.models.entities import CostEntry, Farm, Harvest, Planting, Sale
 from app.services import guava, sample_finance as sf
+from app.services.clock import farm_today
 from app.services.seed import seed_stage1
 
 B = guava.SETUP_BY_ID["commercial"]
@@ -41,7 +40,7 @@ class TestFigures:
 async def test_loading_marks_everything_and_removing_leaves_real_entries(Session):
     async with Session() as s:
         await seed_stage1(s)
-    today = date(2026, 11, 5)
+    today = farm_today()                     # the seed plants from the real date; a fixed date here drifts away from it
     async with Session() as s:
         farm = await s.scalar(select(Farm))
         assert await sf.status(s, farm) == {"sample": 0, "real": 0}
