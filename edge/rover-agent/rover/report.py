@@ -34,6 +34,22 @@ def thumbnail(img, size: int = 72, quality: int = 70) -> str | None:
     return base64.b64encode(out.getvalue()).decode("ascii")
 
 
+def photo_jpeg(img, max_side: int = 640, quality: int = 82) -> str | None:
+    """A JPEG of a camera frame, at most `max_side` pixels on its longer side, as base64: large enough for the farm
+    server's photo check to see spots and curl. None without Pillow or an image."""
+    if img is None:
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    frame = Image.fromarray(img[..., :3])
+    frame.thumbnail((max_side, max_side))           # keeps the shape; never enlarges
+    out = io.BytesIO()
+    frame.save(out, format="JPEG", quality=quality)
+    return base64.b64encode(out.getvalue()).decode("ascii")
+
+
 def _state(result) -> str:
     if result is None:
         return "unscanned"

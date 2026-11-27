@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { BookOpen } from "lucide-react";
 import { Empty, More, Notice, Panel, Tag } from "../components/ui";
 import { api, loadProblem, type Disease } from "../lib/api";
@@ -16,12 +17,24 @@ function Detail({ d }: { d: Disease }) {
 }
 
 export default function Guide() {
-  const guide = useData(api.diseaseGuide);
+  const [crop, setCrop] = useState<"guava" | "tomato">("guava");
+  const guide = useData(() => api.diseaseGuide(crop), [crop]);
   const rows = guide.data ?? [];
   return (
     <main className="main stack" style={{ paddingTop: 12 }}>
       {guide.error && <Notice kind="alert">{loadProblem(guide.error)}</Notice>}
-      <Panel title="Guava problems" icon={BookOpen} pad={false} right={<span className="small muted">No spray doses: the sources give none</span>}>
+      <Panel title={crop === "tomato" ? "Tomato problems" : "Guava problems"} icon={BookOpen} pad={false}
+             right={<span className="rv-right">
+               <span className="small muted">No spray doses{crop === "tomato" ? ": ask an agronomist" : ": the sources give none"}</span>
+               <span className="seg" role="group" aria-label="Crop">
+                 {(["guava", "tomato"] as const).map((k) => (
+                   <button key={k} type="button" className={crop === k ? "on" : ""} aria-pressed={crop === k} onClick={() => setCrop(k)}>
+                     {k === "guava" ? "Guava" : "Tomato"}</button>
+                 ))}
+               </span>
+             </span>}>
+        {crop === "tomato" && <p className="panel-pad small muted">The photo check reads this guide on a tomato block. Written from standard
+          extension descriptions on 27 Nov 2026 and not yet checked by an agronomist.</p>}
         {rows.length === 0 ? <Empty>Loading the guide.</Empty> : (
           <div className="tablewrap">
             <table className="tbl fold">

@@ -32,6 +32,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.models.entities import Device, Farm, Sensor, SensorReading, Zone
+from app.services import rover_photos
+from app.services.disease import get_classifier
 from app.services.metrics import SOIL_PROBE_METRICS, Refused, clean
 from app.services.rover_live import live as rover_live, store_report
 
@@ -130,6 +132,22 @@ async def store_telemetry(session: AsyncSession, topic: str, payload: object,
     return len(rows)
 
 
+_background: set[asyncio.Task] = set()
+
+
+def _spawn(job) -> None:
+    """Run a slow job (a photo check takes seconds online) beside the loop; keep a reference so it is not collected."""
+    async def guarded() -> None:
+        try:
+            await job
+        except Exception:                                 # noqa: BLE001 — a failed check must not touch the round
+            log.exception("rover photo check failed")
+
+    task = asyncio.create_task(guarded())
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+
+
 async def _consume() -> None:
     while True:
         try:
@@ -170,6 +188,8 @@ async def _consume() -> None:
                         rover_live.on_status(payload)
                     elif topic.endswith("/mission/state"):
                         rover_live.on_state(payload)
+                        if rover_photos.wanted(payload):          # a flagged plant: keep and check its photo, off the loop
+                            _spawn(rover_photos.keep_and_check(payload, classifier=get_classifier()))
                     elif topic.endswith("/mission/result"):
                         # Watering targets are shown for a person to act on; they do not become proposals yet.
                         rover_live.on_result(payload)

@@ -13,7 +13,7 @@ function describe(c: RoverCell | undefined, row: number, col: number, photo = fa
   const m = c.readings?.soil_moisture;
   if (m !== undefined) parts.push(`soil ${m} %`);
   if (c.advice) parts.push(c.advice.litres > 0 ? `water ${c.advice.litres} L` : "no water today");
-  if (c.flagged) parts.push("yellow leaves, go and look");
+  if (c.flagged) parts.push(c.check ? `yellow leaves, ${c.check.title.toLowerCase()}` : "yellow leaves, go and look");
   if (photo) parts.push("photo saved");
   return `${name}: ${parts.join(", ")}`;
 }
@@ -119,6 +119,9 @@ export default function RoverMap({ rows, cols, cells, at, selected, onPick, phot
               {litres > 0 && words && <text x={x + PX / 2} y={top + PX / 2 + 4} className="rm-ml">{litres < 10 ? litres.toFixed(1) : Math.round(litres)}</text>}
               {c.flagged && <rect x={x + 3} y={top + 3} width={PX - 6} height={PX - 6} className="rm-outline" />}
               {c.flagged && words && <text x={x + PX - 9} y={top + 15} className="rm-bang">!</text>}
+              {c.check && c.check.label && c.check.label !== "healthy" && (
+                <rect x={x + 6} y={top + PX - 12} width={PX - 12} height={5} rx={2} className="rm-checked"><title>{c.check.title}</title></rect>
+              )}
               {photos?.has(spotKey(c.row, c.col)) && <circle cx={x + 9} cy={top + PX - 9} r={4} className="rm-photo" />}
             </g>
           );

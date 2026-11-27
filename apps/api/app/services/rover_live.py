@@ -102,12 +102,19 @@ class RoverLive:
             m.update({k: payload[k] for k in SUMMARY_FIELDS if k in payload})
 
     def on_result(self, report: object) -> None:
-        """The full report is the authority: it fills in anything lost on the way."""
+        """The full report is the authority: it fills in anything lost on the way. A photo check already made stays."""
         if not isinstance(report, dict) or self.mission is None or self.mission["missionId"] != report.get("missionId"):
             return
         for cell in report.get("cells") or []:
             if isinstance(cell, dict) and (key := _cell_key(cell)) is not None:
-                self.cells[key] = cell
+                old = self.cells.get(key) or {}
+                self.cells[key] = {**cell, "check": old["check"]} if "check" in old else cell
+
+    def set_check(self, mission_id: str, key: tuple[int, int], check: dict) -> None:
+        """What the photo check said about a plant the rover flagged (services/rover_photos.py). Only for this round."""
+        if self.mission is None or self.mission["missionId"] != mission_id:
+            return
+        self.cells[key] = {**self.cells.get(key, {"row": key[0], "col": key[1]}), "check": check}
 
     def snapshot(self) -> dict:
         m = None

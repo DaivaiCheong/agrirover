@@ -27,11 +27,14 @@ from app.services.conditions import load_snapshots
 from app.services.errors import Invalid, NotFound
 from app.services.guava_diseases import DISEASES
 from app.services.rule_engine import utcnow
+from app.services.tomato_diseases import DISEASES as TOMATO_DISEASES
 
 TARGET_PHOTOS, TARGET_DAYS = 100, 3
 PARTS = ("leaf", "fruit", "branch", "tree")
-LABELS = {"healthy": "Healthy", **{d.id: d.title for d in DISEASES}, "other": "Something else"}
-README = ("Guava photos to confirm.\n\nFor each row of photos.csv, open the photo named in `file` and write what it shows in `expert_label`, "
+# Guava's and tomato's together: an id both guides use (chlorosis, cracking) means the same thing in each.
+LABELS = {"healthy": "Healthy", **{d.id: d.title for d in DISEASES}, **{d.id: d.title for d in TOMATO_DISEASES if d.id not in {x.id for x in DISEASES}},
+          "other": "Something else"}
+README = ("Plant photos to confirm.\n\nFor each row of photos.csv, open the photo named in `file` and write what it shows in `expert_label`, "
           "using one of these words. Leave it empty if the photo cannot show it.\n\n" + "\n".join(f"{k}: {v}" for k, v in LABELS.items()) + "\n")
 
 

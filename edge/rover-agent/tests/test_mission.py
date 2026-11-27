@@ -107,6 +107,34 @@ def test_a_plant_map_round_stops_at_the_plants_only_and_drives_through_the_gaps(
     assert passing and "observation" not in passing[0]                 # the map sees it pass the empty spot, no photo
 
 
+def test_a_flagged_plant_comes_with_a_photo_to_check_and_a_healthy_one_does_not():
+    import base64
+    s = MissionSpec("m-photo", "t1", 4, 6, 0.5)
+    runner, field = sim_runner(CFG, s, seed=5, guards=Guards())
+    states: list[dict] = []
+    runner.run(s, states.append)
+    seen = [st for st in states if "observation" in st]
+    flagged = [st for st in seen if st["observation"]["flagged"]]
+    assert flagged and len(flagged) < len(seen)                    # the seed has some yellow trees, not all
+    assert all(base64.b64decode(st["photo"]).startswith(b"\xff\xd8\xff") for st in flagged)        # a JPEG
+    assert all("photo" not in st for st in seen if not st["observation"]["flagged"])
+
+
+def test_the_photo_keeps_its_shape_and_is_never_larger_than_640():
+    import base64
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from rover.report import photo_jpeg
+    big = photo_jpeg(np.zeros((960, 1280, 3), np.uint8))
+    assert Image.open(io.BytesIO(base64.b64decode(big))).size == (640, 480)
+    small = photo_jpeg(np.zeros((96, 96, 3), np.uint8))
+    assert Image.open(io.BytesIO(base64.b64decode(small))).size == (96, 96)
+    assert photo_jpeg(None) is None
+
+
 def test_a_round_starts_at_the_first_plant_on_the_route():
     s = MissionSpec("m", "t1", 2, 3, 0.5, row_m=0.8, stops=frozenset({Cell(1, 1), Cell(1, 2)}))
     assert s.path() == [Cell(1, 2), Cell(1, 1)]                        # route goes along row 1 first; no plant there

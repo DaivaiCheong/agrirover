@@ -69,7 +69,8 @@ class StubClassifier:
     def __init__(self, result):
         self.result = result
 
-    def classify(self, data: bytes):
+    def classify(self, data: bytes, guide=None):
+        self.guide = guide
         return self.result
 
 
@@ -100,7 +101,7 @@ def test_a_language_model_reports_what_it_saw_and_no_invented_percentage(client)
 def test_a_possible_match_never_runs_the_soil_check_by_itself(client):
     # "zone" given, yet no database call: the model's name alone must not lead to advice
     app.dependency_overrides[get_classifier] = lambda: StubClassifier(Seen("anthracnose", None, "Dark spots."))
-    body = client.post("/api/v1/photos/check?zone=g5", files={"photo": ("a.jpg", JPEG, "image/jpeg")}).json()
+    body = client.post("/api/v1/photos/check?zone=g5&crop=guava", files={"photo": ("a.jpg", JPEG, "image/jpeg")}).json()
     assert body["symptom"] == "anthracnose" and body["correlation"] is None
 
 
@@ -140,7 +141,7 @@ def test_the_soil_check_follows_the_best_match_not_the_runner_up(client):
 
 def test_a_model_that_is_down_says_so_rather_than_guessing(client):
     class Down:
-        def classify(self, data):
+        def classify(self, data, guide=None):
             raise ModelUnavailable("cannot reach the disease model at http://x")
     r = _post(client, classifier=Down())
     assert r.status_code == 503 and "cannot reach" in r.json()["detail"]

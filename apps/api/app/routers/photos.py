@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import get_db
 from app.services import diagnosis, photo_library, tree_check
+from app.services.crop_guides import GUAVA, GUIDES, crop_of_zone, guide_for
 from app.services.disease import Classifier, ModelUnavailable, get_classifier
-from app.services.guava_diseases import BY_ID, DISEASES
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
@@ -52,38 +52,43 @@ async def tree(zone: str, row: int = Query(..., ge=0), col: int = Query(..., ge=
 @router.post("/check")
 async def check_photo(photo: UploadFile = File(...), zone: str | None = None,
                       row: int | None = Query(None, ge=0), col: int | None = Query(None, ge=0),
+                      crop: Literal["guava", "tomato"] | None = None,
                       classifier: Classifier | None = Depends(get_classifier),
                       session: AsyncSession = Depends(get_db)):
     """Check one plant photo. The image is not stored here: saving it is a separate choice. Say which bed it is from
     (`zone`) and a symptom the farm has a rule for is set against that bed's soil and air readings. Say which tree too
-    (`row`, `col`, from 0) and the answer carries that tree's own readings from the newest round."""
+    (`row`, `col`, from 0) and the answer carries that tree's own readings from the newest round. The bed's crop picks
+    the disease guide; `crop` (guava, tomato) names it without asking the database."""
     tree_ctx = await _tree(session, zone, row, col)        # checked first: a wrong tree should not cost a model call
     data = await _read_image(photo)
     if classifier is None:
         raise HTTPException(503, "disease model not installed")
+    # the block's crop picks the guide (a tomato block: tomato's); `crop` names it outright, and nothing named is guava
+    guide = GUIDES[crop] if crop else guide_for(await crop_of_zone(session, settings.farm_name, zone)) if zone else GUAVA
     try:
-        result = await run_in_threadpool(classifier.classify, data)
+        result = await run_in_threadpool(classifier.classify, data, guide)
     except ModelUnavailable as exc:
         raise HTTPException(503, str(exc)) from exc
     if result is None:
         return {"status": "uncertain", "label": None, "confidence": None, "seen": None, "matches": [], "symptom": None, "correlation": None,
-                "tree": tree_ctx, "note": "The model is not sure. Take a clearer, closer photo of one leaf or fruit. " + NOTE}
-    matches = [BY_ID[x].to_dict() for x in (result.label, result.also) if x in BY_ID]
-    # the soil check is offered for the best match only: picking the runner-up's rule put "Guava rust" under a brown-spot photo
-    symptom = (matches[0]["symptom"] if matches else None) or diagnosis.match_symptom(result.label)
+                "tree": tree_ctx, "crop": guide.crop, "note": "The model is not sure. Take a clearer, closer photo of one leaf or fruit. " + NOTE}
+    matches = [guide.by_id[x].to_dict() for x in (result.label, result.also) if x in guide.by_id]
+    # the soil check is offered for the best match only: picking the runner-up's rule put "Guava rust" under a brown-spot photo.
+    # Its rules are guava's, so a tomato photo gets none (the Farm screen rates the tomato block's soil instead).
+    symptom = ((matches[0]["symptom"] if matches else None) or diagnosis.match_symptom(result.label)) if guide is GUAVA else None
     correlation = None
     # Only a model with measured accuracy may run the soil check by itself. Otherwise a person compares the matches and chooses.
     if zone and symptom and result.confidence is not None:
         correlation = {**await diagnosis.diagnose(session, settings.farm_name, zone, symptom), "source": "photo"}
     confidence = None if result.confidence is None else round(float(result.confidence), 3)
     return {"status": "ok", "label": result.label, "confidence": confidence, "seen": result.seen, "matches": matches, "symptom": symptom,
-            "correlation": correlation, "tree": tree_ctx, "note": NOTE}
+            "correlation": correlation, "tree": tree_ctx, "crop": guide.crop, "note": NOTE}
 
 
 @router.get("/guide")
-async def disease_guide():
-    """The guava disease guide: what the photo AI reads, for a farmer to read too."""
-    return [d.to_dict() for d in DISEASES]
+async def disease_guide(crop: Literal["guava", "tomato"] = "guava"):
+    """A crop's disease guide: what the photo AI reads, for a farmer to read too."""
+    return [d.to_dict() for d in GUIDES[crop].diseases]
 
 
 @router.get("/labels")

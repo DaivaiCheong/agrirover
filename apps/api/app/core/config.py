@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     ollama_model: str | None = None
     ollama_api_key: str | None = None          # only for the hosted service at https://ollama.com; photos then leave the farm
-    photo_matches: bool = False                # suggest diseases from the guide. Too often wrong on local gemma4: see services/disease.py
+    # Check the photos of a simulated rover's flagged plants too (services/rover_photos.py). Off: they are drawn squares.
+    check_simulated_photos: bool = False
+    photo_matches: bool = False               # suggest diseases from the guide. Too often wrong on local gemma4: see services/disease.py
     photo_dir: str = "farm-photos"             # saved plant photos: back this folder up with the database
 
     # Stage 1 runs one farm; the topic segment farm/{name}/... must match it.

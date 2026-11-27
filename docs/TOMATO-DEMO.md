@@ -63,6 +63,38 @@ These are starting targets for a field or bed in the tropics, for the whole seas
 here yet, and the moisture band uses the probe's own % scale until the probe is checked against a dry and a wet
 sample of this soil. Code: `apps/api/app/services/tomato.py`.
 
+## At each plant: the camera and the photo check
+
+At each stop the rover photographs the plant and measures leaf cover and yellowing on the Pi. A plant with more than
+8 % yellow leaf is flagged, and the rover sends a larger photo of it (up to 640 px). The farm server then:
+
+1. keeps the photo in **Health › Photo library**, with the plant's row and spot, for an expert to confirm;
+2. asks the photo check what it shows, with the **tomato** disease guide on a tomato block (early and late blight,
+   Septoria, bacterial spot, leaf mould, leaf curl and mosaic viruses, wilt, blossom-end rot, feed shortages,
+   whitefly, leaf miner, fruit borer, cracking: **Health › Disease guide › Tomato**);
+3. shows the answer on that plant in the Rover screen ("Possible early blight · or septoria leaf spot").
+
+Triage, not a diagnosis: the tomato guide is not yet checked by an agronomist, and the model's accuracy was only
+measured on guava. `PHOTO_MATCHES=true` lets it name the closest entries; without it, it says only healthy or problem.
+A simulated round is not checked (its camera draws squares) unless `CHECK_SIMULATED_PHOTOS=true`.
+
+**The photo model: local gemma4.** This farm runs `gemma4` (6.1 GB) in Ollama on the PC: free, and photos stay
+here. It needs Ollama 0.40 or newer (`ollama pull gemma4`), with `OLLAMA_URL=http://host.docker.internal:11434` and
+`OLLAMA_MODEL=gemma4` in `.env`, then `docker compose up -d api`. The first photo after a restart takes about two
+minutes while the model loads; then a few seconds each. The online models at ollama.com need usage credits or a
+subscription (without them every check answers "not included in your Ollama plan").
+
+Checked on 27 Nov 2026 on one field photo of tomato leaves with brown, yellow-edged patches: "problem, several brown
+and yellow spots"; with names on, "early blight, or Septoria leaf spot". One photo is not a measure. Names stay off
+(`PHOTO_MATCHES=false`) until it is scored on labelled tomato photos from the photo library: on guava, local gemma4
+told healthy from a problem 130 times in 148, but named the disease right only 18 times in 119.
+
+Free pretrained tomato-disease models (YOLO or classifiers) are trained on PlantVillage lab photos of single leaves,
+and fall to about 11-31 % on field photos, so none is used yet. With a few hundred expert-labelled photos of your own,
+fine-tune one and score it against this check with `scripts/eval_photo_check.py`.
+
+The soil probe is not on the rover yet: a real round records no soil readings (`rover/probe.py`).
+
 ## 1. The farm server (on the PC)
 
 ```powershell

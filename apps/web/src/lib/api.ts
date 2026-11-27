@@ -148,6 +148,12 @@ export type TreeAdvice = { row: number; col: number; plant: boolean; litres: num
 export type RoverCell = {
   row: number; col: number; plant: boolean; flagged: boolean; readings: Record<string, number>; canopy?: number | null; chlorosis?: number | null;
   disease?: string | null; disease_confidence?: number | null; advice?: TreeAdvice | null;
+  /** What the photo check said about a plant the real rover flagged, during its round (services/rover_photos.py). */
+  check?: RoverPhotoCheck | null;
+};
+export type RoverPhotoCheck = {
+  status: "ok" | "uncertain" | "unavailable"; label: string | null; title: string; seen: string | null; also: string | null;
+  crop: "guava" | "tomato"; photoId: string | null; problem: string | null;
 };
 export type LiveMission = {
   missionId: string; zoneId: string; rows: number; cols: number; cellM: number; rowM: number;
@@ -380,7 +386,7 @@ export const api = {
   treeContext: (zone: string, row: number, col: number) =>
     request<TreeContext>(`/photos/tree?${new URLSearchParams({ zone, row: String(row), col: String(col) })}`),
   photoLabels: () => request<PhotoLabels>("/photos/labels"),
-  diseaseGuide: () => request<Disease[]>("/photos/guide"),
+  diseaseGuide: (crop: "guava" | "tomato" = "guava") => request<Disease[]>(`/photos/guide?crop=${crop}`),
   confirmPhoto: (id: string, body: { label: string; name: string; note: string | null }) => send<SavedPhoto>("PUT", `/photos/${id}/confirm`, body),
   deletePhoto: (id: string) => send<void>("DELETE", `/photos/${id}`),
   // the rover: its real software, with simulated wheels, camera and probe until the hardware is built

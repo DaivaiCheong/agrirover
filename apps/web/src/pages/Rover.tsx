@@ -39,6 +39,19 @@ function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return <li className={ok ? "chk chk-ok" : "chk"}>{ok ? <CircleCheck size={15} aria-hidden /> : <Circle size={15} aria-hidden />}{children}</li>;
 }
 
+/** What the photo check said about a plant the rover flagged: kept in Health › Photo library for an expert to confirm. */
+function PhotoCheckLine({ check }: { check?: RoverCell["check"] }) {
+  if (!check) return <span className="muted">Checking the photo… (real rover only)</span>;
+  return (
+    <>
+      <b>{check.title}</b>{check.also && <span className="muted"> · or {check.also.toLowerCase()}</span>}
+      {check.seen && <div className="small">{check.seen}</div>}
+      {check.problem && <div className="small muted">{check.problem}</div>}
+      <div className="small muted">Triage, not a diagnosis.{check.photoId && <> Kept in <Link to="/photos">Health › Photo library</Link>.</>}</div>
+    </>
+  );
+}
+
 /** One tree as the rover found it: the photo if one came with the round, what the probe read, and what it should get today. */
 function CellView({ cell, frame, held }: { cell?: RoverCell; frame?: string | null; held?: boolean }) {
   if (!cell) return <p className="small muted">The rover's photos and readings appear here during a round.</p>;
@@ -50,6 +63,7 @@ function CellView({ cell, frame, held }: { cell?: RoverCell; frame?: string | nu
         <tr><th scope="row">Tree</th><td><b>{cellName(cell.row, cell.col)}</b>{!cell.plant && " · no tree seen"}</td></tr>
         {a && cell.plant && <tr><th scope="row">Water today</th><td>{held ? <span className="muted">Held: induction stress</span> : <><b>{a.litres} L</b> of {a.fullLitres} L full demand</>}</td></tr>}
         {cell.plant && <tr><th scope="row">Leaf cover</th><td>{Math.round((cell.canopy ?? 0) * 100)} %{cell.flagged && <> <Tag kind="warn">Yellow {Math.round((cell.chlorosis ?? 0) * 100)} %</Tag></>}</td></tr>}
+        {cell.flagged && <tr><th scope="row">Photo check</th><td><PhotoCheckLine check={cell.check} /></td></tr>}
         {Object.keys(LABEL).filter((k) => cell.readings?.[k] !== undefined).map((k) => (
           <tr key={k}><th scope="row">{LABEL[k]}</th><td>{cell.readings[k]}</td></tr>
         ))}

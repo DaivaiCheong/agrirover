@@ -22,33 +22,48 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
-from app.services.guava_diseases import BY_ID, prompt_text
+from app.services.crop_guides import GUAVA, Guide
 
 TIMEOUT_S = 300.0                   # the first photo also loads the model into memory
 HEALTHY, PROBLEM, UNSURE, NONE = "healthy", "problem", "unsure", "none"
-SCREEN_PROMPT = (
-    "You are checking one close-up photo of a guava leaf or fruit for a farmer. Look only at what is visible.\n"
-    f"Choose one label:\n- {HEALTHY}: evenly coloured and clean, with no spots, patches, holes or damage. Natural speckles on guava skin are fine.\n"
-    f"- {PROBLEM}: any spots, patches, yellowing, mould, scabs, holes, insects, scorching or splits.\n"
-    f"- {UNSURE}: not a guava leaf or fruit, or too blurred or dark to judge.\n"
-    "Do not name a disease. In `seen`, describe the visible signs in one short sentence.\n"
-    'Reply only with JSON: {"seen": "...", "label": "..."}'
-)
-SCREEN_SCHEMA = {"type": "object", "required": ["seen", "label"],
-                 "properties": {"seen": {"type": "string"}, "label": {"type": "string", "enum": [HEALTHY, PROBLEM, UNSURE]}}}
 # `where` comes first so the model looks at which leaves carry the signs before it picks a name: young growth points to
 # rust, old leaves coloured between the veins to a feed shortage. On the 150 held-out photos this took right names from
 # 52 to 61 of 120. A forced list of sign types as well scored worse (51): it had no word for some signs (docs/GUAVA-RESEARCH.md).
 WHERE = ("young_growth", "old_leaves", "all_leaves", "fruit")
-MATCH_PROMPT = (
-    "This photo of a guava leaf or fruit shows a problem. Use this guide, and go by what is visible.\n\n" + prompt_text() + "\n\n"
-    f"First give `where`: which part carries the signs ({', '.join(WHERE)}). Compare young shoots at the tips with older leaves lower down. "
-    f"Then `label` is the entry that fits best, and `also` the next closest entry. Use {NONE} if nothing else fits, and {UNSURE} as `label` if no entry fits. "
-    f"Use only the ids at the start of each entry. Reply only with JSON: " + '{"where": "...", "label": "...", "also": "..."}'
-)
-MATCH_SCHEMA = {"type": "object", "required": ["where", "label", "also"],
-                "properties": {"where": {"type": "string", "enum": list(WHERE)},
-                               "label": {"type": "string", "enum": [*BY_ID, UNSURE]}, "also": {"type": "string", "enum": [*BY_ID, NONE]}}}
+
+
+def screen_prompt(g: Guide) -> str:
+    crop = g.name.lower()
+    return (
+        f"You are checking one close-up photo of a {crop} leaf or fruit for a farmer. Look only at what is visible.\n"
+        f"Choose one label:\n- {HEALTHY}: evenly coloured and clean, with no spots, patches, holes or damage. {g.normal}\n"
+        f"- {PROBLEM}: any spots, patches, yellowing, mould, scabs, holes, insects, scorching or splits.\n"
+        f"- {UNSURE}: not a {crop} leaf or fruit, or too blurred or dark to judge.\n"
+        "Do not name a disease. In `seen`, describe the visible signs in one short sentence.\n"
+        'Reply only with JSON: {"seen": "...", "label": "..."}'
+    )
+
+
+def match_prompt(g: Guide) -> str:
+    return (
+        f"This photo of a {g.name.lower()} leaf or fruit shows a problem. Use this guide, and go by what is visible.\n\n" + g.prompt + "\n\n"
+        f"First give `where`: which part carries the signs ({', '.join(WHERE)}). Compare young shoots at the tips with older leaves lower down. "
+        f"Then `label` is the entry that fits best, and `also` the next closest entry. Use {NONE} if nothing else fits, and {UNSURE} as `label` if no entry fits. "
+        f"Use only the ids at the start of each entry. Reply only with JSON: " + '{"where": "...", "label": "...", "also": "..."}'
+    )
+
+
+def match_schema(g: Guide) -> dict:
+    return {"type": "object", "required": ["where", "label", "also"],
+            "properties": {"where": {"type": "string", "enum": list(WHERE)},
+                           "label": {"type": "string", "enum": [*g.by_id, UNSURE]}, "also": {"type": "string", "enum": [*g.by_id, NONE]}}}
+
+
+SCREEN_SCHEMA = {"type": "object", "required": ["seen", "label"],
+                 "properties": {"seen": {"type": "string"}, "label": {"type": "string", "enum": [HEALTHY, PROBLEM, UNSURE]}}}
+# The guava prompts, as measured (scripts/eval_photo_check.py uses these).
+SCREEN_PROMPT, MATCH_PROMPT, MATCH_SCHEMA = screen_prompt(GUAVA), match_prompt(GUAVA), match_schema(GUAVA)
+BY_ID = GUAVA.by_id
 
 
 class ModelUnavailable(Exception):
@@ -64,8 +79,9 @@ class Seen:
 
 
 class Classifier(Protocol):
-    def classify(self, data: bytes) -> Seen | None:
-        """What the photo shows, or None when the model is not sure. Raises ModelUnavailable when it cannot answer."""
+    def classify(self, data: bytes, guide: Guide = GUAVA) -> Seen | None:
+        """What the photo shows, checked against `guide` (the block's crop), or None when the model is not sure.
+        Raises ModelUnavailable when it cannot answer."""
 
 
 class OllamaClassifier:
@@ -85,7 +101,8 @@ class OllamaClassifier:
         if res.status_code in (401, 403):
             raise ModelUnavailable("the Ollama key was refused: check OLLAMA_API_KEY")
         if res.status_code == 402:
-            raise ModelUnavailable(f"{self.model} is not included in your Ollama plan")
+            raise ModelUnavailable(f"{self.model} is not included in your Ollama plan: add usage credits or a subscription "
+                                   "on ollama.com, or use a local model")
         if res.status_code == 429:
             raise ModelUnavailable("the online model's usage limit is reached: try again later")
         if res.status_code != 200:
@@ -96,9 +113,9 @@ class OllamaClassifier:
         except (ValueError, KeyError, TypeError) as exc:
             raise ModelUnavailable("disease model gave an answer that could not be read") from exc
 
-    def classify(self, data: bytes) -> Seen | None:
+    def classify(self, data: bytes, guide: Guide = GUAVA) -> Seen | None:
         image = base64.b64encode(data).decode("ascii")
-        screen = self._ask(SCREEN_PROMPT, SCREEN_SCHEMA, image)
+        screen = self._ask(screen_prompt(guide), SCREEN_SCHEMA, image)
         label, seen = screen.get("label"), screen.get("seen")
         if label == HEALTHY:
             return Seen(HEALTHY, None, seen)
@@ -106,11 +123,11 @@ class OllamaClassifier:
             return None
         if not self.matches:
             return Seen(PROBLEM, None, seen)
-        match = self._ask(MATCH_PROMPT, MATCH_SCHEMA, image)
+        match = self._ask(match_prompt(guide), match_schema(guide), image)
         best, also = match.get("label"), match.get("also")
-        if best not in BY_ID:
+        if best not in guide.by_id:
             return Seen(PROBLEM, None, seen)
-        return Seen(best, None, seen, also if also in BY_ID and also != best else None)
+        return Seen(best, None, seen, also if also in guide.by_id and also != best else None)
 
 
 def get_classifier() -> Classifier | None:

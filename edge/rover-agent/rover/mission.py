@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from rover.config import DriveLimits, RoverConfig
 from rover.planner import ALONG, CORNERS, Cell, path_stats, plan, route, through_stops
 from rover.probe import NoProbe
-from rover.report import thumbnail
+from rover.report import photo_jpeg, thumbnail
 from rover.safety import Guards, SafetyStop
 from rover.vision import DEFAULT_CALIBRATION, Calibration, Observation, analyze, with_disease
 
@@ -268,6 +268,8 @@ class MissionRunner:
                 if seen and results and cell is not None:      # what the camera just saw, for whoever is watching
                     state["observation"] = results[-1].to_dict()
                     state["frame"] = thumbnail(img)
+                    if results[-1].obs.flagged:                # yellow leaves: a photo the farm server can check and keep
+                        state["photo"] = photo_jpeg(img)
                 on_progress(state)
             except Exception:                  # noqa: BLE001 — a failed status message must not end the mission
                 log.exception("progress callback failed")

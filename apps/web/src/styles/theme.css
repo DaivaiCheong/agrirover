@@ -796,6 +796,8 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .sw-crop{width:12px;height:12px;border-radius:50%;background:#D9432F;display:inline-block;box-shadow:inset 0 3px 0 -1px var(--plant)}
 .sw-seen{width:10px;height:10px;border-radius:50%;background:var(--ok);display:inline-block}
 .rv-plants{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+/* the photo check named a problem at this plant: a bar under it, beside the yellow-leaf outline */
+.rm-checked{fill:var(--alert);stroke:#fff;stroke-width:1}
 .rv-route{display:grid;gap:6px}
 .rv-route .seg{width:max-content}
 .rm-done{fill:none;stroke:var(--ink);stroke-width:2;opacity:.55;stroke-linejoin:round;pointer-events:none}
