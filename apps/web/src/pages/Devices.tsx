@@ -1,8 +1,5 @@
-import { useMemo } from "react";
-import { SyncBadge } from "../components/SampleNotice";
-import { Led, Panel } from "../components/ui";
-import { api, type DeviceRow } from "../lib/api";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
+import { Led, Notice, Panel } from "../components/ui";
+import { api, loadProblem, type DeviceRow } from "../lib/api";
 import { ago, usePoll } from "../lib/usePoll";
 
 const STATUS: Record<DeviceRow["status"], ["ok" | "warn" | "alert" | "idle", string]> = {
@@ -21,21 +18,15 @@ function statusOf(d: DeviceRow): ["ok" | "warn" | "alert" | "idle", string] {
 
 export default function Devices() {
   const { data, error } = usePoll(api.devices, 10000);
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-  const previewMode = Boolean(error && !data);
-  const rows = previewMode ? demo.devices : (data ?? demo.devices);
+  const rows = data ?? [];
 
   return (
     <main className="main stack" style={{ paddingTop: 12 }}>
+      {error && <Notice kind="alert">{loadProblem(error)}</Notice>}
       <Panel
         title="Field Telemetry & Rover Devices"
         pad={false}
-        right={
-          <div className="rv-right">
-            {previewMode && <SyncBadge />}
-            <span className="small muted">Automated heartbeat every 10 min</span>
-          </div>
-        }
+        right={<span className="small muted">Automated heartbeat every 10 min</span>}
       >
         <div className="tablewrap">
           <table className="tbl">
@@ -63,9 +54,6 @@ export default function Devices() {
                   </tr>
                 );
               })}
-              {rows.length === 0 && (
-                <tr><td colSpan={6}>No devices registered.</td></tr>
-              )}
             </tbody>
           </table>
         </div>

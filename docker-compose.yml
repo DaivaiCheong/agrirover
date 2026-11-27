@@ -1,20 +1,15 @@
-# AgriRover / AI Auto Farm — full stack.  Runs on a laptop for development and
-# on the Raspberry Pi for deployment; the Pi is the production host.
-#   docker compose up -d                 farm server + dashboard
-#   docker compose --profile sim up -d   ... plus a simulated rover for demos
+# AgriRover — full Docker stack with MongoDB (NoSQL) + FastAPI + Mosquitto + React.
+#   docker compose up -d                 MongoDB (NoSQL) + FastAPI backend + React dashboard
+#   docker compose --profile sim up -d   ... plus simulated rover & field node telemetry
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes: [ "./pgdata:/var/lib/postgresql/data" ]
-    ports: [ "5432:5432" ]
+  mongo:
+    image: mongo:7
+    ports: [ "27017:27017" ]
+    volumes: [ "./mongodata:/data/db" ]
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 20
 
   broker:
@@ -27,18 +22,19 @@ services:
     build: ./apps/api
     env_file: [ .env ]
     environment:
-      # Photo check: Ollama on this machine, so photos stay here. An empty OLLAMA_MODEL turns the check off.
+      MONGODB_URL: ${MONGODB_URL:-mongodb://mongo:27017}
+      MONGODB_DB: ${MONGODB_DB:-agrirover}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL-gemma4}
       PHOTO_DIR: /farm-photos
     extra_hosts: [ "host.docker.internal:host-gateway" ]
     depends_on:
-      db: { condition: service_healthy }
+      mongo: { condition: service_healthy }
       broker: { condition: service_started }
     ports: [ "8000:8000" ]
     volumes: [ "./apps/api:/srv", "./farm-photos:/farm-photos" ]
     command: >
-      sh -c "until alembic upgrade head; do echo 'waiting for db...'; sleep 2; done && python -m app.services.seed &&
+      sh -c "python -m app.services.seed &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   web:
@@ -52,8 +48,6 @@ services:
     command: npm run dev -- --host 0.0.0.0
 
   rover-sim:
-    # Simulated rover (drive + camera) on the real broker. The physical rover
-    # runs the same agent on its own Raspberry Pi: python -m rover run
     build: ./edge/rover-agent
     profiles: [ "sim" ]
     environment:
@@ -63,8 +57,6 @@ services:
     volumes: [ "./edge/rover-agent/reports:/srv/reports" ]
 
   field-sim:
-    # Simulated ESP8266 field node: the fixed part of the field, reporting rain and the water. The rover carries the
-    # soil probe and air sensor now. SIM_SCENARIO=rain makes it rain: the rover stops and today's water falls to nothing.
     build: ./edge/field-node-sim
     profiles: [ "sim" ]
     environment:
@@ -74,4 +66,3 @@ services:
       SIM_ZONE: g1
       SIM_INTERVAL: "10"
     depends_on: [ broker ]
-

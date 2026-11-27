@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { BedConditions, RoverCell, SavedPhoto } from "./api";
-import { buildDemoOrchardData } from "./roverDemo";
+import { buildDemoOrchardData } from "../test/fixtures";
 import {
   buildBlockSoilRows,
   defaultBlockSoilProfile,

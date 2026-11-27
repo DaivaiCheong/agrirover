@@ -193,6 +193,19 @@ export type Schedule = {
 export type ZoneNow = {
   zone: string; label: string | null; areaM2?: number | null; moisturePct: number | null; rain: boolean | null;
   supplyVoltage: number | null; waterPh: number | null; recordedAt: string | null;
+  soilProfile?: { texture: string; rootingDepthCm: number; drainage: string; organicMatterPct: number } | null;
+};
+
+export type SpreadsheetRowDto = {
+  id: string; rowNum: 2 | 3 | 4 | 5 | 6 | 7; label: string; unit: string;
+  roverQty: number; stdQty: number; unitRateUsd: number;
+  qtyDecimals: number; rateDecimals: number; customRoverQty?: boolean; customStdQty?: boolean; note: string;
+};
+
+export type FinanceWorkbookDto = {
+  plants: number; cycleDays: number; exchangeRate: number;
+  yieldKgPerPlant: number; sellingPricePerKg: number; riskProtectedUsd: number;
+  rows: SpreadsheetRowDto[];
 };
 
 export type DeviceRow = {
@@ -390,6 +403,13 @@ export const api = {
   saveSettings: (patch: Partial<Settings>) => send<Settings>("PUT", "/farm/settings", patch),
   crops: () => request<Crop[]>("/crops"),
   addBed: (b: { label: string; areaM2?: number }) => send<{ name: string; label: string }>("POST", "/zones", b),
+  saveSoilProfile: (zone: string, b: { texture: string; rootingDepthCm: number; drainage: string; organicMatterPct: number }) =>
+    send("PUT", `/zones/${encodeURIComponent(zone)}/profile`, b),
+
+  // interactive Excel workbook (NoSQL persisted)
+  financeWorkbook: () => request<FinanceWorkbookDto>("/finance/spreadsheet"),
+  saveFinanceWorkbook: (body: FinanceWorkbookDto) => send<FinanceWorkbookDto>("PUT", "/finance/spreadsheet", body),
+  resetFinanceWorkbook: () => send<FinanceWorkbookDto>("POST", "/finance/spreadsheet/reset", {}),
 
   // cycles
   cycles: () => request<Cycle[]>("/cycles"),

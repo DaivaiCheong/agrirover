@@ -8,7 +8,6 @@ import RoverVisionPhoto from "../components/RoverVisionPhoto";
 import { Empty, Kpis, Modal, Notice, Panel, Tag } from "../components/ui";
 import { api, loadProblem, type RoverCell, type SurveySummary } from "../lib/api";
 import { STATUS_WORD, cellName, stopInfo } from "../lib/rover";
-import { buildDemoOrchardData } from "../lib/roverDemo";
 import { getRoverContext, parsePlantLabel, setRoverContext, targetsFromConditions } from "../lib/soil";
 import { useData } from "../lib/useData";
 import { ago } from "../lib/usePoll";
@@ -258,8 +257,6 @@ export default function RoverHistory() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const zones = useData(api.zones);
-  const previewMode = Boolean(zones.error && zones.data === null);
-  const demo = useMemo(() => buildDemoOrchardData(), []);
   const conditions = useData(api.conditions);
   const surveys = useData(api.surveys);
 
@@ -269,12 +266,12 @@ export default function RoverHistory() {
   const [modalRoundId, setModalRoundId] = useState<string | null>(null);
   const [showAiBoxes, setShowAiBoxes] = useState(true);
 
-  const beds = previewMode ? demo.zones : (zones.data ?? []);
+  const beds = zones.data ?? [];
   const activeZone = zone === "all" ? "" : (zone || beds[0]?.zone || "");
   const activeBed = beds.find((b) => b.zone === activeZone);
   const blockLabel = activeBed?.label ?? activeZone;
 
-  const allRounds = previewMode ? demo.surveys : (surveys.data ?? []);
+  const allRounds = surveys.data ?? [];
   const filteredRounds = useMemo(
     () => (zone === "all" ? allRounds : allRounds.filter((r) => !activeZone || r.zone === activeZone)),
     [allRounds, zone, activeZone],
@@ -295,17 +292,17 @@ export default function RoverHistory() {
   // Load newest round cells only to populate the Plant filter dropdown cleanly
   const latestRoundId = filteredRounds[0]?.id ?? null;
   const latestRoundFetch = useData(
-    () => (previewMode || !latestRoundId ? Promise.resolve(null) : api.survey(latestRoundId)),
-    [previewMode, latestRoundId],
+    () => (latestRoundId ? api.survey(latestRoundId) : Promise.resolve(null)),
+    [latestRoundId],
   );
-  const latestRound = previewMode ? (latestRoundId ? demo.roundsById.get(latestRoundId) ?? null : null) : latestRoundFetch.data;
+  const latestRound = latestRoundFetch.data;
 
   // Fetch clicked round details when opening the Round Summary Pop-Up Card
   const modalRoundFetch = useData(
-    () => (previewMode || !modalRoundId ? Promise.resolve(null) : api.survey(modalRoundId)),
-    [previewMode, modalRoundId],
+    () => (modalRoundId ? api.survey(modalRoundId) : Promise.resolve(null)),
+    [modalRoundId],
   );
-  const modalRound = previewMode ? (modalRoundId ? demo.roundsById.get(modalRoundId) ?? null : null) : modalRoundFetch.data;
+  const modalRound = modalRoundFetch.data;
 
   const plantRc = parsePlantLabel(selectedPlant);
 
@@ -316,7 +313,7 @@ export default function RoverHistory() {
       .map((c) => cellName(c.row, c.col));
   }, [latestRound?.cells]);
 
-  const activeCond = (previewMode ? demo.conditions : (conditions.data ?? [])).find((c) => c.zone === activeZone);
+  const activeCond = (conditions.data ?? []).find((c) => c.zone === activeZone);
   const stageN = activeCond?.stage?.n ?? null;
 
   const blockRoundIds = useMemo(
@@ -332,9 +329,7 @@ export default function RoverHistory() {
   const blockRoundIdsKey = blockRoundIds.join(",");
   const plantSeriesData = useData(async () => {
     if (!blockRoundIds.length || !plantRc) return [];
-    const details = previewMode
-      ? blockRoundIds.map((id) => demo.roundsById.get(id)).filter((d): d is NonNullable<typeof d> => Boolean(d))
-      : await Promise.all(blockRoundIds.map((id) => api.survey(id)));
+    const details = await Promise.all(blockRoundIds.map((id) => api.survey(id)));
     return details
       .slice()
       .reverse()
@@ -372,15 +367,11 @@ export default function RoverHistory() {
         };
       })
       .filter((x): x is PlantPoint => x !== null);
-  }, [previewMode, blockRoundIdsKey, selectedPlant, stageN]);
+  }, [blockRoundIdsKey, selectedPlant, stageN]);
 
   const targets = targetsFromConditions(activeCond);
-  const waitingApi = !previewMode && (zones.loading || surveys.loading) && !zones.error && !surveys.error;
-  const demoSeries = useMemo(
-    () => (previewMode && activeZone ? demo.telemetryFor(activeZone, hours) : null),
-    [previewMode, activeZone, hours, demo],
-  );
-  const error = previewMode ? null : (zones.error ?? surveys.error ?? modalRoundFetch.error ?? conditions.error);
+  const waitingApi = (zones.loading || surveys.loading) && !zones.error && !surveys.error;
+  const error = zones.error ?? surveys.error ?? modalRoundFetch.error ?? conditions.error;
   const newestAt = filteredRounds[0]?.finishedAt ?? filteredRounds[0]?.startedAt ?? null;
 
   const comparisonSnapshots = useMemo(() => {
@@ -407,7 +398,6 @@ export default function RoverHistory() {
         pad={false}
         right={
           <div className="rv-right">
-            {previewMode && <Tag>Sample data · Synced with AgriRover</Tag>}
             <span className="small muted">
               Monitored automatically by AgriRover{newestAt ? ` · Last updated ${ago(newestAt)}` : ""}
             </span>
@@ -571,7 +561,7 @@ export default function RoverHistory() {
 
       {zone !== "all" && activeCond && (
         <Panel title={`Block soil & air trends · ${activeCond.label ?? activeCond.zone}`} pad={false}>
-          <BedTrends zone={activeCond.zone} params={activeCond.params} hours={hours} fallbackSeries={demoSeries} />
+          <BedTrends zone={activeCond.zone} params={activeCond.params} hours={hours} />
         </Panel>
       )}
 

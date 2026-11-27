@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceArea, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Notice } from "./ui";
-import { api, type CondParam, type TelemetrySeries } from "../lib/api";
+import { api, type CondParam } from "../lib/api";
 import { fmtValue, rangeText, trim, unitText } from "../lib/conditions";
 import { useData } from "../lib/useData";
 
@@ -111,20 +111,16 @@ function Trend({ p, pts, hours, from, to }: { p: CondParam; pts: Pt[]; hours: nu
 }
 
 /** Every reading of one bed over time: nine small charts that share one time window, with the same numbers as a table. */
-export default function BedTrends({ zone, params, hours, fallbackSeries }: {
+export default function BedTrends({ zone, params, hours }: {
   zone: string;
   params: CondParam[];
   hours: number;
-  fallbackSeries?: TelemetrySeries | null;
 }) {
   const [view, setView] = useState<"chart" | "table">("chart");
-  const fetched = useData(
-    () => (fallbackSeries ? Promise.resolve(fallbackSeries) : api.telemetry(zone, TREND_METRICS, hours, Math.round(hours / 24))),
-    [zone, hours, Boolean(fallbackSeries)],
+  const { data, error, loading } = useData(
+    () => api.telemetry(zone, TREND_METRICS, hours, Math.round(hours / 24)),
+    [zone, hours],
   );
-  const data = fallbackSeries ?? fetched.data;
-  const error = fallbackSeries ? null : fetched.error;
-  const loading = fallbackSeries ? false : fetched.loading;
   const byMetric = new Map(params.map((p) => [p.metric, p]));
 
   const from = data ? new Date(data.from).getTime() : 0;

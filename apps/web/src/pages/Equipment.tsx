@@ -1,10 +1,8 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
-import { SyncBadge } from "../components/SampleNotice";
 import { EF, Empty, FormModal, Kpis, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
-import { api } from "../lib/api";
+import { api, loadProblem } from "../lib/api";
 import { todayIso, usd } from "../lib/format";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { useData } from "../lib/useData";
 
 const STATUS: Record<string, [string | undefined, string]> = {
@@ -15,8 +13,6 @@ const STATUS: Record<string, [string | undefined, string]> = {
 
 export default function Equipment() {
   const assets = useData(api.assets);
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-  const previewMode = Boolean(assets.error && assets.data === null);
 
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -29,12 +25,6 @@ export default function Equipment() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    if (previewMode) {
-      setMsg({ kind: "ok", text: `Preview mode: ${name} noted.` });
-      setName("");
-      setCost("");
-      return;
-    }
     try {
       await api.addAsset({
         name,
@@ -64,19 +54,19 @@ export default function Equipment() {
     }
   }
 
-  const rows = previewMode ? demo.assets : (assets.data ?? demo.assets);
+  const rows = assets.data ?? [];
   const inUse = rows.filter((a) => a.status === "in_service");
   const perDay = inUse.reduce((s, a) => s + a.dailyDepreciationUsd, 0);
 
   return (
     <>
       <Toolbar>
-        {previewMode && <SyncBadge />}
         <button className="btn btn-sm" onClick={() => { setMsg(null); setAdding(true); }}>
           <Plus size={16} aria-hidden />Add equipment
         </button>
       </Toolbar>
       <main className="main stack">
+        {assets.error && <Notice kind="alert">{loadProblem(assets.error)}</Notice>}
         {listError && <Notice kind="alert">{listError}</Notice>}
 
         <Kpis
@@ -114,15 +104,11 @@ export default function Equipment() {
                       <td data-label="Per day" className="r">{usd(a.dailyDepreciationUsd, 3)}</td>
                       <td data-label="Status"><Tag kind={STATUS[a.status][0]}>{STATUS[a.status][1]}</Tag></td>
                       <td className="act">
-                        {!previewMode && a.status === "in_service" && (
+                        {a.status === "in_service" && (
                           <button className="linkbtn" onClick={() => act(() => api.retireAsset(a.id))}>Retire</button>
                         )}
-                        {!previewMode && (
-                          <>
-                            {" "}
-                            <button className="linkbtn linkbtn-alert" onClick={() => window.confirm(`Remove ${a.name}?`) && act(() => api.deleteAsset(a.id))}>Remove</button>
-                          </>
-                        )}
+                        {" "}
+                        <button className="linkbtn linkbtn-alert" onClick={() => window.confirm(`Remove ${a.name}?`) && act(() => api.deleteAsset(a.id))}>Remove</button>
                       </td>
                     </tr>
                   ))}

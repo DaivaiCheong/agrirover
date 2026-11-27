@@ -6,7 +6,6 @@ import SoilCad3D from "../components/SoilCad3D";
 import { Notice, Panel, Tag } from "../components/ui";
 import { api, loadProblem, type RoverCell } from "../lib/api";
 import { cellName, headingAt, serpentine } from "../lib/rover";
-import { buildDemoOrchardData } from "../lib/roverDemo";
 import {
   buildBlockSoilRows,
   getBlockSoilProfile,
@@ -45,10 +44,7 @@ export default function Rover() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const zones = useData(api.zones);
-  const previewMode = Boolean(zones.error && zones.data === null);
-  const demo = useMemo(() => buildDemoOrchardData(), []);
-
-  const { data: liveData, error: liveError } = usePoll(api.roverLive, previewMode ? 30000 : 1500);
+  const { data: liveData, error: liveError } = usePoll(api.roverLive, 2500);
   const cycles = useData(api.cycles);
   const conditions = usePoll(api.conditions, 30000);
   const adviceNow = usePoll(api.advice, 30000);
@@ -63,41 +59,41 @@ export default function Rover() {
 
   const viewportRef = useRef<HTMLDivElement>(null);
 
-  const beds = previewMode ? demo.zones : (zones.data ?? []);
-  const growing = (previewMode ? demo.cycles : (cycles.data ?? [])).filter((c) => c.status === "active");
+  const beds = zones.data ?? [];
+  const growing = (cycles.data ?? []).filter((c) => c.status === "active");
   const activeZone = zone || growing[0]?.zone || beds[0]?.zone || "";
   const activeBed = beds.find((b) => b.zone === activeZone);
   const activeCycle = growing.find((c) => c.zone === activeZone);
   const blockLabel = activeBed?.label ?? activeCycle?.bedLabel ?? activeZone ?? "";
 
-  const liveMission = previewMode ? null : (liveData?.mission ?? null);
+  const liveMission = liveData?.mission ?? null;
   const activeMission =
     liveMission && (liveMission.status === "queued" || liveMission.status === "running" || liveMission.zoneId === activeZone)
       ? liveMission
       : null;
 
   const history = useData(api.surveys, [liveMission?.missionId, liveMission?.status]);
-  const surveyList = previewMode ? demo.surveys : (history.data ?? []);
+  const surveyList = history.data ?? [];
   const lastSurvey = activeMission
     ? undefined
     : surveyList.find((s) => s.zone === activeZone && (s.status === "completed" || s.status === "aborted"));
   const lastRound = useData(
-    () => (previewMode || !lastSurvey ? Promise.resolve(null) : api.survey(lastSurvey.id)),
-    [previewMode, lastSurvey?.id],
+    () => (!lastSurvey ? Promise.resolve(null) : api.survey(lastSurvey.id)),
+    [lastSurvey?.id],
   );
 
-  const adviceList = previewMode ? demo.advice : (adviceNow.data ?? []);
+  const adviceList = adviceNow.data ?? [];
   const blockAdvice = adviceList.find((a) => a.zone === activeZone);
-  const blockConditions = (previewMode ? demo.conditions : (conditions.data ?? [])).find((c) => c.zone === activeZone);
+  const blockConditions = (conditions.data ?? []).find((c) => c.zone === activeZone);
   const targets = useMemo(() => targetsFromConditions(blockConditions), [blockConditions]);
 
   const storedCells: RoverCell[] = useMemo(() => {
     if (!lastSurvey) return [];
-    const roundDetail = previewMode ? demo.roundsById.get(lastSurvey.id) : (lastRound.data?.id === lastSurvey.id ? lastRound.data : null);
+    const roundDetail = lastRound.data?.id === lastSurvey.id ? lastRound.data : null;
     if (!roundDetail) return [];
     const adviceByKey = new Map((blockAdvice?.trees ?? []).map((t) => [`${t.row},${t.col}`, t]));
     return roundDetail.cells.map((c) => ({ ...c, advice: c.advice ?? adviceByKey.get(`${c.row},${c.col}`) ?? null }));
-  }, [lastSurvey, previewMode, demo.roundsById, lastRound.data, blockAdvice]);
+  }, [lastSurvey, lastRound.data, blockAdvice]);
 
   const cells = activeMission?.cells ?? storedCells;
   const grid = resolveBlockGrid({
@@ -109,7 +105,7 @@ export default function Rover() {
     zone: activeBed,
   });
 
-  const blockProfile = getBlockSoilProfile(activeZone);
+  const blockProfile = activeBed?.soilProfile ?? getBlockSoilProfile(activeZone);
   const capturedAt = activeMission
     ? new Date().toISOString()
     : (lastSurvey?.finishedAt ?? lastSurvey?.startedAt ?? null);
@@ -123,11 +119,11 @@ export default function Rover() {
       cells,
       conditions: blockConditions,
       advice: blockAdvice,
-      photos: previewMode ? [] : (savedPhotos.data?.photos ?? []),
+      photos: savedPhotos.data?.photos ?? [],
       profile: blockProfile,
       capturedAt,
     });
-  }, [activeZone, grid.rows, grid.cols, cells, blockConditions, blockAdvice, previewMode, savedPhotos.data, blockProfile, capturedAt]);
+  }, [activeZone, grid.rows, grid.cols, cells, blockConditions, blockAdvice, savedPhotos.data, blockProfile, capturedAt]);
 
   const summary = useMemo(() => summarizePlantSoil(allPlants), [allPlants]);
   const visiblePlants = useMemo(() => {
@@ -174,8 +170,8 @@ export default function Rover() {
   }, [adviceList, activeZone, summary.attention]);
 
   const liveFrame = useData(
-    () => (!previewMode && detailOpen && selected && activeMission ? api.roverFrame(selected[0], selected[1]) : Promise.resolve(null)),
-    [previewMode, detailOpen, selected?.[0], selected?.[1], activeMission?.missionId],
+    () => (detailOpen && selected && activeMission ? api.roverFrame(selected[0], selected[1]) : Promise.resolve(null)),
+    [detailOpen, selected?.[0], selected?.[1], activeMission?.missionId],
   );
 
   const running = activeMission?.status === "queued" || activeMission?.status === "running";
@@ -192,19 +188,18 @@ export default function Rover() {
 
   const photographedKeys = useMemo(() => {
     const set = new Set<string>();
-    if (previewMode) return set;
     for (const p of savedPhotos.data?.photos ?? []) {
       if (p.zone !== activeZone) continue;
       const rc = parsePlantLabel(p.tree);
       if (rc) set.add(`${rc[0]},${rc[1]}`);
     }
     return set;
-  }, [previewMode, savedPhotos.data, activeZone]);
+  }, [savedPhotos.data, activeZone]);
 
   const raining = beds.some((b) => b.rain === true);
   const isSmallScreen = typeof window !== "undefined" && window.innerWidth <= 640;
   const sceneHeight = isSmallScreen ? 340 : 440;
-  const pageError = previewMode ? null : (liveError ?? zones.error ?? conditions.error);
+  const pageError = liveError ?? zones.error ?? conditions.error;
 
   function selectBlock(nextZone: string) {
     setZone(nextZone);
@@ -262,7 +257,6 @@ export default function Rover() {
           pad={false}
           right={
             <span className="rv-right">
-              {previewMode && <Tag>Sample data · Synced with AgriRover</Tag>}
               <span className="small muted">{autoStatusText}</span>
               <span className="seg" role="group" aria-label="Land view mode">
                 <button type="button" className={view === "3d" ? "on" : ""} aria-pressed={view === "3d"} onClick={() => setView("3d")}>
@@ -328,7 +322,7 @@ export default function Rover() {
             <span className="small muted">Click a plant in 3D to inspect AI camera analysis &amp; soil status</span>
           </div>
 
-          {!previewMode && zones.data === null ? (
+          {zones.data === null ? (
             <div className="cad-loading" style={{ height: sceneHeight }}>Loading land plot…</div>
           ) : !activeZone ? (
             <div className="cad-loading" style={{ height: sceneHeight }}>No land blocks configured yet.</div>

@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { EF, FormModal, Kpis, Modal, Tag, type FormMsg } from "./ui";
 import { api, type Cycle } from "../lib/api";
 import { dayMonth, num, todayIso, usd } from "../lib/format";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { EXPECTED_KG_PER_PLANT, PRICE_USD_PER_KG } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
 
@@ -19,7 +18,7 @@ const TOMATO_SETUPS = [
   { id: "raised_bed", label: "Raised Mulched Beds", spacing: "Mulched drip bed", defaultPerM2: 0.3 },
 ];
 
-/** Start a tomato cycle on a bed with precision rover targets preloaded. */
+/** Start a tomato cycle directly on the FastAPI + MongoDB backend. */
 export default function AddCropModal({
   isOpen,
   onClose,
@@ -33,10 +32,9 @@ export default function AddCropModal({
 }) {
   const beds = useData(api.zones);
   const cycles = useData(api.cycles);
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
 
-  const bedList = beds.data ?? demo.zones;
-  const cycleList = cycles.data ?? demo.cycles;
+  const bedList = beds.data ?? [];
+  const cycleList = cycles.data ?? [];
 
   const [bed, setBed] = useState("");
   const [setupId, setSetupId] = useState(TOMATO_SETUPS[0].id);
@@ -49,7 +47,7 @@ export default function AddCropModal({
 
   const busy = new Set(cycleList.filter((c) => c.status === "active").map((c) => c.zone));
   const free = bedList.filter((b) => !busy.has(b.zone));
-  const chosen = bed || zone || free[0]?.zone || bedList[0]?.zone || "g6";
+  const chosen = bed || zone || free[0]?.zone || bedList[0]?.zone || "";
   const area = bedList.find((b) => b.zone === chosen)?.areaM2 ?? 50;
   const setup = TOMATO_SETUPS.find((s) => s.id === setupId) ?? TOMATO_SETUPS[0];
 
@@ -73,6 +71,10 @@ export default function AddCropModal({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (!chosen) {
+      setMsg({ kind: "alert", text: "Choose an available block first." });
+      return;
+    }
     try {
       const cycle = await api.addCycle({
         zone: chosen,
@@ -87,30 +89,8 @@ export default function AddCropModal({
       setMade(cycle);
       cycles.reload();
       onAdded?.();
-    } catch {
-      const bedLabel = bedList.find((b) => b.zone === chosen)?.label ?? chosen.toUpperCase();
-      setMade({
-        id: `demo-cycle-${chosen}`,
-        zone: chosen,
-        bedLabel,
-        trialArm: null,
-        crop: "tomato",
-        cropName: "Tomato",
-        variety: variety.trim() || "Roma Tomato",
-        plantedOn: started,
-        endedOn: null,
-        status: "active",
-        day: 1,
-        stage: "seedling",
-        stageTitle: "Seedling & establishment",
-        plantCount: Number(plants) || 10,
-        areaM2: area,
-        setup: setupId,
-        setupLabel: setup.label,
-        expectedPriceUsdPerKg: Number(price) || PRICE_USD_PER_KG,
-        forecast: null,
-      });
-      onAdded?.();
+    } catch (err) {
+      setMsg({ kind: "alert", text: (err as Error).message });
     }
   }
 

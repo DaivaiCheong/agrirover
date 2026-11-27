@@ -1,13 +1,12 @@
 import { useMemo } from "react";
 import { Scale } from "lucide-react";
 import { Link } from "react-router-dom";
-import { SyncBadge } from "../components/SampleNotice";
-import { Empty, Kpis, Panel, Tag } from "../components/ui";
-import { api } from "../lib/api";
+import { Empty, Kpis, Notice, Panel, Tag } from "../components/ui";
+import { api, loadProblem } from "../lib/api";
 import { num } from "../lib/format";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { buildAllBlockEconomics, UNIT_TOTAL_COST_RIEL, UNIT_TOTAL_COST_USD, usdAndRiel } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
+import { useLatestRoundsByZone } from "../lib/useLatestRounds";
 
 export default function CopSummary() {
   const zones = useData(api.zones);
@@ -15,37 +14,10 @@ export default function CopSummary() {
   const conditions = useData(api.conditions);
   const surveys = useData(api.surveys);
 
-  const previewMode = Boolean((zones.error && zones.data === null) || (cycles.error && cycles.data === null));
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-
-  const activeZones = previewMode ? demo.zones : (zones.data ?? demo.zones);
-  const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
-  const activeConds = previewMode ? demo.conditions : (conditions.data ?? demo.conditions);
-  const surveyList = previewMode ? demo.surveys : (surveys.data ?? []);
-
-  const liveRoundIds = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const s of surveyList) {
-      if ((s.status === "completed" || s.status === "aborted") && !map.has(s.zone)) {
-        map.set(s.zone, s.id);
-      }
-    }
-    return map;
-  }, [surveyList]);
-
-  const roundKey = [...liveRoundIds.values()].join(",");
-  const fetchedRounds = useData(async () => {
-    if (previewMode || !roundKey) return new Map();
-    const pairs = await Promise.all([...liveRoundIds.entries()].map(async ([z, id]) => [z, await api.survey(id)] as const));
-    return new Map(pairs);
-  }, [previewMode, roundKey]);
-
-  const roundsByZone = useMemo(() => {
-    if (previewMode) return demo.roundsByZone;
-    const map = new Map(demo.roundsByZone);
-    fetchedRounds.data?.forEach((v, k) => map.set(k, v));
-    return map;
-  }, [previewMode, demo.roundsByZone, fetchedRounds.data]);
+  const activeZones = zones.data ?? [];
+  const activeCycles = cycles.data ?? [];
+  const activeConds = conditions.data ?? [];
+  const { roundsByZone } = useLatestRoundsByZone(surveys.data ?? []);
 
   const { blocks } = useMemo(
     () =>
@@ -58,6 +30,8 @@ export default function CopSummary() {
     [activeCycles, activeZones, activeConds, roundsByZone],
   );
 
+  const pageError = zones.error ?? cycles.error ?? conditions.error ?? surveys.error;
+
   const totalPlants = blocks.reduce((s, b) => s + b.plantCount, 0);
   const totalSpentUsd = blocks.reduce((s, b) => s + b.spentToDateUsd, 0);
   const totalSpentRiel = blocks.reduce((s, b) => s + b.spentToDateRiel, 0);
@@ -68,6 +42,7 @@ export default function CopSummary() {
 
   return (
     <main className="main stack" style={{ paddingTop: 12 }}>
+      {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
       <Kpis
         items={[
           { k: "Active tomato plants", v: totalPlants, d: `Across ${blocks.filter((b) => b.plantCount > 0).length} growing beds` },
@@ -83,7 +58,6 @@ export default function CopSummary() {
         pad={false}
         right={
           <div className="rv-right">
-            <SyncBadge />
             <span className="small muted">{usdAndRiel(UNIT_TOTAL_COST_USD, UNIT_TOTAL_COST_RIEL)} budget per active tomato plant</span>
           </div>
         }

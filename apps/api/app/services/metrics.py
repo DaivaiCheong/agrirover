@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from app.models.entities import Metric, Quality
+from app.models.enums import Metric, Quality
 
 
 @dataclass(frozen=True)

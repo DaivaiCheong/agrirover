@@ -2,37 +2,53 @@ import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Bot, Calculator, Camera, Sprout } from "lucide-react";
 import EnvRibbon from "../components/EnvRibbon";
-import { SyncBadge } from "../components/SampleNotice";
-import { Kpis, PageHead, Panel, Tag } from "../components/ui";
-import { api } from "../lib/api";
+import { Empty, Kpis, Notice, PageHead, Panel, Tag } from "../components/ui";
+import { api, loadProblem } from "../lib/api";
 import { litres, num } from "../lib/format";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { buildAllBlockEconomics, usdAndRiel } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
+import { useLatestRoundsByZone } from "../lib/useLatestRounds";
 
-/** Detailed view of a single tomato block cycle, linked to Rover soil readings, Vision alerts & Cost budget. */
+/** Detailed view of a single tomato block cycle, live from MongoDB. */
 export default function OrchardCycle() {
   const { id = "" } = useParams();
   const cycles = useData(api.cycles);
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-  const previewMode = Boolean(cycles.error && cycles.data === null);
+  const zones = useData(api.zones);
+  const conditions = useData(api.conditions);
+  const adviceRes = useData(api.advice);
+  const surveys = useData(api.surveys);
 
-  const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
-  const cycle = activeCycles.find((c) => c.id === id || c.zone === id) ?? demo.cycles[0];
-  const cond = demo.conditions.find((c) => c.zone === cycle.zone);
-  const advice = demo.advice.find((a) => a.zone === cycle.zone);
+  const activeCycles = cycles.data ?? [];
+  const activeZones = zones.data ?? [];
+  const activeConds = conditions.data ?? [];
+  const activeAdvice = adviceRes.data ?? [];
+  const { roundsByZone } = useLatestRoundsByZone(surveys.data ?? []);
+
+  const cycle = activeCycles.find((c) => c.id === id || c.zone === id) ?? null;
+  const cond = cycle ? activeConds.find((c) => c.zone === cycle.zone) : undefined;
+  const advice = cycle ? activeAdvice.find((a) => a.zone === cycle.zone) : undefined;
+
   const { blocks, allRows } = useMemo(
     () =>
       buildAllBlockEconomics({
-        cycles: demo.cycles,
-        zones: demo.zones,
-        conditions: demo.conditions,
-        roundsByZone: demo.roundsByZone,
+        cycles: activeCycles,
+        zones: activeZones,
+        conditions: activeConds,
+        roundsByZone,
       }),
-    [demo],
+    [activeCycles, activeZones, activeConds, roundsByZone],
   );
-  const blockFin = blocks.find((b) => b.zone === cycle.zone);
-  const plants = allRows.filter((r) => r.zone === cycle.zone && r.plant);
+  const blockFin = cycle ? blocks.find((b) => b.zone === cycle.zone) : undefined;
+  const plants = cycle ? allRows.filter((r) => r.zone === cycle.zone && r.plant) : [];
+  const pageError = cycles.error ?? zones.error ?? conditions.error;
+
+  if (!cycle) {
+    return (
+      <main className="main stack">
+        {pageError ? <Notice kind="alert">{loadProblem(pageError)}</Notice> : <Empty>Loading tomato block…</Empty>}
+      </main>
+    );
+  }
 
   return (
     <>
@@ -42,7 +58,6 @@ export default function OrchardCycle() {
         sub={`Tomato (${cycle.variety ?? "Roma Tomato"}) · ${blockFin?.plantCount ?? cycle.plantCount ?? 0} plants · ${cycle.setupLabel ?? "Drip bed"}`}
         actions={
           <>
-            <SyncBadge />
             <Link className="btn btn-ghost btn-sm" to="/rover">
               <Bot size={15} aria-hidden />Open Rover 3D
             </Link>
@@ -56,6 +71,7 @@ export default function OrchardCycle() {
         }
       />
       <main className="main stack">
+        {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
         <Kpis
           items={[
             { k: "Cycle stage", v: `Day ${cycle.day ?? 1}`, d: cycle.stageTitle ?? "Growing" },
@@ -110,9 +126,7 @@ export default function OrchardCycle() {
                 {plants.map((p) => (
                   <tr key={p.name}>
                     <td><b>{p.name}</b></td>
-                    <td>
-                      <Tag kind={p.vision.status === "healthy" ? "ok" : "warn"}>{p.vision.badgeLabel}</Tag>
-                    </td>
+                    <td><Tag kind={p.vision.status === "healthy" ? "ok" : "warn"}>{p.vision.badgeLabel}</Tag></td>
                     <td className="r">{p.readings.ph !== null ? p.readings.ph.toFixed(2) : "—"}</td>
                     <td className="r">{p.readings.moisture !== null ? `${p.readings.moisture.toFixed(1)}%` : "—"}</td>
                     <td className="r">{p.waterLitres !== null ? `${p.waterLitres} L` : "0 L"}</td>

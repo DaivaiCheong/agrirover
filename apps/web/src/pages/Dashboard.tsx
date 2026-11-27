@@ -2,15 +2,14 @@ import { useMemo } from "react";
 import { ArrowRight, Bot, CalendarDays, Camera, Calculator, Droplets, ShieldAlert, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 import EnvRibbon from "../components/EnvRibbon";
-import { SyncBadge } from "../components/SampleNotice";
-import { Kpis, PageHead, Panel, Tag } from "../components/ui";
-import { api } from "../lib/api";
+import { Kpis, Notice, PageHead, Panel, Tag } from "../components/ui";
+import { api, loadProblem } from "../lib/api";
 import { litres, longToday } from "../lib/format";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { targetsFromConditions } from "../lib/soil";
 import { buildAllBlockEconomics, computeFinanceView, UNIT_SAVED_RIEL, UNIT_SAVED_USD, UNIT_TOTAL_COST_RIEL, UNIT_TOTAL_COST_USD, usdAndRiel } from "../lib/tomatoFinance";
 import { matchTreatmentForCondition } from "../lib/treatments";
 import { useData } from "../lib/useData";
+import { useLatestRoundsByZone } from "../lib/useLatestRounds";
 import { usePoll } from "../lib/usePoll";
 import { evaluateAgronomyAction } from "../utils/agronomyEngine";
 
@@ -19,18 +18,13 @@ export default function Dashboard() {
   const advice = usePoll(api.advice, 30000);
   const conditions = usePoll(api.conditions, 30000);
   const zones = useData(api.zones);
+  const surveys = useData(api.surveys);
 
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-  const previewMode = Boolean(
-    (cycles.error && cycles.data === null) ||
-      (advice.error && advice.data === null) ||
-      (conditions.error && conditions.data === null),
-  );
-
-  const activeZones = previewMode ? demo.zones : (zones.data ?? demo.zones);
-  const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
-  const activeConds = previewMode ? demo.conditions : (conditions.data ?? demo.conditions);
-  const activeAdvice = previewMode ? demo.advice : (advice.data ?? demo.advice);
+  const activeZones = zones.data ?? [];
+  const activeCycles = cycles.data ?? [];
+  const activeConds = conditions.data ?? [];
+  const activeAdvice = advice.data ?? [];
+  const { roundsByZone } = useLatestRoundsByZone(surveys.data ?? []);
 
   const { blocks, allRows } = useMemo(
     () =>
@@ -38,9 +32,9 @@ export default function Dashboard() {
         cycles: activeCycles,
         zones: activeZones,
         conditions: activeConds,
-        roundsByZone: demo.roundsByZone,
+        roundsByZone,
       }),
-    [activeCycles, activeZones, activeConds, demo.roundsByZone],
+    [activeCycles, activeZones, activeConds, roundsByZone],
   );
 
   const farmReport = useMemo(
@@ -48,6 +42,7 @@ export default function Dashboard() {
     [blocks, allRows],
   );
 
+  const pageError = cycles.error ?? zones.error ?? conditions.error ?? advice.error;
   const totalWaterToday = activeAdvice.reduce((s, a) => s + a.water.litres, 0);
   const rowsByZone = useMemo(() => {
     const map = new Map<string, typeof allRows>();
@@ -71,7 +66,6 @@ export default function Dashboard() {
         sub={longToday()}
         actions={
           <>
-            <SyncBadge />
             <Link className="btn btn-sm btn-ghost" to="/rover">
               <Bot size={15} aria-hidden />Rover 3D View
             </Link>
@@ -82,6 +76,7 @@ export default function Dashboard() {
         }
       />
       <main className="main stack">
+        {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
         <Kpis
           items={[
             {

@@ -3,13 +3,12 @@ import { useSearchParams } from "react-router-dom";
 import { ArrowRight, Bot, Camera, Calculator, Plus, Sprout } from "lucide-react";
 import { Link } from "react-router-dom";
 import AddCropModal from "../components/AddCropModal";
-import { SyncBadge } from "../components/SampleNotice";
-import { Kpis, PageHead, Panel, Tag } from "../components/ui";
-import { api } from "../lib/api";
+import { Kpis, Notice, PageHead, Panel, Tag } from "../components/ui";
+import { api, loadProblem } from "../lib/api";
 import { num } from "../lib/format";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { buildAllBlockEconomics, UNIT_TOTAL_COST_RIEL, UNIT_TOTAL_COST_USD, usdAndRiel } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
+import { useLatestRoundsByZone } from "../lib/useLatestRounds";
 
 export default function Cycles() {
   const [qs, setQs] = useSearchParams();
@@ -19,37 +18,10 @@ export default function Cycles() {
   const conditions = useData(api.conditions);
   const surveys = useData(api.surveys);
 
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-  const previewMode = Boolean((cycles.error && cycles.data === null) || (zones.error && zones.data === null));
-
-  const activeZones = previewMode ? demo.zones : (zones.data ?? demo.zones);
-  const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
-  const activeConds = previewMode ? demo.conditions : (conditions.data ?? demo.conditions);
-  const surveyList = previewMode ? demo.surveys : (surveys.data ?? []);
-
-  const liveRoundIds = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const s of surveyList) {
-      if ((s.status === "completed" || s.status === "aborted") && !map.has(s.zone)) {
-        map.set(s.zone, s.id);
-      }
-    }
-    return map;
-  }, [surveyList]);
-
-  const roundKey = [...liveRoundIds.values()].join(",");
-  const fetchedRounds = useData(async () => {
-    if (previewMode || !roundKey) return new Map();
-    const pairs = await Promise.all([...liveRoundIds.entries()].map(async ([z, id]) => [z, await api.survey(id)] as const));
-    return new Map(pairs);
-  }, [previewMode, roundKey]);
-
-  const roundsByZone = useMemo(() => {
-    if (previewMode) return demo.roundsByZone;
-    const map = new Map(demo.roundsByZone);
-    fetchedRounds.data?.forEach((v, k) => map.set(k, v));
-    return map;
-  }, [previewMode, demo.roundsByZone, fetchedRounds.data]);
+  const activeZones = zones.data ?? [];
+  const activeCycles = cycles.data ?? [];
+  const activeConds = conditions.data ?? [];
+  const { roundsByZone } = useLatestRoundsByZone(surveys.data ?? []);
 
   const { blocks } = useMemo(
     () =>
@@ -62,6 +34,7 @@ export default function Cycles() {
     [activeCycles, activeZones, activeConds, roundsByZone],
   );
 
+  const pageError = cycles.error ?? zones.error ?? conditions.error;
   const growing = blocks.filter((b) => b.plantCount > 0);
   const totalPlants = growing.reduce((s, b) => s + b.plantCount, 0);
   const totalAlerts = growing.reduce((s, b) => s + b.visionAlertCount, 0);
@@ -75,15 +48,13 @@ export default function Cycles() {
         title="Tomato Crop Cycles"
         sub="Active tomato plantings synced with Rover soil probes, Health vision alerts & cycle budgets"
         actions={
-          <>
-            {previewMode && <SyncBadge />}
-            <button className="btn btn-sm" onClick={() => setShowAdd(true)}>
-              <Plus size={16} aria-hidden />Start a tomato cycle
-            </button>
-          </>
+          <button className="btn btn-sm" onClick={() => setShowAdd(true)}>
+            <Plus size={16} aria-hidden />Start a tomato cycle
+          </button>
         }
       />
       <main className="main stack">
+        {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
         <Kpis
           items={[
             { k: "Active tomato blocks", v: `${growing.length} of ${blocks.length}`, d: `${blocks.length - growing.length} ready for next planting` },

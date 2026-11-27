@@ -1,25 +1,34 @@
 import { useMemo, useState } from "react";
 import { Wheat } from "lucide-react";
-import { SyncBadge } from "../components/SampleNotice";
-import { Empty, Kpis, Panel, Tag } from "../components/ui";
-import { api } from "../lib/api";
+import { Empty, Kpis, Notice, Panel, Tag } from "../components/ui";
+import { api, loadProblem } from "../lib/api";
 import { num } from "../lib/format";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { buildAllBlockEconomics, usdToRiel } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
+import { useLatestRoundsByZone } from "../lib/useLatestRounds";
 
 export default function Harvest() {
   const cycles = useData(api.cycles);
   const zones = useData(api.zones);
   const conditions = useData(api.conditions);
-  const previewMode = Boolean((cycles.error && cycles.data === null) || (zones.error && zones.data === null));
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
+  const surveys = useData(api.surveys);
 
-  const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
-  const activeZones = previewMode ? demo.zones : (zones.data ?? demo.zones);
-  const activeConds = previewMode ? demo.conditions : (conditions.data ?? demo.conditions);
+  const activeCycles = cycles.data ?? [];
+  const activeZones = zones.data ?? [];
+  const activeConds = conditions.data ?? [];
+  const { roundsByZone } = useLatestRoundsByZone(surveys.data ?? []);
 
   const [selectedZone, setSelectedZone] = useState("all");
+
+  const cycleKey = activeCycles.map((c) => c.id).join(",");
+  const ledgerData = useData(async () => {
+    if (!activeCycles.length) return { harvests: [], sales: [] };
+    const [hLists, sLists] = await Promise.all([
+      Promise.all(activeCycles.map(async (c) => ({ cycle: c, items: await api.harvests(c.id) }))),
+      Promise.all(activeCycles.map(async (c) => ({ cycle: c, items: await api.sales(c.id) }))),
+    ]);
+    return { harvests: hLists, sales: sLists };
+  }, [cycleKey]);
 
   const { blocks } = useMemo(
     () =>
@@ -27,17 +36,17 @@ export default function Harvest() {
         cycles: activeCycles,
         zones: activeZones,
         conditions: activeConds,
-        roundsByZone: demo.roundsByZone,
+        roundsByZone,
       }),
-    [activeCycles, activeZones, activeConds, demo.roundsByZone],
+    [activeCycles, activeZones, activeConds, roundsByZone],
   );
 
   const harvestRows = useMemo(() => {
     const out: { zone: string; label: string; variety: string; date: string; kgTotal: number; kgMarketable: number; kgLost: number; note: string | null }[] = [];
-    for (const c of activeCycles) {
+    for (const entry of ledgerData.data?.harvests ?? []) {
+      const c = entry.cycle;
       if (selectedZone !== "all" && c.zone !== selectedZone) continue;
-      const hs = demo.harvestsByZone.get(c.zone) ?? [];
-      for (const h of hs) {
+      for (const h of entry.items) {
         out.push({
           zone: c.zone,
           label: c.bedLabel,
@@ -51,14 +60,14 @@ export default function Harvest() {
       }
     }
     return out;
-  }, [activeCycles, demo.harvestsByZone, selectedZone]);
+  }, [ledgerData.data, selectedZone]);
 
   const saleRows = useMemo(() => {
     const out: { zone: string; label: string; date: string; kg: number; pricePerKg: number; amountUsd: number; buyer: string | null }[] = [];
-    for (const c of activeCycles) {
+    for (const entry of ledgerData.data?.sales ?? []) {
+      const c = entry.cycle;
       if (selectedZone !== "all" && c.zone !== selectedZone) continue;
-      const ss = demo.salesByZone.get(c.zone) ?? [];
-      for (const s of ss) {
+      for (const s of entry.items) {
         out.push({
           zone: c.zone,
           label: c.bedLabel,
@@ -71,7 +80,7 @@ export default function Harvest() {
       }
     }
     return out;
-  }, [activeCycles, demo.salesByZone, selectedZone]);
+  }, [ledgerData.data, selectedZone]);
 
   const scopedBlocks = selectedZone === "all" ? blocks : blocks.filter((b) => b.zone === selectedZone);
   const expectedYieldKg = scopedBlocks.reduce((s, b) => s + b.expectedYieldKg, 0);
@@ -79,16 +88,18 @@ export default function Harvest() {
   const projectedRevenueRiel = scopedBlocks.reduce((s, b) => s + b.projectedRevenueRiel, 0);
   const harvestedKg = harvestRows.reduce((s, h) => s + h.kgTotal, 0);
   const soldUsd = saleRows.reduce((s, x) => s + x.amountUsd, 0);
+  const pageError = cycles.error ?? zones.error ?? ledgerData.error;
 
   return (
     <main className="main stack" style={{ paddingTop: 12 }}>
+      {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
+
       <Panel
         title="Tomato Harvest & Revenue"
         icon={Wheat}
         pad={false}
         right={
           <div className="rv-right">
-            <SyncBadge />
             <select
               className="erp-select toolbar-select"
               aria-label="Filter by tomato block"
@@ -109,7 +120,7 @@ export default function Harvest() {
           <Kpis
             items={[
               { k: "Expected cycle yield", v: `${num(expectedYieldKg, 1)} kg`, d: "Target ~4.5 kg / tomato plant" },
-              { k: "Harvested so far", v: `${num(harvestedKg, 1)} kg`, d: "Early ripening flushes (G3–G5)" },
+              { k: "Harvested so far", v: `${num(harvestedKg, 1)} kg`, d: "Logged in MongoDB harvests" },
               { k: "Sales logged", v: `$${soldUsd.toFixed(2)}`, d: `~${usdToRiel(soldUsd).toLocaleString()} ៛` },
               { k: "Projected cycle revenue", v: `$${projectedRevenueUsd.toFixed(2)}`, d: `~${projectedRevenueRiel.toLocaleString()} ៛ (@ $0.80/kg)` },
             ]}
@@ -120,7 +131,7 @@ export default function Harvest() {
       <div className="grid g2">
         <Panel title="Logged Tomato Harvests" pad={false}>
           {harvestRows.length === 0 ? (
-            <Empty>Selected beds are in flowering or fruit-sizing stage (no harvest logged yet).</Empty>
+            <Empty>Selected beds have no logged harvests yet.</Empty>
           ) : (
             <div className="tablewrap">
               <table className="tbl fold fin-sub-tbl">

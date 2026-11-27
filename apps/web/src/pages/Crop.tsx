@@ -4,9 +4,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import PlantSoilModal from "../components/PlantSoilModal";
 import { FastFocusBlocks, MulderQuickCheck } from "../components/FastFocusCard";
 import RoverVisionPhoto from "../components/RoverVisionPhoto";
-import { Empty, Panel, Tag } from "../components/ui";
-import { api } from "../lib/api";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
+import { Empty, Notice, Panel, Tag } from "../components/ui";
+import { api, loadProblem } from "../lib/api";
 import {
   buildBlockSoilRows,
   getBlockSoilProfile,
@@ -17,6 +16,7 @@ import {
 } from "../lib/soil";
 import { TOMATO_TREATMENTS } from "../lib/treatments";
 import { useData } from "../lib/useData";
+import { useLatestRoundsByZone } from "../lib/useLatestRounds";
 import { ago } from "../lib/usePoll";
 import { evaluateAgronomyAction, FAST_GUIDE_CARDS } from "../utils/agronomyEngine";
 
@@ -49,48 +49,24 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
   const surveys = useData(api.surveys);
   const photos = useData(() => api.photos("all"));
 
-  const previewMode = Boolean(zones.error && zones.data === null);
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-
   const [zoneFilter, setZoneFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "alerts" | "healthy">("all");
   const [showBoxes, setShowBoxes] = useState(true);
   const [inspected, setInspected] = useState<GalleryItem | null>(null);
 
-  const beds = previewMode ? demo.zones : (zones.data ?? []);
-  const condList = previewMode ? demo.conditions : (conditions.data ?? []);
-  const adviceList = previewMode ? demo.advice : (advice.data ?? []);
-  const surveyList = previewMode ? demo.surveys : (surveys.data ?? []);
-  const savedPhotos = previewMode ? [] : (photos.data?.photos ?? []);
+  const beds = zones.data ?? [];
+  const condList = conditions.data ?? [];
+  const adviceList = advice.data ?? [];
+  const surveyList = surveys.data ?? [];
+  const savedPhotos = photos.data?.photos ?? [];
 
-  // Build unified gallery of all rover-captured tomato plants across blocks
-  const latestSurveyByZone = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const s of surveyList) {
-      if ((s.status === "completed" || s.status === "aborted") && !map.has(s.zone)) {
-        map.set(s.zone, s.id);
-      }
-    }
-    return map;
-  }, [surveyList]);
-
-  const liveRoundIdsKey = [...latestSurveyByZone.values()].join(",");
-  const fetchedRounds = useData(async () => {
-    if (previewMode || !liveRoundIdsKey) return new Map();
-    const entries = await Promise.all(
-      [...latestSurveyByZone.entries()].map(async ([z, id]) => [z, await api.survey(id)] as const),
-    );
-    return new Map(entries);
-  }, [previewMode, liveRoundIdsKey]);
+  const { roundsByZone } = useLatestRoundsByZone(surveyList);
+  const pageError = zones.error ?? surveys.error ?? conditions.error;
 
   const allItems = useMemo<GalleryItem[]>(() => {
     const out: GalleryItem[] = [];
     for (const b of beds) {
-      const roundId = latestSurveyByZone.get(b.zone);
-      if (!roundId) continue;
-      const round = previewMode
-        ? demo.roundsById.get(roundId)
-        : fetchedRounds.data?.get(b.zone);
+      const round = roundsByZone.get(b.zone);
       if (!round?.rows || !round?.cols) continue;
       const cond = condList.find((c) => c.zone === b.zone);
       const adv = adviceList.find((a) => a.zone === b.zone);
@@ -110,9 +86,8 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
         out.push({ blockLabel: b.label ?? b.zone, plant: p });
       }
     }
-    // Sort vision alerts first so farmers immediately see plants needing care
     return out.sort((a, b) => Number(b.plant.vision.status === "alert") - Number(a.plant.vision.status === "alert"));
-  }, [beds, latestSurveyByZone, previewMode, demo.roundsById, fetchedRounds.data, condList, adviceList, savedPhotos]);
+  }, [beds, roundsByZone, condList, adviceList, savedPhotos]);
 
   const zoneItems = useMemo(
     () => (zoneFilter === "all" ? allItems : allItems.filter((item) => item.plant.zone === zoneFilter)),
@@ -194,6 +169,7 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
 
   return (
     <main className="main stack" style={{ paddingTop: 12 }}>
+      {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
       {activeTab === "gallery" ? (
         <>
           <Panel
@@ -202,7 +178,6 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
             pad={false}
             right={
               <div className="rv-right">
-                {previewMode && <Tag>Sample data · Synced with AgriRover</Tag>}
                 <span className="small muted">
                   Monitored automatically by AgriRover{newestAt ? ` · Last updated ${ago(newestAt)}` : ""}
                 </span>
@@ -332,7 +307,6 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
             pad={false}
             right={
               <div className="rv-right">
-                {previewMode && <Tag>Sample data · Synced with AgriRover</Tag>}
                 <span className="small muted">Fast-Focus Action · Mulder Antagonism · Expected Result</span>
               </div>
             }

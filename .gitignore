@@ -24,6 +24,7 @@ dist-ssr/
 *.tsbuildinfo
 
 # --- data / artefacts ---
+mongodata/
 pgdata/
 minio-data/
 *.sqlite3

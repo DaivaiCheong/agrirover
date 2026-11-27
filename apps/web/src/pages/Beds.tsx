@@ -1,15 +1,13 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Activity, ArrowDown, ArrowUp, ChevronDown, ChevronRight, Clock, Droplets, MapPin, Package, Plus, Sprout } from "lucide-react";
 import { Link } from "react-router-dom";
 import AddCropModal from "../components/AddCropModal";
 import BedTrends, { RANGES } from "../components/BedTrends";
 import { StatusBadge } from "../components/EnvRibbon";
-import { SyncBadge } from "../components/SampleNotice";
-import { EF, Empty, FormModal, Kpis, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
-import { api, type BedConditions, type CondParam, type Cycle } from "../lib/api";
+import { EF, Empty, FormModal, Kpis, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
+import { api, loadProblem, type BedConditions, type CondParam, type Cycle } from "../lib/api";
 import { RIBBON_CELLS, cls, explain, fmtValue, rangeText } from "../lib/conditions";
 import { litres, num, usd } from "../lib/format";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { getBlockSoilProfile } from "../lib/soil";
 import { useData } from "../lib/useData";
 import { ago, usePoll } from "../lib/usePoll";
@@ -65,13 +63,7 @@ export default function Beds() {
   const cycles = useData(api.cycles);
   const conditions = usePoll(api.conditions);
   const stock = useData(api.stockItems);
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-
-  const previewMode = Boolean(
-    (zones.error && zones.data === null) ||
-      (cycles.error && cycles.data === null) ||
-      (conditions.error && conditions.data === null),
-  );
+  const adviceRes = useData(api.advice);
 
   const [openBed, setOpenBed] = useState<string | null>(null);
   const [hours, setHours] = useState<number>(RANGES[0].hours);
@@ -81,10 +73,10 @@ export default function Beds() {
   const [msg, setMsg] = useState<FormMsg>(null);
   const [plantingZone, setPlantingZone] = useState<string | null>(null);
 
-  const rows = previewMode ? demo.zones : (zones.data ?? demo.zones);
-  const activeCycleList = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
-  const activeCondList = previewMode ? demo.conditions : (conditions.data ?? demo.conditions);
-  const stockRows = previewMode ? demo.stockItems : (stock.data ?? demo.stockItems);
+  const rows = zones.data ?? [];
+  const activeCycleList = cycles.data ?? [];
+  const activeCondList = conditions.data ?? [];
+  const stockRows = stock.data ?? [];
 
   const activeCyclesByZone = new Map(activeCycleList.filter((c) => c.status === "active").map((c) => [c.zone, c]));
   const condOf = new Map(activeCondList.map((b) => [b.zone, b]));
@@ -93,7 +85,8 @@ export default function Beds() {
   const totalArea = rows.reduce((s, z) => s + (z.areaM2 ?? 0), 0);
   const activePlants = activeCycleList.reduce((s, c) => s + (c.plantCount ?? 0), 0);
   const occupied = rows.filter((z) => activeCyclesByZone.has(z.zone)).length;
-  const waterTodayL = demo.advice.reduce((s, a) => s + a.water.litres, 0);
+  const waterTodayL = (adviceRes.data ?? []).reduce((s, a) => s + a.water.litres, 0);
+  const pageError = zones.error ?? cycles.error ?? conditions.error;
 
   async function addBed(e: React.FormEvent) {
     e.preventDefault();
@@ -104,21 +97,21 @@ export default function Beds() {
       setNewLabel("");
       setNewArea("");
       zones.reload();
-    } catch {
-      setMsg({ kind: "ok", text: `Preview mode: "${newLabel.trim()}" ready once server is connected.` });
+    } catch (err) {
+      setMsg({ kind: "alert", text: (err as Error).message });
     }
   }
 
   return (
     <>
       <Toolbar>
-        {previewMode && <SyncBadge />}
         <button className="btn btn-sm" onClick={() => { setMsg(null); setShowAddBed(true); }}>
           <Plus size={16} aria-hidden />Add bed
         </button>
       </Toolbar>
 
       <main className="main stack">
+        {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
         <Kpis
           items={[
             { k: "Total beds", v: rows.length, d: `${occupied} growing · ${rows.length - occupied} ready` },
@@ -167,7 +160,7 @@ export default function Beds() {
                     const params = new Map((b?.params ?? []).map((p) => [p.metric, p]));
                     const open = openBed === z.zone;
                     const c = activeCyclesByZone.get(z.zone);
-                    const soil = getBlockSoilProfile(z.zone);
+                    const soil = z.soilProfile ?? getBlockSoilProfile(z.zone);
                     return (
                       <tr key={z.zone} className={`pickable${open ? " open" : ""}`} onClick={() => setOpenBed(open ? null : z.zone)}>
                         <td>
@@ -228,7 +221,6 @@ export default function Beds() {
                 zone={openCond.zone}
                 params={openCond.params}
                 hours={hours}
-                fallbackSeries={previewMode ? demo.telemetryFor(openCond.zone, hours) : null}
               />
               <p className="small muted trend-source">Rover automated daily probe average · {openCond.source}</p>
             </div>

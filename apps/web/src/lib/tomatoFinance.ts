@@ -1,6 +1,7 @@
 import { buildBlockSoilRows, getBlockSoilProfile, targetsFromConditions, type PlantSoilRow } from "./soil";
-import type { BedConditions, Cycle, SavedPhoto } from "./api";
-import type { DemoRoundDetail } from "./roverDemo";
+import type { BedConditions, Cycle, RoverCell, SavedPhoto, SurveySummary } from "./api";
+
+export type RoundDetail = SurveySummary & { cells: RoverCell[] };
 
 export type FinanceScale = "plant" | "block" | "farm";
 
@@ -264,7 +265,7 @@ export function buildAllBlockEconomics(input: {
   cycles: Cycle[];
   zones: { zone: string; label: string | null; areaM2?: number | null }[];
   conditions: BedConditions[];
-  roundsByZone: Map<string, DemoRoundDetail | undefined>;
+  roundsByZone: Map<string, RoundDetail | undefined>;
   savedPhotos?: SavedPhoto[];
 }): { blocks: BlockFinanceSummary[]; allRows: PlantSoilRow[] } {
   const { cycles, zones, conditions, roundsByZone, savedPhotos = [] } = input;

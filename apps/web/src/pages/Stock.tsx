@@ -1,10 +1,8 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Droplets, Plus } from "lucide-react";
-import { SyncBadge } from "../components/SampleNotice";
 import { EF, Empty, FormModal, Kpis, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
-import { api, type StockItem } from "../lib/api";
+import { api, loadProblem, type StockItem } from "../lib/api";
 import { CATEGORY_LABELS, STOCK_CATEGORIES, cycleLabel, litres, num, todayIso, usd } from "../lib/format";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { usdToRiel } from "../lib/tomatoFinance";
 import { useData } from "../lib/useData";
 
@@ -13,11 +11,10 @@ type Dialog = "add" | "buy" | "use" | null;
 export default function Stock() {
   const items = useData(api.stockItems);
   const cycles = useData(api.cycles);
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-  const previewMode = Boolean((items.error && items.data === null) || (cycles.error && cycles.data === null));
+  const adviceRes = useData(api.advice);
 
   const [selected, setSelected] = useState<string | null>(null);
-  const moves = useData(() => (selected && !previewMode ? api.stockMoves(selected) : Promise.resolve([])), [selected, previewMode]);
+  const moves = useData(() => (selected ? api.stockMoves(selected) : Promise.resolve([])), [selected]);
 
   const [dialog, setDialog] = useState<Dialog>(null);
   const [name, setName] = useState("");
@@ -32,19 +29,15 @@ export default function Stock() {
   const [msg, setMsg] = useState<FormMsg>(null);
   const [listError, setListError] = useState<string | null>(null);
 
-  const rows = previewMode ? demo.stockItems : (items.data ?? demo.stockItems);
+  const rows = items.data ?? [];
   const item = rows.find((i) => i.id === selected) ?? null;
-  const open = (previewMode ? demo.cycles : (cycles.data ?? demo.cycles)).filter((c) => c.status === "active");
+  const open = (cycles.data ?? []).filter((c) => c.status === "active");
   const cycleId = useCycle || open[0]?.id || "";
   const totalValueUsd = rows.reduce((s, i) => s + i.valueUsd, 0);
-  const waterTodayL = demo.advice.reduce((s, a) => s + a.water.litres, 0);
+  const waterTodayL = (adviceRes.data ?? []).reduce((s, a) => s + a.water.litres, 0);
+  const pageError = items.error ?? cycles.error;
 
   async function run(fn: () => Promise<unknown>, ok: string, after?: () => void) {
-    if (previewMode) {
-      setMsg({ kind: "ok", text: `Preview mode: ${ok}` });
-      after?.();
-      return;
-    }
     try {
       await fn();
       setMsg({ kind: "ok", text: ok });
@@ -77,12 +70,12 @@ export default function Stock() {
   return (
     <>
       <Toolbar>
-        {previewMode && <SyncBadge />}
         <button className="btn btn-sm" onClick={() => { setMsg(null); setDialog("add"); }}>
           <Plus size={16} aria-hidden />Add supply item
         </button>
       </Toolbar>
       <main className="main stack">
+        {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
         {listError && <Notice kind="alert">{listError}</Notice>}
 
         <Kpis

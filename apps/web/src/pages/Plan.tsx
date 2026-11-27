@@ -1,14 +1,12 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import RoundSchedule from "../components/RoundSchedule";
-import { SyncBadge } from "../components/SampleNotice";
-import { Empty, Kpis, More, PageHead, Panel, Tag } from "../components/ui";
-import { api, type ScheduleEvent } from "../lib/api";
+import { Empty, Kpis, More, Notice, PageHead, Panel, Tag } from "../components/ui";
+import { api, loadProblem, type ScheduleEvent } from "../lib/api";
 import { dayMonth, litres, todayIso } from "../lib/format";
 import { roundPlan } from "../lib/rover";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
 import { useData } from "../lib/useData";
 
 const RANGES = [
@@ -48,31 +46,27 @@ export default function Plan() {
   const plan = useData(() => api.schedule(days), [days]);
   const cycles = useData(api.cycles);
   const advice = useData(api.advice);
+  const zones = useData(api.zones);
 
-  const demo = useMemo(() => buildDemoTomatoFarm(), []);
-  const previewMode = Boolean(
-    (plan.error && plan.data === null) ||
-      (cycles.error && cycles.data === null) ||
-      (advice.error && advice.data === null),
-  );
+  const scheduleData = plan.data;
+  const activeCycles = cycles.data ?? [];
+  const activeAdvice = advice.data ?? [];
+  const zoneList = zones.data ?? [];
 
-  const scheduleData = previewMode ? demo.buildSchedule(days) : (plan.data ?? demo.buildSchedule(days));
-  const activeCycles = previewMode ? demo.cycles : (cycles.data ?? demo.cycles);
-  const activeAdvice = previewMode ? demo.advice : (advice.data ?? demo.advice);
-
-  const dates = scheduleData.dates;
-  const blocks = scheduleData.blocks.filter((b) => !block || b.zone === block);
-  const events = scheduleData.events.filter((e) => (!block || e.zone === block) && matchesKindFilter(e, kind));
+  const dates = scheduleData?.dates ?? [];
+  const blocks = (scheduleData?.blocks ?? []).filter((b) => !block || b.zone === block);
+  const events = (scheduleData?.events ?? []).filter((e) => (!block || e.zone === block) && matchesKindFilter(e, kind));
   const active = activeCycles.filter((c) => c.status === "active" && (!block || c.zone === block));
-  const slots = roundPlan(active, scheduleData.roundTime ?? "07:00", activeAdvice, todayIso());
-  const totalBlockCount = block ? 1 : demo.zones.length;
+  const slots = roundPlan(active, scheduleData?.roundTime ?? "07:00", activeAdvice, todayIso());
+  const totalBlockCount = block ? 1 : (zoneList.length || blocks.length);
 
   const weekWater = blocks.reduce((s, b) => s + b.water.slice(0, 7).reduce((t, c) => t + (c?.litres ?? 0), 0), 0);
   const inWeek = (e: ScheduleEvent) => dates.length > 0 && e.date <= dates[Math.min(6, dates.length - 1)];
-  const feeds = scheduleData.events.filter((e) => (!block || e.zone === block) && e.kind === "feed" && inWeek(e)).length;
-  const careTasks = scheduleData.events.filter(
+  const feeds = (scheduleData?.events ?? []).filter((e) => (!block || e.zone === block) && e.kind === "feed" && inWeek(e)).length;
+  const careTasks = (scheduleData?.events ?? []).filter(
     (e) => (!block || e.zone === block) && (e.kind === "task" || e.kind === "foliar" || e.kind === "water") && inWeek(e),
   ).length;
+  const pageError = plan.error ?? cycles.error ?? advice.error ?? zones.error;
 
   const chartData = dates.slice(0, 7).map((d, i) => {
     const precisionL = blocks.reduce((s, b) => s + (b.water[i]?.litres ?? 0), 0);
@@ -92,7 +86,6 @@ export default function Plan() {
         sub="Connected to live G1–G6 Rover probes, Health vision alerts, and precision irrigation savings"
         actions={
           <>
-            <SyncBadge />
             <select
               className="erp-select toolbar-select"
               aria-label="Block"
@@ -100,7 +93,7 @@ export default function Plan() {
               onChange={(e) => setBlock(e.target.value)}
             >
               <option value="">All blocks (G1–G6)</option>
-              {demo.zones.map((z) => (
+              {zoneList.map((z) => (
                 <option key={z.zone} value={z.zone}>{z.label ?? z.zone}</option>
               ))}
             </select>
@@ -118,6 +111,7 @@ export default function Plan() {
         }
       />
       <main className="main stack">
+        {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
         <Kpis
           items={[
             {

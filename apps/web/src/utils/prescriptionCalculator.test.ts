@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoverCell } from "../lib/api";
-import { buildDemoTomatoFarm } from "../lib/roverDemo";
+import { buildDemoTomatoFarm } from "../test/fixtures";
 import { buildBlockSoilRows, defaultBlockSoilProfile, targetsFromConditions } from "../lib/soil";
 import {
   calculatePrescription,

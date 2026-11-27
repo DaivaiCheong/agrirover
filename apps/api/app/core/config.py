@@ -5,7 +5,8 @@ class Settings(BaseSettings):
     """All configuration comes from the environment. Nothing is hard-coded."""
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql+asyncpg://aaf:aaf@localhost:5432/aiautofarm"
+    mongodb_url: str = "mongodb://localhost:27017"
+    mongodb_db: str = "agrirover"
 
     jwt_secret_key: str = "dev-only-change-me"
     jwt_algorithm: str = "HS256"
@@ -18,9 +19,6 @@ class Settings(BaseSettings):
     mqtt_password: str | None = None
     mqtt_tls: bool = False
 
-    # Both spellings of the dev host: a browser opened at 127.0.0.1 sends a
-    # different Origin than one opened at localhost, and CORS treats them as
-    # different sites. Allowing only one produces a silent preflight failure.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @property
@@ -30,23 +28,20 @@ class Settings(BaseSettings):
     weather_api_url: str | None = None
     weather_api_key: str | None = None
 
-    # Photo check. A local Ollama keeps photos on the farm's machine. No model named means the check is off.
     ollama_url: str = "http://localhost:11434"
     ollama_model: str | None = None
-    ollama_api_key: str | None = None          # only for the hosted service at https://ollama.com; photos then leave the farm
-    photo_matches: bool = False                # suggest diseases from the guide. Too often wrong on local gemma4: see services/disease.py
-    photo_dir: str = "farm-photos"             # saved plant photos: back this folder up with the database
+    ollama_api_key: str | None = None
+    photo_matches: bool = False
+    photo_dir: str = "farm-photos"
 
-    # Stage 1 runs one farm; the topic segment farm/{name}/... must match it.
     farm_name: str = "farm-01"
 
-    # Daily Telegram message. Both must be set, or the worker stays off.
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
-    daily_message_time: str = "06:05"          # farm-local HH:MM
-    rover_round_time: str = "07:00"            # farm-local HH:MM: when the day's rounds are planned to start
+    daily_message_time: str = "06:05"
+    rover_round_time: str = "07:00"
 
-    admin_email: str = "admin@aiautofarm.local"
+    admin_email: str = "admin@agrirover.local"
     admin_password: str = "change-me"
 
 

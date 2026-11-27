@@ -1,113 +1,101 @@
-# AgriRover Backend, Docker & Database Engineer Guide
+# AgriRover Backend, Docker & NoSQL (MongoDB) Guide
 
-Practical reference for running, migrating, seeding, debugging, and extending the FastAPI + PostgreSQL + Mosquitto + Docker stack to serve the 100%-Tomato AgriRover frontend on `main`.
+Practical reference for running, seeding, inspecting, and developing the **FastAPI + Motor (`MongoDB 7`) + Mosquitto MQTT + React** Docker stack on `main`.
 
-> Also see [architecture/frontend-backend-db.md](architecture/frontend-backend-db.md) for the standard Frontend ↔ FastAPI ↔ PostgreSQL communication flow, `JSONB` rationale vs. MongoDB, and adding new API features cleanly.
+> Also see [architecture/frontend-backend-db.md](architecture/frontend-backend-db.md) for the end-to-end Frontend ↔ FastAPI ↔ MongoDB request lifecycle and coding standards.
 
 ---
 
 ## 1. Docker Compose Stack (`docker-compose.yml`)
 
-| Container Service | Image / Build | Port(s) | Purpose & Startup Behavior |
+| Service | Image / Build | Port(s) | Purpose & Startup Behavior |
 |---|---|---|---|
-| `db` | `postgres:16-alpine` | `5432` | Primary relational + time-series telemetry database (`./pgdata` volume). Runs `pg_isready` healthcheck before `api` starts. |
-| `broker` | `eclipse-mosquitto:2` | `1883` | Local MQTT broker (`./infra/mosquitto.conf`) receiving rover scans and ESP field node telemetry. |
-| `api` | `./apps/api/Dockerfile` | `8000` | FastAPI backend (`uvicorn app.main:app --reload`). Automatically executes `alembic upgrade head && python -m app.services.seed` on boot. |
-| `web` | `./apps/web/Dockerfile` | `5173` | Vite + React dashboard (`npm run dev -- --host 0.0.0.0`). |
-| `rover-sim` *(profile `sim`)* | `./edge/rover-agent/Dockerfile` | — | Optional simulated rover worker talking to `broker` over MQTT (`--profile sim`). |
-| `field-sim` *(profile `sim`)* | `./edge/field-node-sim/Dockerfile` | — | Optional simulated ESP8266 field sensor emitting moisture & rain (`SIM_SCENARIO=dry\|wet\|rain`). |
+| `mongo` | `mongo:7` | `27017` | Primary NoSQL document & telemetry database (`./mongodata:/data/db`). Healthchecked via `mongosh --quiet --eval "db.adminCommand('ping').ok"`. |
+| `broker` | `eclipse-mosquitto:2` | `1883` | Local MQTT broker (`./infra/mosquitto.conf`) receiving ESP field telemetry and rover scans. |
+| `api` | `./apps/api/Dockerfile` | `8000` | FastAPI backend (`python -m app.services.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`). |
+| `web` | `./apps/web/Dockerfile` | `5173` | Vite + React dashboard (`npm run dev -- --host 0.0.0.0`), zero offline mock data. |
+| `rover-sim` *(profile `sim`)* | `./edge/rover-agent/Dockerfile` | — | Optional simulated rover worker publishing MQTT missions to `broker`. |
+| `field-sim` *(profile `sim`)* | `./edge/field-node-sim/Dockerfile` | — | Optional simulated ESP8266 field sensor emitting telemetry (`SIM_SCENARIO=dry\|wet\|rain`). |
 
 ---
 
-## 2. Quickstart Commands (Docker & Local Dev)
+## 2. Quickstart & Day-to-Day Operations
 
-### A. Initial Setup (Windows PowerShell)
+### Initial Setup (Windows PowerShell)
 
 ```powershell
-# 1. Create local .env from template (never commit .env)
+# 1. Create local .env from template (.env is git-ignored)
 Copy-Item .env.example .env
 
-# 2. Optional: enable local Gemma vision triage via Ollama on host
-ollama pull gemma4
-
-# 3. Start DB, MQTT broker, FastAPI backend, and React web UI
+# 2. Start MongoDB 7, Mosquitto broker, FastAPI backend, and React web UI
 docker compose up -d
 
 # Or include simulated rover & field node telemetry:
 docker compose --profile sim up -d
 ```
 
-### B. Day-to-Day Backend & Database Operations
+### Operations Cheat Sheet
 
 | Task | Command |
 |---|---|
-| Watch API startup, Alembic & seed logs | `docker compose logs -f api` |
-| Check running containers & Postgres health | `docker compose ps` |
-| Run pending DB migrations manually | `docker compose exec api alembic upgrade head` |
-| Inspect current Alembic revision | `docker compose exec api alembic current` |
-| Autogenerate a new migration after editing `entities.py` | `docker compose exec api alembic revision --autogenerate -m "description"` |
-| Open interactive `psql` prompt inside DB | `docker compose exec db psql -U $POSTGRES_USER -d $POSTGRES_DB` |
-| Back up PostgreSQL DB (`pg_dump`) + photos | `docker compose exec -T db pg_dump -U aaf aiautofarm > backup.sql` (and archive `./farm-photos/`) |
-| Full clean database wipe & re-seed (**dev only**) | `docker compose down && Remove-Item -Recurse -Force ./pgdata && docker compose up -d` |
-| Stop all services | `docker compose --profile sim down` |
+| Watch API seed & uvicorn logs | `docker compose logs -f api` |
+| Check running containers & healthchecks | `docker compose ps` |
+| Re-run idempotent Tomato seed manually | `docker compose exec api python -m app.services.seed` |
+| Open interactive `mongosh` shell | `docker compose exec mongo mongosh agrirover` |
+| Back up MongoDB database | `docker compose exec -T mongo mongodump --db=agrirover --archive > agrirover.archive` |
+| Clean DB wipe & re-seed (**dev only**) | `docker compose down && Remove-Item -Recurse -Force ./mongodata && docker compose up -d` |
+| Stop all containers | `docker compose --profile sim down` |
 
 ---
 
 ## 3. Environment Configuration (`.env`)
 
-Key variables defined in [`.env.example`](../.env.example) and loaded by [`apps/api/app/core/config.py`](../apps/api/app/core/config.py):
+Key variables in [`.env.example`](../.env.example), read by [`apps/api/app/core/config.py`](../apps/api/app/core/config.py):
 
 | Variable | Default / Example | Used By | Notes |
 |---|---|---|---|
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `aaf`, `change-me`, `aiautofarm` | `db`, `api` | Postgres credentials (`DATABASE_URL` must match). |
-| `DATABASE_URL` | `postgresql+asyncpg://aaf:change-me@db:5432/aiautofarm` | `api` (Alembic + SQLAlchemy) | Inside Docker use host `db`; for local host scripts use `127.0.0.1:5432`. |
-| `MQTT_HOST`, `MQTT_PORT`, `FARM_NAME` | `broker`, `1883`, `farm-01` | `api`, `rover-sim`, `field-sim` | Topic pattern: `farm/{FARM_NAME}/zone/{zone}/telemetry` & `devices/rover-01/mission/*`. |
-| `VITE_API_BASE` | `http://localhost:8000/api/v1` | `apps/web` | Backend base URL baked/read by Vite frontend. |
-| `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | `api` | Include both `localhost` and `127.0.0.1` so browser preflights succeed. |
-| `OLLAMA_URL`, `OLLAMA_MODEL`, `PHOTO_MATCHES` | `http://host.docker.internal:11434`, `gemma4`, `false` | `api` | Set `OLLAMA_MODEL=` empty to disable local LLM image triage. |
-| `PHOTO_DIR` | `/farm-photos` | `api` | Persisted via `./farm-photos:/farm-photos` volume mount. |
+| `MONGODB_URL` | `mongodb://mongo:27017` | `api` | Use `mongodb://mongo:27017` inside Docker; use `mongodb://127.0.0.1:27017` from host Python commands. |
+| `MONGODB_DB` | `agrirover` | `api`, `seed` | Target MongoDB database name. |
+| `MQTT_HOST`, `MQTT_PORT`, `FARM_NAME` | `broker`, `1883`, `farm-01` | `api`, `rover-sim`, `field-sim` | Topic prefixes `farm/{FARM_NAME}/zone/{zone}/telemetry` and `devices/rover-01/mission/*`. |
+| `VITE_API_BASE` | `http://localhost:8000/api/v1` | `apps/web` | FastAPI base URL read by `apps/web/src/lib/api.ts`. |
+| `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | `api` | Allowed browser origins for CORS preflight requests. |
+| `OLLAMA_URL`, `OLLAMA_MODEL`, `PHOTO_MATCHES` | `http://host.docker.internal:11434`, `gemma4`, `false` | `api` | Set `OLLAMA_MODEL=` empty to disable Ollama image triage. |
+| `PHOTO_DIR` | `/farm-photos` | `api` | Disk volume mounted from `./farm-photos:/farm-photos`. |
 
 ---
 
-## 4. Running Backend & Database Tests Against Docker Postgres
+## 4. Running Tests Against Docker MongoDB (Matches GitHub Actions CI)
 
-CI (`.github/workflows/ci.yml`) runs **all API tests including migration parity checks** against a live `postgres:16-alpine` instance:
+CI (`.github/workflows/ci.yml`) runs `pytest` against a live `mongo:7` service container:
 
 ```powershell
-# Ensure Postgres container from docker-compose is running on port 5432:
-docker compose up -d db
+# Start MongoDB container on localhost:27017
+docker compose up -d mongo
 
-# Point test runner at local Postgres and run full pytest suite:
-$env:TEST_DATABASE_URL = "postgresql://aaf:change-me@127.0.0.1:5432/postgres"
+# Point FastAPI test runner at local MongoDB
+$env:MONGODB_URL = "mongodb://127.0.0.1:27017"
+$env:MONGODB_DB = "agrirover_ci"
 Push-Location apps/api
-pip install -r requirements.txt
-python -m pytest
+python -m pip install -r requirements.txt
+python -m pytest -v
 Pop-Location
 ```
 
-> **Schema Integrity Rule (`tests/test_migrations.py`):**
-> - Every table/column change in `apps/api/app/models/entities.py` **must** have a matching Alembic migration in `apps/api/alembic/versions/` (`compare_metadata == []`).
-> - `sensor_reading` must keep **only one time index**: `ix_sensor_reading_zone_metric_time` on `(zone_id, metric, recorded_at)`.
+> If `MONGODB_URL` is omitted or set to `mongomock://localhost` (`tests/conftest.py`), `app/core/db.py` uses `mongomock-motor` in-memory for isolated unit runs.
 
 ---
 
 ## 5. Frontend ↔ Backend API Contract (`/api/v1/*`)
 
-The React app (`apps/web/src/lib/api.ts`) talks to `/api/v1` and gracefully displays `Sample data · Synced with AgriRover` when offline. When connecting the live backend to the Tomato UI on `main`, ensure these endpoints return shapes matching `api.ts`:
+The React app (`apps/web/src/lib/api.ts`) requires a live FastAPI backend and surfaces clear connection error notices whenever the API is unavailable.
 
-### Core Endpoints Consumed by the Tomato UI
-
-| Page | Method & Path | Required Fields / Notes |
+| Area / Pages | Endpoints | Purpose |
 |---|---|---|
-| `Today`, `Farm`, `Rover`, `Crops` | `GET /api/v1/zones` | `[{ zone, label, areaM2, moisturePct, rain, supplyVoltage, waterPh, recordedAt }]` |
-| `Today`, `Crops`, `Plan`, `Finance` | `GET /api/v1/cycles` | Active tomato cycles (`crop: "tomato"`, `cropName: "Tomato"`, `variety`, `plantCount`, `day`, `stageTitle`, `grid: { rows, cols, rowM, treeM }`, `forecast`). |
-| `Today`, `Farm`, `Rover`, `Health` | `GET /api/v1/conditions` | Live `params[]` (`soil_moisture`, `soil_ph`, `soil_ec`, `soil_temperature`, `nitrogen`, `phosphorus`, `potassium`, `air_temperature`, `air_humidity`) with tomato target bands (`58–72%`, `6.0–6.8`, `0.8–2.5`, `18–29 °C`), plus active `alerts[]`. |
-| `Today`, `Plan` | `GET /api/v1/advice` | Per-block `water: { litres, fullLitres, savedLitres }`, `feed`, and `trees[]` plant advice list. |
-| `Rover`, `Health`, `History`, `Finance` | `GET /api/v1/missions`<br>`GET /api/v1/missions/{id}` | Mission list & per-cell array `cells[]`: `{ row, col, plant, flagged, canopy, chlorosis, disease, disease_confidence, readings, advice }`. `disease` accepts `"early_blight"`, `"leaf_curl"`, `"chlorosis"`, `"blossom_end_rot"`, `"pest_damage"`. |
-| `Rover History`, `Farm Trends` | `GET /api/v1/telemetry/{zone}?metrics=...&hours=...&points=...` | Bucketed metric time-series arrays `series[metric] = [{ t, v }]`. |
-| `Plan` | `GET /api/v1/schedule?days=14` | Daily `dates[]`, block `water[]` forecasts, and `events[]` (`kind`: `water \| feed \| foliar \| task \| stage \| harvest`). |
-| `Finance`, `Block Breakdown` | `GET /api/v1/cycles/{id}/cop`<br>`GET /api/v1/cycles/{id}/harvests`<br>`GET /api/v1/cycles/{id}/sales` | Cycle cost categories, USD + KHR totals (`khrPerUsd: 4085`), yield kg, and sales ledger. |
-| `Farm > Stock`, `Equipment`, `Devices`, `Settings` | `GET /api/v1/stock/items`<br>`GET /api/v1/assets`<br>`GET /api/v1/devices`<br>`GET /api/v1/farm/settings` | Inventory items, equipment depreciation, active rover/drip controllers, and farm economic settings. |
+| Farm & Soil | `GET/POST /api/v1/zones`, `PUT /api/v1/zones/{zone}/profile`, `GET /api/v1/conditions`, `GET /api/v1/decisions/today`, `GET/PUT /api/v1/farm/settings`, `GET /api/v1/devices` | `G1–G6` beds, soil profiles, 9-metric telemetry bands, irrigation decisions, devices, economic settings. |
+| Crops & Advisory | `GET/POST /api/v1/cycles`, `PATCH /api/v1/cycles/{id}`, `POST /api/v1/cycles/{id}/close`, `GET /api/v1/cycles/{id}/orchard`, `POST/DELETE .../jobs/{job}/done`, `POST .../fruit`, `GET /api/v1/advice`, `GET /api/v1/schedule` | Active tomato crop cycles, daily per-block drip + nutrient advice, 14-day schedule, harvest/sales tracking. |
+| Rover & Telemetry | `GET/POST /api/v1/missions`, `GET /api/v1/missions/{id}`, `GET /api/v1/telemetry/{zone}` | Autonomous rover grids (`cells[]` with soil NPK/pH/EC/moisture & vision detections) + hourly bucketed time-series charts. |
+| Finance & Excel | `GET/PUT /api/v1/finance/spreadsheet`, `POST /api/v1/finance/spreadsheet/reset`, `GET/POST/DELETE /api/v1/costs`, `GET /api/v1/cycles/{id}/cop`, `GET/POST /api/v1/cycles/{id}/harvests`, `.../sales`, `/api/v1/stock/*`, `/api/v1/assets*` | Interactive Excel ledger workbook persisted in MongoDB, cost entries, COP analysis, stock inventory, and equipment depreciation. |
+| Health & Photos | `GET /api/v1/photos`, `POST /api/v1/photos`, `POST /api/v1/photos/check`, `GET /api/v1/photos/guide`, `GET/POST /api/v1/leaf-tests`, `PUT .../results` | Tomato disease guide, rover/uploaded photo curation, and lab tissue nutrient results. |
 
 ---
 
@@ -117,25 +105,12 @@ The React app (`apps/web/src/lib/api.ts`) talks to `/api/v1` and gracefully disp
   ```json
   {
     "device": "ESP-FIELD-01",
-    "fw": "1.0.0",
-    "sampleCount": 16,
     "measurements": [
-      { "metric": "soil_moisture", "value": 64.2, "unit": "pct", "sensor": "S-A-25", "quality": "valid" },
-      { "metric": "rain", "value": 0, "unit": "bool", "quality": "valid" }
+      { "metric": "soil_moisture", "value": 64.2, "unit": "%" },
+      { "metric": "rain", "value": 0, "unit": "bool" }
     ]
   }
   ```
 - **Rover Round State & Final Report:**
-  - `devices/rover-01/mission/state` (real-time cell updates during scan)
-  - `devices/rover-01/mission/result` (persisted into `survey_mission`, `survey_finding`, and `sensor_reading`)
-
----
-
-## 7. Backend Transition Notes (`Guava` → `Tomato`)
-
-> **Heads-up for Backend Devs:** Earlier commits in `apps/api/app/services/` still carry `guava.py`, `guava_diseases.py`, `demo_orchard.py`, and guava assertions in `apps/api/tests/` so existing CI stays green while frontend work landed first on `main`.
-
-When switching the backend database seed and advisory rules over to Tomato cleanly:
-1. Update `services/seed.py` & create `services/tomato.py` + migration `0011` (detailed in [SCHEMA.md](SCHEMA.md#3-recommended-migration-0011-tomato-backend--ai-vision-alignment)).
-2. Align `services/advisor.py` nutrient hold thresholds (`Soil N >= 80 mg/kg` holds extra nitrogen feeds; `Moisture 58–72%`, `pH 6.0–6.8`, `EC 0.8–2.5 mS/cm`).
-3. Update `apps/api/tests/test_schema.py`, `test_advisor.py`, `test_schedule.py`, and `test_ui_api.py` together in the same commit as the backend migration and test with Docker Postgres before pushing.
+  - `devices/rover-01/mission/state` (updates live mission progress state)
+  - `devices/rover-01/mission/result` (validates cell metrics via `metrics.py` and inserts a `surveys` document + `telemetry` documents into MongoDB)

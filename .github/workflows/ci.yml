@@ -7,13 +7,12 @@ jobs:
   api:
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:16-alpine
-        env: { POSTGRES_USER: aaf, POSTGRES_PASSWORD: change-me, POSTGRES_DB: postgres }
-        ports: [ "5432:5432" ]
+      mongo:
+        image: mongo:7
+        ports: [ "27017:27017" ]
         options: >-
-          --health-cmd "pg_isready -U aaf" --health-interval 5s
-          --health-timeout 3s --health-retries 20
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,6 +20,9 @@ jobs:
       - run: pip install -r apps/api/requirements.txt
       - run: python -m pytest
         working-directory: apps/api
+        env:
+          MONGODB_URL: mongodb://127.0.0.1:27017
+          MONGODB_DB: agrirover_ci
 
   rover-agent:
     runs-on: ubuntu-latest

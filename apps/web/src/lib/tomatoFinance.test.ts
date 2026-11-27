@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDemoTomatoFarm } from "./roverDemo";
+import { buildDemoTomatoFarm } from "../test/fixtures";
 import {
   buildAllBlockEconomics,
   computeFinanceView,
