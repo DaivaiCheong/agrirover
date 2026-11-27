@@ -45,12 +45,23 @@ class MissionIn(BaseModel):
     cols: int = Field(ge=1, le=40)                                      # trees in a row
     cell_m: float = Field(default=3.0, alias="cellM", ge=0.2, le=10.0)  # from tree to tree
     row_m: float | None = Field(default=None, alias="rowM", ge=0.2, le=10.0)
+    # The route, set on the Rover screen's map: the start corner (sw = row 1, tree 1) and lanes along the rows or across.
+    start: Literal["sw", "se", "nw", "ne"] = "sw"
+    along: Literal["rows", "across"] = "rows"
+    # The spots that hold a plant (from the block's plant map), [row, col] from 0: the rover stops at these only.
+    # None: every spot, as on the guava blocks.
+    stops: list[tuple[int, int]] | None = Field(default=None, min_length=1, max_length=MAX_CELLS)
     simulate: Literal["normal", "rain", "low_battery"] | None = None    # what a simulated rover meets; a real one ignores it
 
     @model_validator(mode="after")
     def _not_too_big(self) -> "MissionIn":
         if self.rows * self.cols > MAX_CELLS:
             raise ValueError(f"at most {MAX_CELLS} trees a round")
+        if self.stops is not None:
+            for r, c in self.stops:
+                if not (0 <= r < self.rows and 0 <= c < self.cols):
+                    raise ValueError(f"stop at row {r + 1}, spot {c + 1} is outside the {self.rows} x {self.cols} grid")
+            self.stops = sorted(set(self.stops))
         return self
 
 
@@ -60,7 +71,7 @@ class EstopIn(BaseModel):
 
 def sim_options(body: MissionIn, base: dict | None, spread: float | None) -> dict:
     """What the simulated rover should meet, set about 40 % of the way along so the map shows both parts."""
-    cells = body.rows * body.cols
+    cells = len(body.stops) if body.stops else body.rows * body.cols      # the stops the rover photographs
     # the same block always has the same trees; the day's readings vary around the base
     sim: dict = {"seed": zlib.crc32(body.zone_id.encode()) % 1_000_000, "speedup": SIM_SPEEDUP}
     if base:
@@ -108,7 +119,10 @@ async def create_mission(body: MissionIn, publish: Publisher = Depends(get_publi
         raise HTTPException(status.HTTP_409_CONFLICT, "The rover is offline.")
     mission_id = str(uuid.uuid4())
     row_m = body.row_m or body.cell_m
-    payload = {"missionId": mission_id, "zoneId": body.zone_id, "rows": body.rows, "cols": body.cols, "cellM": body.cell_m, "rowM": row_m}
+    payload = {"missionId": mission_id, "zoneId": body.zone_id, "rows": body.rows, "cols": body.cols, "cellM": body.cell_m, "rowM": row_m,
+               "start": body.start, "along": body.along}
+    if body.stops is not None:
+        payload["stops"] = [list(s) for s in body.stops]
     if body.simulate is not None:
         payload["sim"] = sim_options(body, *await _sim_base(session, body.zone_id))
     try:
@@ -116,7 +130,8 @@ async def create_mission(body: MissionIn, publish: Publisher = Depends(get_publi
     except Exception as exc:                          # noqa: BLE001
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
                             "farm broker unreachable; round not sent") from exc
-    live.queued(mission_id, body.zone_id, body.rows, body.cols, body.cell_m, row_m, body.simulate)
+    live.queued(mission_id, body.zone_id, body.rows, body.cols, body.cell_m, row_m, body.simulate, body.start, body.along,
+                None if body.stops is None else [list(s) for s in body.stops])
     return {"missionId": mission_id, "status": "queued"}
 
 

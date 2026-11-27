@@ -39,6 +39,9 @@ class Settings(BaseSettings):
 
     # Stage 1 runs one farm; the topic segment farm/{name}/... must match it.
     farm_name: str = "farm-01"
+    # On first start, seed the six guava demo beds and two weeks of simulated rounds. Off: the farm starts with one
+    # tomato block (services/seed.py TOMATO_DEMO) and real data only.
+    demo_orchard: bool = False
 
     # Daily Telegram message. Both must be set, or the worker stays off.
     telegram_bot_token: str | None = None

@@ -70,10 +70,10 @@ In words:
 
 | # | Step | What happens | Code |
 |---|---|---|---|
-| 0 | Set up the farm (once) | Blocks, tree count, spacing, variety, planting date and growing setup. The first start seeds a demo farm: six blocks (G1 to G5 growing guava, G6 empty) and two weeks of simulated rounds | `apps/api/app/services/seed.py`; screens Farm › Beds & Land, Crops |
-| 1 | Get ready | On **Rover**, pick the block. Start stays locked until three live checks pass (rover online, e-stop released, no rain) and a person ticks three more (rows clear, rover at the first tree facing along row 1, camera and probe clean) | `apps/web/src/pages/Rover.tsx`, [ROVER-SOP.md](ROVER-SOP.md) |
-| 2 | Send the round | `POST /api/v1/missions {zoneId, rows, cols, cellM, rowM}`. Refused if the rover is busy, offline or e-stopped. Published to MQTT `devices/rover-01/mission/set` | `apps/api/app/routers/missions.py` |
-| 3 | Plan the path | The rover checks the round (at most 400 trees, 40 a side, spacing 0.2 to 10 m) and plans a serpentine path: every tree once, in moves of at most 1 m | `edge/rover-agent/rover/planner.py`, `mission.py` |
+| 0 | Set up the farm (once) | Blocks, tree count, spacing, variety, planting date and growing setup. The first start seeds one tomato block with a plant map (T1, for the rover demo: [TOMATO-DEMO.md](TOMATO-DEMO.md)). With `DEMO_ORCHARD=true` in `.env` it also seeds a guava demo farm: six blocks (G1 to G5 growing guava, G6 empty) and two weeks of simulated rounds | `apps/api/app/services/seed.py`; screens Farm › Beds & Land, Crops |
+| 1 | Get ready | On **Rover**, pick the block and set the **Route**: the start corner and lanes along the rows or across them (or tap a corner dot on the map). The map draws the path and where to place the rover. Start stays locked until three live checks pass (rover online, e-stop released, no rain) and a person ticks three more (rows clear, rover on the start tree facing the next one, camera and probe clean) | `apps/web/src/pages/Rover.tsx`, `components/RoverMap.tsx`, [ROVER-SOP.md](ROVER-SOP.md) |
+| 2 | Send the round | `POST /api/v1/missions {zoneId, rows, cols, cellM, rowM, start, along}`. Refused if the rover is busy, offline or e-stopped. Published to MQTT `devices/rover-01/mission/set` | `apps/api/app/routers/missions.py` |
+| 3 | Plan the path | The rover checks the round (at most 400 trees, 40 a side, spacing 0.2 to 10 m) and plans a serpentine path from the start corner: every tree once, in moves of at most 1 m | `edge/rover-agent/rover/planner.py` (`route`), `mission.py` |
 | 4 | At each tree | Check the guards (e-stop, rain, battery below 11.1 V, lost link) → drive → photograph → leaf cover and yellowing from colour (over 8 % yellow is flagged) → soil probe and air sensor → record | `rover/safety.py`, `drive.py`, `vision.py`, `probe.py` |
 | 5 | Live progress | Each tree goes out on `mission/state`. The server keeps the live round in memory, and the Rover screen reads it from `GET /api/v1/missions/live` | `apps/api/app/services/rover_live.py` |
 | 6 | Store the round | The full report goes out on `mission/result`. The server stores it in `survey_mission` and `survey_finding` (one row per tree), and the block's averages in `sensor_reading`. The rover also writes `reports/<mission>/report.json` and `field-map.svg` on its own disk | `apps/api/app/workers/mqtt_ingest.py`, `rover_live.store_report` |
@@ -194,7 +194,8 @@ You need **Docker Desktop**. Python and Node are only needed to run a part outsi
 4. **Health › Leaf tests:** where lab results go. Leave it empty until a real one comes; never type in made-up figures.
 5. **Finance:** where the money goes (sample figures).
 
-The full demo, with what to say: [DEMO-SCRIPT.md](DEMO-SCRIPT.md).
+The full demo, with what to say: [DEMO-SCRIPT.md](DEMO-SCRIPT.md). The real rover on a floor of tomato pots, going
+from plant to plant on a block's plant map: [TOMATO-DEMO.md](TOMATO-DEMO.md).
 
 | To | Run |
 |---|---|

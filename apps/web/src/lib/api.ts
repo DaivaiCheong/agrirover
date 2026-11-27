@@ -58,6 +58,8 @@ export type BedConditions = {
   zone: string; label: string | null; areaM2: number | null; crop: string | null; cropName: string | null;
   variety: string | null; day: number | null; recordedAt: string | null; rated: boolean; status: RatingStatus;
   basis: string; source: string; stage: CondStage | null; params: CondParam[]; alerts: CondAlert[];
+  /** What each reading should be, and why: sent for a tomato block (services/tomato.py). */
+  rules?: { label: string; target: string; critical: string; note: string }[];
 };
 
 export type TelemetrySeries = {
@@ -152,6 +154,10 @@ export type LiveMission = {
   status: "queued" | "running" | "completed" | "aborted" | "failed" | "rejected" | "lost";
   reason: string | null; cell: [number, number] | null; battery: number | null; frame: string | null;
   cellsScanned: number; cellsTotal: number; simulate: string | null; simulated: boolean | null; cells: RoverCell[];
+  /** The route set on the map; absent from an older server. */
+  start?: "sw" | "se" | "nw" | "ne"; along?: "rows" | "across";
+  /** The plants the rover stops at, when the block has a plant map. */
+  stops?: [number, number][] | null;
 };
 export type RoverLive = { rover: { code: string; status: "online" | "offline" | "unknown"; estop: boolean }; mission: LiveMission | null };
 export type SurveySummary = {
@@ -160,7 +166,14 @@ export type SurveySummary = {
   cellsFlagged: number | null; distanceM: number | null; estDurationS: number | null;
   startedAt: string; finishedAt: string | null;
 };
-export type SurveyInput = { zoneId: string; rows: number; cols: number; cellM: number; rowM: number; simulate: "normal" | "rain" | "low_battery" };
+export type SurveyInput = { zoneId: string; rows: number; cols: number; cellM: number; rowM: number; simulate: "normal" | "rain" | "low_battery";
+  start: "sw" | "se" | "nw" | "ne"; along: "rows" | "across";
+  /** The spots with a plant, [row, col] from 0: the rover stops at these only. Absent: every spot. */
+  stops?: [number, number][] };
+/** A block's grid of spots and the spots that hold a plant (the tomato demo). Rows and spots count from 0. */
+export type PlantMap = { zone: string; label: string; crop: string; rows: number; cols: number; rowM: number; plantM: number;
+  plants: [number, number][]; updatedAt: string | null };
+export type PlantMapInput = { crop: string; rows: number; cols: number; rowM: number; plantM: number; plants: [number, number][] };
 
 export type FeedAdvice = {
   action: "feed" | "hold" | "flush" | "wait" | "none"; reason: string; due: boolean; nextDay: number | null; aim: string; nitrogen: string; notes: string[];
@@ -377,6 +390,10 @@ export const api = {
   startSurvey: (body: SurveyInput) => send<{ missionId: string }>("POST", "/missions", body),
   surveys: () => request<SurveySummary[]>("/missions"),
   survey: (id: string) => request<SurveySummary & { cells: RoverCell[] }>(`/missions/${id}`),
+  // where the plants stand in a block, so the rover goes from plant to plant
+  plantMaps: () => request<PlantMap[]>("/plant-maps"),
+  savePlantMap: (zone: string, body: PlantMapInput) => send<PlantMap>("PUT", `/plant-maps/${encodeURIComponent(zone)}`, body),
+  newPlantBlock: (body: PlantMapInput & { label: string }) => send<PlantMap>("POST", "/plant-maps", body),
   advice: () => request<Advice[]>("/advice"),
   schedule: (days: number) => request<Schedule>(`/schedule?days=${days}`),
   growth: (zone: string) => request<Growth>(`/advice/${zone}/growth`),

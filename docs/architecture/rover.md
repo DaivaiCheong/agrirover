@@ -22,10 +22,12 @@ How many leaves a scan needs, and how long a stop takes, are not known. The near
 
 ## Mission flow (today's soil round)
 
-1. The farm server publishes a round: `POST /api/v1/missions {zoneId, rows, cols, cellM, rowM}` (trees in a row, tree to tree, row to row)
-   → MQTT `devices/rover-01/mission/set`.
+1. The farm server publishes a round: `POST /api/v1/missions {zoneId, rows, cols, cellM, rowM, start, along}` (trees in a row, tree to tree,
+   row to row, and the route set on the Rover screen's map) → MQTT `devices/rover-01/mission/set`.
 2. The rover validates it (at most 40 × 40 and 400 trees, spacing 0.2–10 m) and plans a
-   serpentine path: every tree once. Long moves are split into steps of at most 1 m.
+   serpentine path: every tree once, from the `start` corner (`sw` row 1 tree 1, `se` row 1 last tree, `nw` last row tree 1,
+   `ne` last row last tree), in lanes `along` the rows (`rows`) or `across` them. Both default to `sw` / `rows`, the old path.
+   Long moves are split into steps of at most 1 m. Code: `planner.route()`; the map draws the same path from `lib/rover.ts` `route()`.
 3. For each tree: check guards → drive → photograph → analyse → read the probe and air sensor → record.
 4. Progress goes out on `mission/state` (retained); the full report on
    `mission/result`. The report is also written to disk on the rover.
@@ -33,7 +35,12 @@ How many leaves a scan needs, and how long a stop takes, are not known. The near
    finished report in `survey_mission` and `survey_finding`, and each reading's bed average in `sensor_reading`, so the rover feeds
    the telemetry table. The day's advice is worked out from the newest fresh round; it does not become `action_proposal` rows yet.
 
-The rover must stand at the first tree, facing along row 1, before a round.
+The rover must stand on the route's start tree, facing its second stop, before a round. The Rover screen names both
+(for example "Rover on R4 T4, facing R3 T4") and draws the rover there on the map. The rover has no positioning yet:
+it drives by dead reckoning from where it is placed, so placing it right is what makes it follow the map.
+
+The route is kept for each block in the browser that set it (not on the server), and a stored round does not record its
+route: History draws every past round on the default path.
 
 Procedure for the person running it: [ROVER-SOP.md](../ROVER-SOP.md).
 
@@ -51,7 +58,7 @@ real rover ignores it. Scripted rain raises the same `SafetyStop` a real rain re
 
 | Topic | Direction | Payload |
 |---|---|---|
-| `devices/rover-01/mission/set` | server → rover | `{missionId, zoneId, rows, cols, cellM}` |
+| `devices/rover-01/mission/set` | server → rover | `{missionId, zoneId, rows, cols, cellM, rowM, start, along}` |
 | `devices/rover-01/mission/state` | rover → server, retained | progress (with each cell's reading and a small photo), then the final summary |
 | `devices/rover-01/mission/result` | rover → server | full report: cells, watering targets |
 | `devices/rover-01/estop` | server → rover | `{"estop": true}` engages, `{"estop": false}` releases |

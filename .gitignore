@@ -51,3 +51,4 @@ build/
 
 # database backups
 backups/
+pgdata.*/

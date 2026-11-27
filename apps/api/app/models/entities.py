@@ -329,6 +329,25 @@ class AuditLog(Base):
 # --------------------------------------------------------------------------
 # Reserved for the survey rover. Created now; unused until commissioning.
 # --------------------------------------------------------------------------
+class PlantMap(Base):
+    """Where the plants stand in a block, for the rover: a grid of spots, row and spot spacing, and the spots that
+    hold a plant. The rover stops at those spots only. Kept apart from planting, which is a guava cycle; a plant map
+    holds any crop (the tomato demo)."""
+    __tablename__ = "plant_map"
+    __table_args__ = (
+        CheckConstraint("rows BETWEEN 1 AND 40 AND cols BETWEEN 1 AND 40", name="ck_plant_map_size"),
+        CheckConstraint("row_m BETWEEN 0.2 AND 10 AND plant_m BETWEEN 0.2 AND 10", name="ck_plant_map_spacing"),
+    )
+    zone_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("zone.id", ondelete="CASCADE"), primary_key=True)
+    crop: Mapped[str] = mapped_column(String(40), nullable=False)               # what the farmer reads: "Tomato"
+    rows: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    cols: Mapped[int] = mapped_column(SmallInteger, nullable=False)            # spots in a row
+    row_m: Mapped[float] = mapped_column(Numeric(4, 2), nullable=False)         # row to row
+    plant_m: Mapped[float] = mapped_column(Numeric(4, 2), nullable=False)       # spot to spot along a row
+    plants: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)   # [[row, col], ...] from 0
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class SurveyMission(Base):
     __tablename__ = "survey_mission"
     id: Mapped[uuid.UUID] = _pk()

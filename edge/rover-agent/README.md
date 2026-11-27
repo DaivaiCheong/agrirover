@@ -17,9 +17,14 @@ Each round writes `report.json`, `field-map.svg` and `camera-frames.png`.
 
 ```bash
 pip install -r requirements.txt pyserial
-export MQTT_HOST=<farm server IP> ROVER_SERIAL_PORT=/dev/ttyUSB0
-python -m rover run                       # Pi camera; add --usb-camera for a webcam
+cp .env.example .env                      # MQTT_HOST, ROVER_SERIAL_PORT, calibration, battery stop
+python -m rover jog forward 0.5           # calibrate: measure, correct ROVER_MPS_AT_CRUISE in .env
+python -m rover jog turn 90               # ... and ROVER_DPS_AT_CRUISE
+python -m rover run                       # Pi camera; --usb-camera for a webcam, --no-camera for none
 ```
+
+A round may name `stops` (the plants of a block's plant map): the rover then drives from the first to the last and
+stops at those only. Floor demo, step by step: [docs/TOMATO-DEMO.md](../../docs/TOMATO-DEMO.md).
 
 Without hardware, against a real broker: `python -m rover run --sim-hardware`
 (or `docker compose --profile sim up` from the repository root).

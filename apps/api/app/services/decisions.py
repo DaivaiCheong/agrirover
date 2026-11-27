@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Boolean, Enum as SAEnum, column, or_, select, true, values
+from sqlalchemy import Boolean, Enum as SAEnum, cast, column, or_, select, true, values
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -137,10 +137,13 @@ async def newest_readings(session: AsyncSession, zone_ids: list) -> dict:
         [(z, deciding[z][0] if z in deciding else None) for z in zone_ids])
     kinds = values(column("metric", SAEnum(Metric, name="metric_type", create_type=False)),
                    column("is_probe", Boolean), name="mt").data([(m, m in SOIL_PROBE_METRICS) for m in Metric])
+    # Cast both: a bed with no probe (a new bed, the tomato block) makes deciding_id all NULL, which Postgres
+    # would otherwise type as text and refuse to compare with a uuid.
+    zone_col, deciding_col = cast(zones.c.zone_id, PGUUID(as_uuid=True)), cast(zones.c.deciding_id, PGUUID(as_uuid=True))
     newest = (select(SensorReading.value.label("value"), SensorReading.recorded_at.label("recorded_at"))
-              .where(SensorReading.zone_id == zones.c.zone_id, SensorReading.metric == kinds.c.metric,
-                     or_(kinds.c.is_probe.is_(False), zones.c.deciding_id.is_(None),
-                         SensorReading.sensor_id == zones.c.deciding_id))
+              .where(SensorReading.zone_id == zone_col, SensorReading.metric == kinds.c.metric,
+                     or_(kinds.c.is_probe.is_(False), deciding_col.is_(None),
+                         SensorReading.sensor_id == deciding_col))
               .order_by(SensorReading.recorded_at.desc()).limit(1).lateral("newest"))
     rows = (await session.execute(
         select(zones.c.zone_id, kinds.c.metric, newest.c.value, newest.c.recorded_at)

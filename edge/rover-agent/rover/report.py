@@ -108,7 +108,8 @@ def field_map_svg(report: MissionReport, px: int = 56) -> str:
         out.append(f'<rect x="{lx}" y="{y - 12}" width="16" height="16" fill="{fill}" {edge}/>')
         out.append(f'<text x="{lx + 24}" y="{y + 1}" font-size="12" fill="{INK}">{label}</text>')
     out.append(f'<text x="24" y="{ly + 48}" font-size="11" fill="#57606A">'
-               f'● start  ○ last cell scanned · row 0 at the bottom, rover starts heading east</text>')
+               f'● start  ○ last cell scanned · row 1 at the bottom · start corner {escape(report.start)}, '
+               f'lanes {"along the rows" if report.along == "rows" else "across the rows"}</text>')
     out.append("</svg>")
     return "\n".join(out)
 

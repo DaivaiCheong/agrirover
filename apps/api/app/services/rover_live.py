@@ -24,6 +24,8 @@ log = logging.getLogger("rover")
 ROVER_CODE = "ROVER-01"
 RUNNING = {"queued", "running"}
 FINAL = {"completed", "aborted", "failed", "rejected", "lost"}
+CORNERS = ("sw", "se", "nw", "ne")            # the route's start corner and lanes, as rover/planner.py names them
+ALONG = ("rows", "across")
 SUMMARY_FIELDS = ("cellsScanned", "cellsTotal", "plantsDetected", "cellsFlagged", "distanceM", "estDurationS", "startedAt", "finishedAt")
 
 
@@ -48,11 +50,12 @@ class RoverLive:
     def running(self) -> bool:
         return self.mission is not None and self.mission["status"] in RUNNING
 
-    def queued(self, mission_id: str, zone_id: str, rows: int, cols: int, tree_m: float, row_m: float, simulate: str | None) -> None:
+    def queued(self, mission_id: str, zone_id: str, rows: int, cols: int, tree_m: float, row_m: float, simulate: str | None,
+               start: str = "sw", along: str = "rows", stops: list[list[int]] | None = None) -> None:
         self.cells, self.frames = {}, {}
         self.mission = {"missionId": mission_id, "zoneId": zone_id, "rows": rows, "cols": cols, "cellM": tree_m, "rowM": row_m,
-                        "status": "queued", "reason": None, "cell": None, "battery": None, "frame": None,
-                        "cellsScanned": 0, "cellsTotal": rows * cols, "simulate": simulate, "simulated": None}
+                        "start": start, "along": along, "stops": stops, "status": "queued", "reason": None, "cell": None, "battery": None,
+                        "frame": None, "cellsScanned": 0, "cellsTotal": len(stops) if stops else rows * cols, "simulate": simulate, "simulated": None}
 
     def on_status(self, payload: object) -> None:
         status = payload.get("status") if isinstance(payload, dict) else None
@@ -77,8 +80,11 @@ class RoverLive:
             # After a server restart a round still in progress is adopted; a finished one is only history.
             if status != "running" or not isinstance(payload.get("rows"), int) or not isinstance(payload.get("cols"), int):
                 return
+            start, along, stops = payload.get("start"), payload.get("along"), payload.get("stops")
+            stops = [s for s in stops if isinstance(s, list) and len(s) == 2 and all(isinstance(v, int) for v in s)] if isinstance(stops, list) else None
             self.queued(str(mission_id), str(payload.get("zoneId", "")), payload["rows"], payload["cols"],
-                        float(payload.get("cellM", 3.0)), float(payload.get("rowM", 3.0)), None)
+                        float(payload.get("cellM", 3.0)), float(payload.get("rowM", 3.0)), None,
+                        start if start in CORNERS else "sw", along if along in ALONG else "rows", stops or None)
         m = self.mission
         if status == "running":
             m["status"] = "running"

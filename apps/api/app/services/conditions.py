@@ -1,4 +1,5 @@
-"""What each bed's soil and air look like now, rated against guava's stage. Glue for the pure rules in guava.py.
+"""What each bed's soil and air look like now, rated against guava's stage (guava.py), or against tomato's targets
+(tomato.py) on a block whose plant map grows tomato.
 
 Nothing is stored: a rating is worked out from the newest readings every time, so there is no alert table to go stale.
 """
@@ -11,8 +12,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.entities import CropProfile, Farm, Metric, OrchardJobDone, Planting, SensorReading, Zone
-from app.services import guava
+from app.models.entities import CropProfile, Farm, Metric, OrchardJobDone, Planting, PlantMap, SensorReading, Zone
+from app.services import guava, tomato
 from app.services.decisions import newest_readings
 from app.services.errors import NotFound
 from app.services.farm_data import active_plantings
@@ -30,12 +31,20 @@ class BedSnapshot:
     farm_tz: str
     recent_min: float | None = None           # lowest moisture in the last 3 days: a jump from it splits fruit
     bagged: bool = False
+    map_crop: str | None = None               # the crop on the block's plant map (the tomato demo), if it has one
 
     @property
     def stress(self) -> bool:
         return bool(self.planting and self.planting.regulation == "withhold")
 
+    @property
+    def tomato(self) -> bool:
+        """No guava cycle, and a plant map that grows tomato: rated against tomato's targets."""
+        return self.planting is None and tomato.is_tomato(self.map_crop)
+
     def assess(self, now: datetime) -> dict:
+        if self.tomato:
+            return tomato.rate_bed(self.readings, now=now, recent_min=self.recent_min)
         fruit = float(self.planting.fruit_mm) if self.planting and self.planting.fruit_mm is not None else None
         return guava.rate_bed(self.readings, self.day, now=now, stress=self.stress, recent_min=self.recent_min,
                               fruit_mm=fruit, bagged=self.bagged)
@@ -75,6 +84,7 @@ async def load_snapshots(session: AsyncSession, farm_name: str, now: datetime,
                SensorReading.recorded_at >= now - timedelta(days=3))
         .group_by(SensorReading.zone_id))).all()) if ids else {}
     bagged = set((await session.scalars(select(OrchardJobDone.planting_id).where(OrchardJobDone.job_id == "bag"))).all())
+    map_crops = dict((await session.execute(select(PlantMap.zone_id, PlantMap.crop).where(PlantMap.zone_id.in_(ids)))).all()) if ids else {}
 
     out = []
     for z in zones:
@@ -83,7 +93,8 @@ async def load_snapshots(session: AsyncSession, farm_name: str, now: datetime,
         out.append(BedSnapshot(
             zone=z, readings=newest_per_metric(by_zone.get(z.id, [])), planting=planting, crop=crop,
             day=guava.days_between(planting.planted_on, today) if planting else None, farm_tz=farm.timezone,
-            recent_min=None if low is None else float(low), bagged=bool(planting and planting.id in bagged)))
+            recent_min=None if low is None else float(low), bagged=bool(planting and planting.id in bagged),
+            map_crop=map_crops.get(z.id)))
     return out
 
 
@@ -94,7 +105,8 @@ async def bed_conditions(session: AsyncSession, farm_name: str, now: datetime | 
         known = [r.at for m, r in s.readings.items() if m in guava.META]
         out.append({
             "zone": s.zone.name, "label": s.zone.label, "areaM2": float(s.zone.area_m2) if s.zone.area_m2 else None,
-            "crop": s.crop.slug if s.crop else None, "cropName": s.crop.common_name if s.crop else None,
+            "crop": s.crop.slug if s.crop else tomato.SLUG if s.tomato else None,
+            "cropName": s.crop.common_name if s.crop else s.map_crop if s.tomato else None,
             "variety": s.planting.variety if s.planting else None, "day": s.day,
             "recordedAt": max(known).isoformat() if known else None,
             **s.assess(now),

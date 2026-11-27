@@ -1,5 +1,7 @@
 """Cameras. Every camera returns an RGB uint8 image of the cell under the rover.
 
+NoCamera              a grey frame, for driving a round before the camera is mounted.
+
 SimField / SimCamera  a synthetic bed with known ground truth, used for tests,
                       demos, and to check the vision against the truth.
 PiCamera              Raspberry Pi camera module (picamera2).
@@ -49,7 +51,8 @@ class SimField:
 
     def __init__(self, rows: int, cols: int, seed: int = 0,
                  plant_rate: float = 0.95, sick_rate: float = 0.1,
-                 base: dict | None = None, moisture_spread: float = 12.0):
+                 base: dict | None = None, moisture_spread: float = 12.0, planted: set[tuple[int, int]] | None = None):
+        """`planted`: the spots that hold a plant (a plant map); the rest are bare. None: about plant_rate of them."""
         rng = np.random.default_rng(seed)
         self.rows, self.cols, self.seed = rows, cols, seed
         self.base = {**BASE_READINGS, **(base or {})}
@@ -57,7 +60,8 @@ class SimField:
         self.cells: dict[tuple[int, int], CellTruth] = {}
         for r in range(rows):
             for c in range(cols):
-                plant = bool(rng.random() < plant_rate)
+                drawn = bool(rng.random() < plant_rate)     # always drawn, so the same seed gives the same field
+                plant = drawn if planted is None else (r, c) in planted
                 gradient = 0.75 - 0.55 * (c / max(cols - 1, 1))
                 moisture = float(np.clip(gradient + rng.normal(0, 0.12), 0.0, 1.0))
                 canopy = float(rng.uniform(0.20, 0.45)) if plant else 0.0
@@ -114,6 +118,14 @@ class SimCamera:
 
         img += rng.normal(0, self.noise, img.shape)
         return np.clip(img, 0, 255).astype(np.uint8)
+
+
+class NoCamera:
+    """No camera fitted: a plain grey frame, so a round can be driven before the camera is mounted.
+    The vision then sees no plant at any stop, and the soil probe is not lowered."""
+
+    def capture(self, cell: Cell) -> np.ndarray:
+        return np.full((48, 64, 3), 128, np.uint8)
 
 
 class PiCamera:

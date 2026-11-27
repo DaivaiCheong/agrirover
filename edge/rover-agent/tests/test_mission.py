@@ -8,6 +8,7 @@ from rover.__main__ import sim_runner
 from rover.config import DriveLimits, RoverConfig
 from rover.link import RoverLink, estop_requested, rain_from_telemetry
 from rover.mission import MissionSpec
+from rover.planner import Cell
 from rover.report import field_map_svg, save_report
 from rover.safety import Guards
 
@@ -80,10 +81,59 @@ def test_camera_fault_is_reported_not_raised():
     {"missionId": "a", "zoneId": "z", "rows": "2", "cols": 2},
     {"zoneId": "z", "rows": 2, "cols": 2},
     ["not", "an", "object"],
+    {"missionId": "a", "zoneId": "z", "rows": 2, "cols": 2, "start": "middle"},
+    {"missionId": "a", "zoneId": "z", "rows": 2, "cols": 2, "start": 1},
+    {"missionId": "a", "zoneId": "z", "rows": 2, "cols": 2, "along": "diagonal"},
 ])
 def test_invalid_missions_are_refused(payload):
     with pytest.raises(ValueError):
         MissionSpec.from_payload(payload, DriveLimits())
+
+
+def test_a_plant_map_round_stops_at_the_plants_only_and_drives_through_the_gaps():
+    # the tomato demo: 2 rows of 3 spots, plants on 4 of them
+    s = MissionSpec.from_payload({"missionId": "m-tomato", "zoneId": "t1", "rows": 2, "cols": 3, "cellM": 0.5, "rowM": 0.8,
+                                  "stops": [[0, 0], [0, 2], [1, 0], [1, 1]]}, DriveLimits())
+    runner, _ = sim_runner(CFG, s, seed=4, guards=Guards())
+    states: list[dict] = []
+    report = runner.run(s, states.append)
+    assert report.status == "completed", report.abort_reason
+    assert [(r.row, r.col) for r in report.results] == [(0, 0), (0, 2), (1, 1), (1, 0)]     # serpentine order, gaps skipped
+    assert all(r.obs.plant for r in report.results)                    # the simulated plants stand where the map says
+    assert report.distance_m == pytest.approx(0.5 * 2 + 0.8 + 0.5 * 2)  # through (0,1) and (1,2), not past (1,0)
+    d = report.to_dict()
+    assert d["cellsTotal"] == 4 and d["grid"]["stops"] == [[0, 0], [0, 2], [1, 1], [1, 0]]
+    passing = [st for st in states if st["cell"] == [0, 1]]
+    assert passing and "observation" not in passing[0]                 # the map sees it pass the empty spot, no photo
+
+
+def test_a_round_starts_at_the_first_plant_on_the_route():
+    s = MissionSpec("m", "t1", 2, 3, 0.5, row_m=0.8, stops=frozenset({Cell(1, 1), Cell(1, 2)}))
+    assert s.path() == [Cell(1, 2), Cell(1, 1)]                        # route goes along row 1 first; no plant there
+    assert s.stop_count == 2
+    runner, _ = sim_runner(CFG, s, seed=1, guards=Guards())
+    assert runner.run(s).status == "completed"                         # the simulated rover starts on R2 T3, inside the block
+
+
+@pytest.mark.parametrize("stops", [[], [[2, 0]], [[0, 3]], [[0]], "all", [["0", 1]]])
+def test_bad_stops_are_refused(stops):
+    with pytest.raises(ValueError):
+        MissionSpec.from_payload({"missionId": "m", "zoneId": "z", "rows": 2, "cols": 3, "stops": stops}, DriveLimits())
+
+
+@pytest.mark.parametrize("start", ["sw", "se", "nw", "ne"])
+@pytest.mark.parametrize("along", ["rows", "across"])
+def test_a_round_from_any_corner_stays_in_the_block_and_follows_the_route(start, along):
+    s = MissionSpec.from_payload({"missionId": f"m-{start}-{along}", "zoneId": "g1", "rows": 3, "cols": 4,
+                                  "cellM": 2.0, "rowM": 3.0, "start": start, "along": along}, DriveLimits())
+    runner, _ = sim_runner(CFG, s, seed=4, guards=Guards())
+    report = runner.run(s)
+    assert report.status == "completed", report.abort_reason          # no geofence stop from a far corner
+    assert [(r.row, r.col) for r in report.results] == [(c.row, c.col) for c in s.path()]
+    data = report.to_dict()
+    assert data["grid"]["start"] == start and data["grid"]["along"] == along
+    first = s.path()[0]
+    assert data["path"][0] == [first.row, first.col]
 
 
 def test_report_files(tmp_path):

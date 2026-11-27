@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.security import hash_password
-from app.models.entities import (CropProfile, Device, DeviceKind, Farm, FarmSetting, IrrigationRule, OrchardJobDone, Planting,
-                                 Role, Sensor, TrialArm, User, Zone)
+from app.models.entities import (CropProfile, Device, DeviceKind, Farm, FarmSetting, IrrigationRule, OrchardJobDone, PlantMap,
+                                 Planting, Role, Sensor, TrialArm, User, Zone)
 from app.services import guava
 from app.services.clock import farm_today
 
@@ -59,8 +59,9 @@ BEDS = (
 
 
 async def seed_stage1(session: AsyncSession, farm_name: str | None = None, device_code: str = DEFAULT_DEVICE,
-                      planted_on: date | None = None) -> None:
-    """`planted_on` makes every cycle start on that date, for tests. Otherwise each bed is on its own day."""
+                      planted_on: date | None = None, beds: tuple[Bed, ...] = BEDS) -> None:
+    """`planted_on` makes every cycle start on that date, for tests. Otherwise each bed is on its own day.
+    `beds=()` sets up the farm, its crop, its settings and its devices with no beds: a real farm, not the demo."""
     farm_name = farm_name or settings.farm_name
     today = farm_today()
 
@@ -96,7 +97,7 @@ async def seed_stage1(session: AsyncSession, farm_name: str | None = None, devic
         session.add(Device(farm_id=farm.id, code="ROVER-01", kind=DeviceKind.rover, commissioned=False))
 
     zones = {z.name: z for z in (await session.execute(select(Zone).where(Zone.farm_id == farm.id))).scalars()}
-    for bed in BEDS:
+    for bed in beds:
         if bed.name in zones:
             continue
         zone = Zone(farm_id=farm.id, name=bed.name, label=bed.label, area_m2=bed.area, trial_arm=bed.arm, crop_id=crop.id)
@@ -121,10 +122,54 @@ async def seed_stage1(session: AsyncSession, farm_name: str | None = None, devic
     await session.commit()
 
 
+@dataclass(frozen=True)
+class DemoMap:
+    name: str
+    label: str
+    crop: str
+    rows: int
+    cols: int
+    row_m: float
+    plant_m: float
+    plants: tuple[tuple[int, int], ...]
+
+
+# One field-sized tomato block, 50 m²: 5 rows of 20 plants, rows 1.0 m apart and plants 0.5 m apart (ordinary field
+# spacing for tomato). Three plants are missing, as on a real bed, so a round shows the rover drives past a gap.
+# For the real rover on a room floor, shrink the grid on the Rover screen (for example 2 x 3, 0.8 x 0.5 m).
+_GAPS = {(1, 6), (3, 13), (4, 2)}
+TOMATO_DEMO = DemoMap("t1", "T1 Tomato farm", "Tomato", 5, 20, 1.0, 0.5,
+                      tuple((r, c) for r in range(5) for c in range(20) if (r, c) not in _GAPS))
+
+
+async def seed_tomato_demo(session: AsyncSession, farm_name: str | None = None, demo: DemoMap = TOMATO_DEMO) -> bool:
+    """The tomato demo block and its plant map, once. Kept apart from seed_stage1: the orchard stays six guava beds.
+    True when it was added."""
+    farm = (await session.execute(select(Farm).where(Farm.name == (farm_name or settings.farm_name)))).scalar_one_or_none()
+    if farm is None or (await session.execute(select(Zone).where(Zone.farm_id == farm.id, Zone.name == demo.name))).scalar_one_or_none():
+        return False
+    zone = Zone(farm_id=farm.id, name=demo.name, label=demo.label, area_m2=round(demo.rows * demo.row_m * demo.cols * demo.plant_m, 2))
+    session.add(zone)
+    await session.flush()
+    session.add(IrrigationRule(zone_id=zone.id))
+    session.add(PlantMap(zone_id=zone.id, crop=demo.crop, rows=demo.rows, cols=demo.cols, row_m=demo.row_m, plant_m=demo.plant_m,
+                         plants=[list(p) for p in demo.plants]))
+    await session.commit()
+    return True
+
+
 async def _main() -> None:
     from app.services.demo_orchard import backfill_rounds
+    # DEMO_ORCHARD=true adds the six guava beds and two weeks of simulated rounds; otherwise the farm starts with the
+    # tomato block only, and every reading on it comes from the rover.
     async with SessionLocal() as session:
-        await seed_stage1(session)
+        await seed_stage1(session, beds=BEDS if settings.demo_orchard else ())
+    async with SessionLocal() as session:
+        if await seed_tomato_demo(session):
+            print(f"added {TOMATO_DEMO.label!r} with {len(TOMATO_DEMO.plants)} plants")
+    if not settings.demo_orchard:
+        print(f"seeded farm {settings.farm_name!r}: no demo orchard (DEMO_ORCHARD=false)")
+        return
     async with SessionLocal() as session:
         added = await backfill_rounds(session, settings.farm_name)
     print(f"seeded farm {settings.farm_name!r}; {added} simulated rover rounds added")

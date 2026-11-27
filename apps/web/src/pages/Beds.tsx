@@ -36,6 +36,15 @@ const COLUMNS: { key: string; head: string; unit?: string }[] = [
 ];
 
 function CropCell({ b, c, onPlant }: { b?: BedConditions; c?: Cycle; onPlant: () => void }) {
+  if (!c && b?.crop === "tomato") {
+    // a block with a plant map: its plants are placed on the Rover screen, and rated against tomato's targets
+    return (
+      <>
+        <Link to="/rover" onClick={(e) => e.stopPropagation()}>{b.cropName ?? "Tomato"}</Link>
+        <div className="mono-sm muted">Plant map · whole season</div>
+      </>
+    );
+  }
   if (!c) {
     return <button type="button" className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); onPlant(); }}><Sprout size={14} aria-hidden />Plant</button>;
   }
@@ -72,7 +81,7 @@ export default function Beds() {
 
   const rows = zones.data ?? [];
   const totalArea = rows.reduce((s, z) => s + (z.areaM2 ?? 0), 0);
-  const occupied = rows.filter((z) => activeCyclesByZone.has(z.zone)).length;
+  const occupied = rows.filter((z) => activeCyclesByZone.has(z.zone) || condOf.get(z.zone)?.crop === "tomato").length;
 
   async function addBed(e: React.FormEvent) {
     e.preventDefault();
@@ -174,6 +183,16 @@ export default function Beds() {
                 </tbody></table>
               )}
               <BedTrends zone={openCond.zone} params={openCond.params} hours={hours} />
+              {openCond.rules && (
+                <div className="tablewrap">
+                  <table className="tbl">
+                    <thead><tr><th>Reading</th><th>Target</th><th>Critical</th><th>Why</th></tr></thead>
+                    <tbody>{openCond.rules.map((r) => (
+                      <tr key={r.label}><td className="nowrap"><b>{r.label}</b></td><td>{r.target}</td><td className="small">{r.critical}</td><td className="small muted">{r.note}</td></tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
               <p className="small muted trend-source">Rover's daily average. Advice only. Targets: {openCond.source}</p>
             </div>
           )}

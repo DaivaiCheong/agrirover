@@ -775,7 +775,29 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .rm-can:hover .rm-bg{stroke:var(--ink);stroke-width:1.5}
 .rm-can:focus-visible{outline:none}
 .rm-can:focus-visible .rm-bg,.rm-picked .rm-bg{stroke:var(--ink);stroke-width:2.5;stroke-dasharray:none}
-.rm-path{fill:none;stroke:var(--ink-muted);stroke-width:1;stroke-dasharray:2 4;opacity:.45;pointer-events:none}
+.rm-path{fill:none;stroke:var(--ink-muted);stroke-width:1.5;stroke-dasharray:3 4;opacity:.6;stroke-linejoin:round;pointer-events:none}
+.rm-start{fill:none;stroke:var(--ink);stroke-width:2;pointer-events:none}
+.rm-corner{cursor:pointer}
+.rm-corner circle{fill:#fff;stroke:var(--ink-muted);stroke-width:1.5}
+.rm-corner:hover circle{stroke:var(--ink);stroke-width:2}
+.rm-corner.on circle{fill:var(--ink);stroke:var(--ink)}
+.rm-corner:focus-visible{outline:none}
+.rm-corner:focus-visible circle{stroke:var(--brand);stroke-width:3}
+.sw-start{width:14px;height:14px;border-radius:50%;border:2px solid var(--ink);display:inline-block}
+/* plant map: a tomato is a red dot with a green top; an empty spot is a fainter square the rover drives past */
+.rm-crop{pointer-events:none}
+.rm-crop circle{fill:#D9432F;stroke:#fff;stroke-width:1.5}
+.rm-crop path{fill:none;stroke:var(--plant);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.rm-empty .rm-bg{opacity:.55}
+.rm-placing .rm-cell{cursor:pointer}
+.rm-placing .rm-cell:hover .rm-bg{stroke:var(--ink);stroke-width:1.5;opacity:1}
+.rm-seen{fill:var(--ok);stroke:#fff;stroke-width:1.5}
+.rm-unseen{fill:#fff;stroke:var(--ink-muted);stroke-width:1.5}
+.sw-crop{width:12px;height:12px;border-radius:50%;background:#D9432F;display:inline-block;box-shadow:inset 0 3px 0 -1px var(--plant)}
+.sw-seen{width:10px;height:10px;border-radius:50%;background:var(--ok);display:inline-block}
+.rv-plants{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rv-route{display:grid;gap:6px}
+.rv-route .seg{width:max-content}
 .rm-done{fill:none;stroke:var(--ink);stroke-width:2;opacity:.55;stroke-linejoin:round;pointer-events:none}
 .rm-rover{transition:transform .5s ease-out;pointer-events:none}
 .rm-rover path{fill:var(--ink);stroke:#fff;stroke-width:2;stroke-linejoin:round}
