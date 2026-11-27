@@ -366,23 +366,44 @@ export default function Farm3D({ blocks, selected, onPick, focus, rover, height 
     const x = at.x0 + (rover.col + 0.5) * b.treeM;
     const z = at.z0 - (rover.row + 0.5) * b.rowM - b.rowM * 0.5;      // in the lane beside the tree
     if (!e.roverObj) {
+      // Like the built rover: white printed chassis, yellow gear motors, black tyres, a mast with the camera,
+      // and a solar panel on top. Drawn larger than life so it reads at farm scale.
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.45, 0.6), new THREE.MeshLambertMaterial({ color: C.rover }));
-      body.position.y = 0.55;
-      body.castShadow = true;
-      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 6), new THREE.MeshLambertMaterial({ color: C.rover }));
-      mast.position.set(-0.2, 1.2, 0);
-      const wheel = new THREE.CylinderGeometry(0.2, 0.2, 0.12, 14);
-      const wm = new THREE.MeshLambertMaterial({ color: 0x333333 });
-      for (const [wx, wz] of [[0.3, 0.33], [-0.3, 0.33], [0.3, -0.33], [-0.3, -0.33]]) {
-        const w = new THREE.Mesh(wheel, wm);
+      const mat = (color: number) => new THREE.MeshLambertMaterial({ color });
+      const box = (w: number, h: number, d: number, color: number, px: number, py: number, pz: number) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
+        m.position.set(px, py, pz);
+        m.castShadow = true;
+        g.add(m);
+        return m;
+      };
+      box(1.0, 0.32, 0.62, 0xf1f0ea, 0, 0.5, 0);                 // chassis
+      box(0.7, 0.06, 0.5, 0xc0392b, 0.05, 0.69, 0);              // driver boards
+      box(0.18, 0.2, 0.5, 0x2f6fb5, -0.32, 0.8, 0);              // battery pack
+      const tyre = new THREE.CylinderGeometry(0.22, 0.22, 0.14, 18);
+      for (const [wx, wz] of [[0.36, 0.4], [-0.36, 0.4], [0.36, -0.4], [-0.36, -0.4]]) {
+        const w = new THREE.Mesh(tyre, mat(0x1f1f1f));
         w.rotation.x = Math.PI / 2;
-        w.position.set(wx, 0.3, wz);
+        w.position.set(wx, 0.24, wz);
+        w.castShadow = true;
         g.add(w);
+        box(0.22, 0.14, 0.1, 0xf2c230, wx, 0.36, wz > 0 ? wz - 0.13 : wz + 0.13);   // yellow gear motor
       }
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.75, 8), mat(0xf1f0ea));
+      mast.position.set(0.3, 1.02, 0);
+      g.add(mast);
+      box(0.2, 0.18, 0.2, 0xf6f6f2, 0.3, 1.45, 0);               // camera box
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 14), mat(0x111111));
+      lens.rotation.z = Math.PI / 2;
+      lens.position.set(0.42, 1.45, 0);
+      g.add(lens);
+      const panel = box(0.9, 0.04, 0.7, 0x1d3a6b, -0.05, 1.18, 0);   // solar panel
+      panel.rotation.z = 0.12;
+      box(0.92, 0.02, 0.72, 0xd9dee5, -0.05, 1.155, 0).rotation.z = 0.12;
       const tag = label("Rover", "f3-rover");
-      tag.position.set(0, 1.9, 0);
-      g.add(body, mast, tag);
+      tag.position.set(0, 2.0, 0);
+      g.add(tag);
+      g.scale.setScalar(1.35);
       g.position.set(x, 0, z);
       e.scene.add(g);
       e.roverObj = g;

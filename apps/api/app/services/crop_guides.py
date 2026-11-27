@@ -31,6 +31,23 @@ TOMATO = Guide("tomato", "Tomato", "Fine hairs on tomato leaves and stems, and a
 GUIDES = {g.crop: g for g in (GUAVA, TOMATO)}
 
 
+# What kind of finding a guide entry is, by its card group: what the farmer does next differs for each.
+KIND_OF_GROUP = {"fungus": "disease", "water mould": "disease", "bacteria": "disease", "virus": "disease", "alga": "disease",
+                 "roots": "disease", "feed": "nutrient", "water": "nutrient", "insect": "pest"}
+
+
+def kind_of(guide: Guide, label: str | None) -> str:
+    """healthy | disease | nutrient | pest | problem (no name given) | unsure (no answer)."""
+    if label is None:
+        return "unsure"
+    if label in ("healthy", "problem"):
+        return label
+    entry = guide.by_id.get(label)
+    if entry is None:
+        return "problem"
+    return KIND_OF_GROUP.get(entry.to_dict()["card"]["group"], "problem")
+
+
 def guide_for(crop: str | None) -> Guide:
     return TOMATO if tomato.is_tomato(crop) else GUAVA
 

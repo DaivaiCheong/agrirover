@@ -15,19 +15,28 @@ import asyncio
 import base64
 import binascii
 import logging
+import uuid
 from collections.abc import Callable
 
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.services import photo_library
-from app.services.crop_guides import Guide, crop_of_zone, guide_for
+from app.services.crop_guides import Guide, crop_of_zone, guide_for, kind_of
 from app.services.disease import HEALTHY, PROBLEM, Classifier, ModelUnavailable
 from app.services.errors import NotFound
 from app.services.rover_live import RoverLive, live as rover_live
 
 log = logging.getLogger("rover.photos")
 NOTE = "Rover photo: yellow leaves flagged on the round"
+NOTE_INSPECTION = "Rover photo: Plant Inspection round"
 _lock: asyncio.Lock | None = None
+
+
+def _uuid(value: object) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(value))
+    except ValueError:
+        return None
 
 
 def _one_at_a_time() -> asyncio.Lock:
@@ -38,16 +47,17 @@ def _one_at_a_time() -> asyncio.Lock:
 
 
 def wanted(payload: object, *, simulated_too: bool | None = None) -> bool:
-    """A stop the rover flagged, with a photo, from a real rover (or a simulated one when allowed)."""
+    """A stop that came with a photo: a plant the rover flagged, or any plant on a Plant Inspection round (`inspect`).
+    From a real rover, from a rehearsal with real pictures (`photosReal`), or from a simulated one when allowed."""
     if not isinstance(payload, dict) or payload.get("status") != "running" or not isinstance(payload.get("photo"), str):
         return False
     seen = payload.get("observation")
-    if not isinstance(seen, dict) or seen.get("flagged") is not True:
+    if not isinstance(seen, dict) or (seen.get("flagged") is not True and payload.get("inspect") is not True):
         return False
     if not isinstance(seen.get("row"), int) or not isinstance(seen.get("col"), int) or not payload.get("zoneId"):
         return False
     allow_sim = settings.check_simulated_photos if simulated_too is None else simulated_too
-    return payload.get("simulated") is False or allow_sim
+    return payload.get("simulated") is False or payload.get("photosReal") is True or allow_sim
 
 
 def title_of(guide: Guide, label: str | None) -> str:
@@ -59,6 +69,18 @@ def title_of(guide: Guide, label: str | None) -> str:
         return "A problem: go and look"
     entry = guide.by_id.get(label)
     return f"Possible {entry.title.lower()}" if entry else label
+
+
+def finding(guide: Guide, label: str | None, also: str | None, seen: str | None, photo_id: str | None, *,
+            status: str = "ok", problem: str | None = None) -> dict:
+    """What the photo check said about one plant, the same shape live (on the Rover map) and stored (an inspection):
+    the headline, what kind of problem, and the guide entry's card (signs, what to do now, why) for the best match."""
+    entry = guide.by_id.get(label) if label else None
+    card = entry.to_dict() if entry else None
+    return {"status": status, "label": label, "title": title_of(guide, label), "kind": kind_of(guide, label),
+            "seen": seen, "also": guide.by_id[also].title if also in guide.by_id else None, "crop": guide.crop,
+            "photoId": photo_id, "problem": problem,
+            "card": None if card is None else {**card["card"], "id": card["id"], "title": card["title"], "why": card["favours"], "do": card["do"]}}
 
 
 def _image(text: str) -> bytes | None:
@@ -92,20 +114,21 @@ async def keep_and_check(payload: dict, *, classifier: Classifier | None, sessio
             except ModelUnavailable as exc:
                 problem = str(exc)
     label = result.label if result else None
+    also = result.also if result and result.also in guide.by_id else None
 
     try:
         async with session_factory() as session:
-            saved = await photo_library.save(session, data, zone_name=zone, part="leaf", row=row, col=col, note=NOTE,
+            saved = await photo_library.save(session, data, zone_name=zone, part="leaf", row=row, col=col,
+                                             note=NOTE if seen.get("flagged") else NOTE_INSPECTION,
                                              model_name=settings.ollama_model if result else None, model_label=label,
-                                             model_seen=result.seen if result else None)
+                                             model_seen=result.seen if result else None, model_also=also,
+                                             mission_id=_uuid(payload.get("missionId")))
     except NotFound:
         log.warning("rover photo for unknown block %s; not kept", zone)
         saved = None
 
-    also = result.also if result and result.also in guide.by_id else None
-    check = {"status": "unavailable" if problem else "ok" if result else "uncertain", "label": label, "title": title_of(guide, label),
-             "seen": result.seen if result else None, "also": guide.by_id[also].title if also else None, "crop": guide.crop,
-             "photoId": saved["id"] if saved else None, "problem": problem}
+    check = finding(guide, label, also, result.seen if result else None, saved["id"] if saved else None,
+                    status="unavailable" if problem else "ok" if result else "uncertain", problem=problem)
     live.set_check(str(payload.get("missionId")), (row, col), check)
     log.info("rover photo %s R%s T%s: %s", zone, row + 1, col + 1, check["title"] if not problem else problem)
     return check

@@ -51,6 +51,10 @@ class MissionIn(BaseModel):
     # The spots that hold a plant (from the block's plant map), [row, col] from 0: the rover stops at these only.
     # None: every spot, as on the guava blocks.
     stops: list[tuple[int, int]] | None = Field(default=None, min_length=1, max_length=MAX_CELLS)
+    # Plant Inspection: a photo of every plant goes to the photo check, not only the yellow ones.
+    inspect: bool = False
+    # The camera faces forward: at each plant the rover turns this way to look at it, then turns back. None: it does not turn.
+    look: Literal["left", "right"] | None = None
     simulate: Literal["normal", "rain", "low_battery"] | None = None    # what a simulated rover meets; a real one ignores it
 
     @model_validator(mode="after")
@@ -123,6 +127,10 @@ async def create_mission(body: MissionIn, publish: Publisher = Depends(get_publi
                "start": body.start, "along": body.along}
     if body.stops is not None:
         payload["stops"] = [list(s) for s in body.stops]
+    if body.inspect:
+        payload["inspect"] = True
+    if body.look:
+        payload["look"] = body.look
     if body.simulate is not None:
         payload["sim"] = sim_options(body, *await _sim_base(session, body.zone_id))
     try:
@@ -131,7 +139,7 @@ async def create_mission(body: MissionIn, publish: Publisher = Depends(get_publi
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
                             "farm broker unreachable; round not sent") from exc
     live.queued(mission_id, body.zone_id, body.rows, body.cols, body.cell_m, row_m, body.simulate, body.start, body.along,
-                None if body.stops is None else [list(s) for s in body.stops])
+                None if body.stops is None else [list(s) for s in body.stops], inspect=body.inspect, look=body.look)
     return {"missionId": mission_id, "status": "queued"}
 
 

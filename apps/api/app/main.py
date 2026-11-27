@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routers import (advice, assistant, auth, conditions, costs, cycles, decisions, devices, diagnosis, farm, irrigation,
-                         leaf_tests, missions, photos, plant_maps, reports, setups, telemetry, zones)
+                         inspections, leaf_tests, missions, photos, plant_maps, reports, rover_test, setups, telemetry, zones)
 from app.services.errors import Conflict, Invalid, NotFound
 from app.workers.mqtt_ingest import ingest_lifespan
 from app.workers.telegram_worker import telegram_lifespan
@@ -78,6 +78,8 @@ app.include_router(devices.router,    prefix=V1)
 app.include_router(assistant.router,  prefix=V1)
 app.include_router(missions.router,   prefix=V1)
 app.include_router(plant_maps.router, prefix=V1)
+app.include_router(inspections.router, prefix=V1)
+app.include_router(rover_test.router, prefix=V1)
 app.include_router(decisions.router,  prefix=V1)
 app.include_router(photos.router,     prefix=V1)
 app.include_router(leaf_tests.router, prefix=V1)

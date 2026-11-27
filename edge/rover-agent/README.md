@@ -26,8 +26,21 @@ python -m rover run                       # Pi camera; --usb-camera for a webcam
 A round may name `stops` (the plants of a block's plant map): the rover then drives from the first to the last and
 stops at those only. Floor demo, step by step: [docs/TOMATO-DEMO.md](../../docs/TOMATO-DEMO.md).
 
+Two more mission options, for a plant inspection round:
+
+- `inspect: true` sends a photo (JPEG, at most 640 px) of every plant to the farm server. Without it, only plants
+  with yellowing leaves come with a photo.
+- `look: "left"` or `"right"`: the camera faces forward, and the plants stand beside the lane. At each stop the rover
+  turns 90 degrees toward the plant, in place, photographs it, and turns back before driving on. Left out: no turn.
+
+Every progress message carries `inspect`, `look` and `photosReal`.
+
 Without hardware, against a real broker: `python -m rover run --sim-hardware`
 (or `docker compose --profile sim up` from the repository root).
+To rehearse with real leaf pictures, add `--photos DIR`: the simulated rover photographs the `.jpg` / `.jpeg` /
+`.png` files in DIR, in name order, one per stop (starting again after the last, and from the first on each round).
+Its progress messages then say `"photosReal": true`, so the farm server checks the photos although the rover is
+simulated.
 
 | Module | Does |
 |---|---|
@@ -38,6 +51,6 @@ Without hardware, against a real broker: `python -m rover run --sim-hardware`
 | `safety.py` | Guards (e-stop, rain, battery, link) and command clamps |
 | `drive.py` | `SimDrive` and `SerialDrive` (motor controller over USB) |
 | `protocol.py` | Serial frames, shared with the firmware |
-| `camera.py` | Pi camera, USB camera, and the simulated bed |
+| `camera.py` | Pi camera, USB camera, a folder of pictures, and the simulated bed |
 | `link.py` | MQTT: missions in, progress and reports out |
 | `report.py` | JSON report, SVG field map, camera mosaic |

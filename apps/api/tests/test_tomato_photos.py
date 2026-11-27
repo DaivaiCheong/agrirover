@@ -55,6 +55,20 @@ def test_the_guide_covers_the_tropical_problems_and_names_no_dose():
     assert "cut the stem" in TOMATO.by_id["wilt"].not_to_confuse.lower()          # a photo cannot see a wilt's cause
 
 
+NUTRIENTS = ("n_deficiency", "p_deficiency", "k_deficiency", "mg_deficiency", "zn_deficiency", "fe_deficiency", "b_deficiency", "chlorosis")
+
+
+def test_the_guide_names_each_nutrient_shortage_and_how_one_nutrient_blocks_another():
+    for nid in NUTRIENTS:
+        assert nid in TOMATO.by_id and CARDS[nid][0] == "feed", nid
+        d = TOMATO.by_id[nid]
+        assert "mobile" in d.not_to_confuse and "lab test" in d.not_to_confuse, nid   # old vs young leaves; a photo only triages
+    assert "potassium" in TOMATO.by_id["mg_deficiency"].favours.lower()                # Mulder's chart: high K blocks Mg
+    assert "Mulder" in TOMATO.by_id["blossom_end_rot"].favours and TOMATO.by_id["blossom_end_rot"].leaf
+    assert TOMATO.by_id["chlorosis"].title == "Yellow leaves, cause unclear"
+    assert "mg_deficiency (Magnesium shortage)" in match_prompt(TOMATO)
+
+
 def test_tomato_words_can_label_a_saved_photo():
     assert LABELS["early_blight"] == "Early blight" and LABELS["rust"] == "Guava rust" and LABELS["chlorosis"]
 

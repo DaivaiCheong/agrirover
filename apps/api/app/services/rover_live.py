@@ -51,10 +51,11 @@ class RoverLive:
         return self.mission is not None and self.mission["status"] in RUNNING
 
     def queued(self, mission_id: str, zone_id: str, rows: int, cols: int, tree_m: float, row_m: float, simulate: str | None,
-               start: str = "sw", along: str = "rows", stops: list[list[int]] | None = None) -> None:
+               start: str = "sw", along: str = "rows", stops: list[list[int]] | None = None, *, inspect: bool = False,
+               look: str | None = None) -> None:
         self.cells, self.frames = {}, {}
         self.mission = {"missionId": mission_id, "zoneId": zone_id, "rows": rows, "cols": cols, "cellM": tree_m, "rowM": row_m,
-                        "start": start, "along": along, "stops": stops, "status": "queued", "reason": None, "cell": None, "battery": None,
+                        "start": start, "along": along, "stops": stops, "inspect": inspect, "look": look, "status": "queued", "reason": None, "cell": None, "battery": None,
                         "frame": None, "cellsScanned": 0, "cellsTotal": len(stops) if stops else rows * cols, "simulate": simulate, "simulated": None}
 
     def on_status(self, payload: object) -> None:
@@ -84,7 +85,8 @@ class RoverLive:
             stops = [s for s in stops if isinstance(s, list) and len(s) == 2 and all(isinstance(v, int) for v in s)] if isinstance(stops, list) else None
             self.queued(str(mission_id), str(payload.get("zoneId", "")), payload["rows"], payload["cols"],
                         float(payload.get("cellM", 3.0)), float(payload.get("rowM", 3.0)), None,
-                        start if start in CORNERS else "sw", along if along in ALONG else "rows", stops or None)
+                        start if start in CORNERS else "sw", along if along in ALONG else "rows", stops or None,
+                        inspect=payload.get("inspect") is True, look=payload.get("look") if payload.get("look") in ("left", "right") else None)
         m = self.mission
         if status == "running":
             m["status"] = "running"

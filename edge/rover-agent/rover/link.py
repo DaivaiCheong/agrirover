@@ -7,7 +7,8 @@ Subscribes
 Publishes
     devices/rover-01/mission/state   progress, then the final summary   (retained)
     devices/rover-01/mission/result  full report
-    devices/rover-01/status          online / offline (last will), e-stop on or off  (retained)
+    devices/rover-01/brain/status    this program online / offline (last will), e-stop on or off  (retained)
+                                     (devices/rover-01/status is the ESP32's own)
 
 Losing the broker connection mid-mission stops the rover at its next check
 (guard `link_lost`). Every report is also written to disk, so nothing is lost

@@ -20,6 +20,11 @@ SOURCES = {
     "apsnet": ("APS, Compendium of Tomato Diseases and Pests", ""),
 }
 
+# Said in every nutrient entry's not_to_confuse, so the photo AI and the farmer both read it.
+NUTRIENT_RULE = ("Old leaves first means a mobile nutrient (N, P, K, Mg) the plant moves to new growth; young leaves first means an "
+                 "immobile one (Ca, Zn, Fe, B).")
+TRIAGE = "The photo check is only a first guess: a leaf or soil lab test confirms a shortage."
+
 
 @dataclass(frozen=True)
 class TomatoDisease(Disease):
@@ -41,8 +46,15 @@ CARDS: dict[str, tuple[str, str, tuple[str, ...], bool]] = {
     "tylcv":           ("virus", "Small, cupped, yellow-edged young leaves", ("Pull out sick plants early", "Control whitefly", "Resistant varieties next time"), False),
     "virus_mosaic":    ("virus", "Light and dark green mottle, twisted leaves", ("Pull out sick plants", "Wash hands and tools", "Control aphids"), False),
     "wilt":            ("roots", "Whole plant wilts though the soil is wet", ("Cut a stem: milky ooze or brown streaks?", "Remove wilted plants", "Do not over-water"), False),
-    "blossom_end_rot": ("feed", "Dark sunken patch at the fruit's bottom", ("Keep the water even", "Check soil pH and EC", "Not a germ: no spray"), False),
-    "chlorosis":       ("feed", "Yellow leaves, or yellow between green veins", ("Check the soil readings", "Take a leaf test"), False),
+    "blossom_end_rot": ("feed", "Dark sunken fruit bottom; young leaf tips burn", ("Keep the water even", "Check soil pH and EC", "Not a germ: no spray"), False),
+    "n_deficiency":    ("feed", "Old leaves pale yellow-green, plant pale, stunted", ("Check soil EC and the feed", "Take a leaf test"), False),
+    "p_deficiency":    ("feed", "Old leaves dark green, purple underneath", ("Check soil pH", "Take a leaf test"), False),
+    "k_deficiency":    ("feed", "Old leaf edges yellow, then brown, scorched", ("Check the potassium in the feed", "Take a leaf test"), False),
+    "mg_deficiency":   ("feed", "Yellow between green veins, old leaves", ("Check potassium is not too high", "Check soil pH", "Take a leaf test"), False),
+    "zn_deficiency":   ("feed", "Small narrow young leaves, short, bronzed", ("Check phosphorus is not too high", "Check soil pH", "Take a leaf test"), False),
+    "fe_deficiency":   ("feed", "Newest leaves yellow with green veins", ("Check soil pH is not too high", "Take a leaf test"), False),
+    "b_deficiency":    ("feed", "Brittle deformed tips, corky or cracked fruit", ("Keep the soil evenly moist", "Take a leaf test"), False),
+    "chlorosis":       ("feed", "Yellow leaves, pattern unclear", ("Note: old or young leaves first?", "Check the soil readings", "Take a leaf test"), False),
     "whitefly":        ("insect", "Tiny white insects under leaves, sticky film", ("Yellow sticky traps", "Net the seedlings", "Watch for leaf curl virus"), False),
     "leaf_miner":      ("insect", "Winding white trails or blotches in leaves", ("Remove mined leaves", "Find the insect before treating"), False),
     "fruit_borer":     ("insect", "Round holes in fruit, droppings", ("Pick and destroy bored fruit", "Pheromone traps"), False),
@@ -110,20 +122,91 @@ DISEASES = (
                   "Remove wilted plants with their roots. Do not over-water. Do not replant tomato, potato, eggplant or chilli there; use grafted "
                   "or resistant plants next time.", ("worldveg", "extension", "apsnet")),
     TomatoDisease("blossom_end_rot", "Blossom-end rot", "Calcium shortage in the fruit, not a germ",
-                  None,
+                  "When calcium is short in the leaves too (rarer, worse in tunnels): the youngest leaves are small and curled, their tips "
+                  "and edges brown and burnt; the growing tip can die back.",
                   "A water-soaked patch at the bottom (blossom end) of the fruit that turns dark, leathery and sunken.",
-                  "Sunscald is pale and papery on the side facing the sun. Rots from germs are soft and spread.",
-                  "Uneven watering, acid soil (pH below 5.5), salty soil (high EC) or too much potassium or ammonium (Mulder's chart): "
-                  "calcium does not reach the fruit.",
+                  "Sunscald is pale and papery on the side facing the sun. Rots from germs are soft and spread. Boron shortage also hurts "
+                  f"the tips, but makes them brittle and the fruit corky. {NUTRIENT_RULE} {TRIAGE}",
+                  "Uneven watering, acid soil (pH below 5.5) or salty soil (high EC): calcium does not reach the fruit. Mulder's chart: "
+                  "high potassium, magnesium or ammonium nitrogen block calcium; low pH makes it worse.",
                   "Keep the water even. Check soil pH and EC on the Farm screen. Not a germ: no spray. Remove spoiled fruit.",
                   ("extension", "apsnet")),
-    TomatoDisease("chlorosis", "Yellow leaves from feed or soil", "Nutrient shortage or soil, not a germ",
-                  "Nitrogen: whole older leaves pale and yellow. Magnesium: yellow between green veins on older leaves. Iron: young leaves "
-                  "yellow with green veins. Potassium: brown, scorched edges on older leaves.",
+    TomatoDisease("n_deficiency", "Nitrogen shortage", "Nutrient shortage, not a germ",
+                  "Oldest, lowest leaves first: the whole leaf, veins too, turns pale yellow-green, then yellow, and may drop. The whole "
+                  "plant is pale, thin-stemmed and stunted; stems can turn purplish.",
+                  "Few, small fruit.",
+                  "Magnesium shortage keeps the veins green; nitrogen yellows the whole leaf evenly. Potassium browns the edges first. "
+                  f"{NUTRIENT_RULE} {TRIAGE}",
+                  "Too little feed, heavy rain washing it out, sandy soil. A low soil EC fits. Mulder's chart: high potassium or calcium "
+                  "can hold nitrogen back.",
+                  "Check the soil EC on the Farm screen and what feed went on. Take a leaf test before adding much. No fungicide for this.",
+                  ("extension", "apsnet")),
+    TomatoDisease("p_deficiency", "Phosphorus shortage", "Nutrient shortage, not a germ",
+                  "Oldest leaves first: dark, dull green to blue-green, with a purple underside and purple veins; leaves small and stiff. "
+                  "The plant is stunted and slow.",
+                  "Late, few fruit.",
+                  "Some varieties and cold nights give a little purple that goes away when it warms. Nitrogen shortage is pale, not dark. "
+                  f"{NUTRIENT_RULE} {TRIAGE}",
+                  "Cold, wet or acid soil, and young plants with small roots. Mulder's chart: high zinc, iron or calcium lock "
+                  "phosphorus away; so does a very acid or very alkaline soil.",
+                  "Check the soil pH on the Farm screen; keep young plants warm and the soil drained. Take a leaf or soil test. "
+                  "No fungicide for this.", ("extension", "apsnet")),
+    TomatoDisease("k_deficiency", "Potassium shortage", "Nutrient shortage, not a germ",
+                  "Oldest leaves first: the edges and tips turn yellow, then brown and scorched, curling up; brown specks between the "
+                  "veins. The middle of the leaf stays green longest.",
+                  "Blotchy, uneven ripening: green or yellow patches on red fruit, hard white tissue inside, poor taste.",
+                  "Early blight spots are round with rings, not along the edge. Magnesium shortage yellows between the veins without the "
+                  f"scorched edge. {NUTRIENT_RULE} {TRIAGE}",
+                  "Sandy or leached soil and heavy fruit loads, which pull potassium out of the leaves. Mulder's chart: high ammonium "
+                  "nitrogen, calcium or magnesium block potassium.",
+                  "Check how much potassium the feed gives, and not too much ammonium. Take a leaf test. No fungicide for this.",
+                  ("extension", "apsnet")),
+    TomatoDisease("mg_deficiency", "Magnesium shortage", "Nutrient shortage, not a germ",
+                  "Oldest leaves first: yellow between the veins while the veins stay green, like a fishbone; it starts in the middle of "
+                  "the leaf and the yellow can turn brown. Common when the fruit is filling.",
                   None,
-                  "Even yellowing without spots points to feed or soil, not a germ. Leaf curl virus also yellows, but cups the young leaves.",
+                  "Iron shortage looks alike but starts on the youngest leaves. Nitrogen yellows the veins too. Potassium starts at the "
+                  f"edges. {NUTRIENT_RULE} {TRIAGE}",
+                  "Mulder's chart: high potassium blocks magnesium, the most common cause on tomato fed for fruit; high calcium or "
+                  "ammonium also do. Acid, sandy or leached soil holds little magnesium.",
+                  "Check the feed is not too rich in potassium, and the soil pH on the Farm screen. Take a leaf test. "
+                  "No fungicide for this.", ("extension", "apsnet")),
+    TomatoDisease("zn_deficiency", "Zinc shortage", "Nutrient shortage, not a germ",
+                  "Youngest leaves first: small and narrow (\"little leaf\"), crowded on short stems (short internodes), sometimes "
+                  "yellow between the veins; older leaves can turn bronze with brown spots and curl down.",
+                  None,
+                  "Leaf curl virus also makes small young leaves, but cupped upward with yellow edges, and whitefly is near. Mosaic virus "
+                  f"mottles light and dark green. {NUTRIENT_RULE} {TRIAGE}",
+                  "High pH or limed soil. Mulder's chart: high phosphorus blocks zinc; so can high iron or copper.",
+                  "Check phosphorus is not too high, and the soil pH on the Farm screen. Take a leaf test. No fungicide for this.",
+                  ("extension", "apsnet")),
+    TomatoDisease("fe_deficiency", "Iron shortage", "Nutrient shortage, not a germ",
+                  "Youngest, newest leaves first: yellow, even nearly white, while the fine veins stay green; old leaves stay green.",
+                  None,
+                  "Magnesium shortage looks alike but starts on the oldest leaves. Leaf curl virus cups and curls the young leaves; iron "
+                  f"shortage leaves them flat. {NUTRIENT_RULE} {TRIAGE}",
+                  "High soil pH (alkaline or over-limed), waterlogged or cold soil. Mulder's chart: high phosphorus or calcium lock iron "
+                  "away; so can high manganese, copper or zinc.",
+                  "Check the soil pH on the Farm screen and that the soil drains. Take a leaf test. No fungicide for this.",
+                  ("extension", "apsnet")),
+    TomatoDisease("b_deficiency", "Boron shortage", "Nutrient shortage, not a germ",
+                  "Youngest growth first: growing tips brittle, thick, twisted or dead; young leaves deformed and yellow-orange at the "
+                  "edges; stems and leaf stalks brittle and may crack. Side shoots grow bushy.",
+                  "Corky, brown patches and cracks on the fruit; poor fruit set.",
+                  "Calcium shortage also hurts the tips, but they burn rather than turn brittle, and the fruit rots at the bottom. "
+                  f"Cracking from uneven water shows no damage on the tips. {NUTRIENT_RULE} {TRIAGE}",
+                  "Dry soil, sandy or leached soil, high pH. Mulder's chart: high calcium or potassium block boron.",
+                  "Keep the soil evenly moist; check the soil pH on the Farm screen. Take a leaf test before adding boron: too much "
+                  "boron is harmful. No fungicide for this.", ("extension", "apsnet")),
+    TomatoDisease("chlorosis", "Yellow leaves, cause unclear", "Nutrient shortage or soil, not a germ",
+                  "Leaves yellowing evenly or between the veins, but the photo cannot show which leaves started first or the pattern is "
+                  "mixed.",
+                  None,
+                  "Use this only when no single shortage above fits. Even yellowing without spots points to feed or soil, not a germ. Leaf "
+                  f"curl virus also yellows, but cups the young leaves. {NUTRIENT_RULE} {TRIAGE}",
                   "Acid or alkaline soil, too little feed, or one nutrient blocking another (Mulder's chart).",
-                  "Check the soil readings and take a leaf test. No fungicide for this alone.", ("extension", "apsnet")),
+                  "Look whether old or young leaves yellowed first. Check the soil readings and take a leaf test. No fungicide for this alone.",
+                  ("extension", "apsnet")),
     TomatoDisease("whitefly", "Whitefly", "Insect (Bemisia tabaci)",
                   "Tiny white flying insects under the leaves, sticky film, black sooty mould on lower leaves.",
                   None,

@@ -4,6 +4,7 @@ NoCamera              a grey frame, for driving a round before the camera is mou
 
 SimField / SimCamera  a synthetic bed with known ground truth, used for tests,
                       demos, and to check the vision against the truth.
+FolderCamera          pictures from a folder, one per stop, to rehearse a round with real leaf photos.
 PiCamera              Raspberry Pi camera module (picamera2).
 OpenCVCamera          any USB webcam.
 """
@@ -11,6 +12,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -126,6 +128,80 @@ class NoCamera:
 
     def capture(self, cell: Cell) -> np.ndarray:
         return np.full((48, 64, 3), 128, np.uint8)
+
+
+class FolderCamera:
+    """The pictures in a folder (.jpg, .jpeg, .png, in name order), one per capture, starting again after the last.
+    Used with the simulated rover to rehearse a round with real leaf photos. Needs Pillow."""
+
+    SUFFIXES = (".jpg", ".jpeg", ".png")
+
+    def __init__(self, folder: str | Path, max_side: int = 1280):
+        self.folder = Path(folder)
+        if not self.folder.is_dir():
+            raise ValueError(f"{self.folder} is not a folder")
+        self.files = sorted(f for f in self.folder.iterdir() if f.is_file() and f.suffix.lower() in self.SUFFIXES)
+        if not self.files:
+            raise ValueError(f"no .jpg, .jpeg or .png pictures in {self.folder}")
+        self.max_side = max_side        # about what a real camera gives; phone photos are much larger
+        self.captures = 0
+
+    def capture(self, cell: Cell) -> np.ndarray:
+        from PIL import Image
+        path = self.files[self.captures % len(self.files)]
+        self.captures += 1
+        with Image.open(path) as im:
+            frame = im.convert("RGB")
+        frame.thumbnail((self.max_side, self.max_side))     # keeps the shape; never enlarges
+        return np.asarray(frame, dtype=np.uint8).copy()
+
+
+class CameraError(RuntimeError):
+    """The camera gave no photo. Ends the round like any other camera fault."""
+
+
+class HttpCamera:
+    """The rover's ESP32-CAM (edge/rover-camera): GET <url> returns a fresh JPEG. The rover program runs on the farm
+    server and pulls a photo at each plant, so the camera needs no upload path and the photo check is unchanged.
+    One retry: a Wi-Fi hiccup should not end a round. Needs Pillow."""
+
+    def __init__(self, url: str, timeout_s: float = 8.0, tries: int = 2, flash: bool = False, max_side: int = 1600,
+                 opener=None):
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(f"camera URL must start with http://, got {url!r}")
+        self.url = url + (("&" if "?" in url else "?") + "flash=1" if flash else "")
+        self.timeout_s, self.tries, self.max_side = timeout_s, max(1, tries), max_side
+        self._open = opener                    # tests pass a fake; None = urllib
+        self.captures = 0
+        self.last_jpeg: bytes | None = None    # what the camera sent, before decoding
+
+    def fetch(self) -> bytes:
+        import urllib.request
+        last: Exception | None = None
+        for _ in range(self.tries):
+            try:
+                if self._open:
+                    data = self._open(self.url, self.timeout_s)
+                else:
+                    with urllib.request.urlopen(self.url, timeout=self.timeout_s) as r:   # noqa: S310 — our own LAN camera
+                        data = r.read()
+                if data[:3] == b"\xff\xd8\xff":
+                    return data
+                last = CameraError(f"camera at {self.url} sent something that is not a JPEG")
+            except OSError as exc:            # URLError, timeouts, refused
+                last = exc
+        raise CameraError(f"no photo from the camera at {self.url}: {last}")
+
+    def capture(self, cell: Cell) -> np.ndarray:
+        import io
+        from PIL import Image
+        data = self.fetch()
+        self.last_jpeg = data
+        self.captures += 1
+        with Image.open(io.BytesIO(data)) as im:
+            frame = im.convert("RGB")
+        frame.thumbnail((self.max_side, self.max_side))
+        return np.asarray(frame, dtype=np.uint8).copy()
 
 
 class PiCamera:

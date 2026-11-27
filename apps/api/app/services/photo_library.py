@@ -71,13 +71,15 @@ def to_dict(p: PlantPhoto, zone: Zone | None, tz: ZoneInfo) -> dict:
     return {"id": str(p.id), "shortId": str(p.id)[:8], "zone": zone.name if zone else None, "zoneLabel": (zone.label or zone.name) if zone else None,
             "tree": tree, "part": p.part, "takenAt": p.taken_at.isoformat(), "takenOn": p.taken_at.astimezone(tz).date().isoformat(), "cropDay": p.crop_day,
             "readings": p.readings, "modelName": p.model_name, "modelLabel": p.model_label, "modelSeen": p.model_seen,
+            "modelAlso": p.model_also, "missionId": str(p.mission_id) if p.mission_id else None,
             "farmerLabel": p.farmer_label, "note": p.note, "expertLabel": p.expert_label, "expertName": p.expert_name,
             "expertNote": p.expert_note, "expertAt": p.expert_at.isoformat() if p.expert_at else None}
 
 
 async def save(session: AsyncSession, data: bytes, *, zone_name: str, part: str, row: int | None = None, col: int | None = None,
                farmer_label: str | None = None, note: str | None = None, model_name: str | None = None, model_label: str | None = None,
-               model_seen: str | None = None, now: datetime | None = None) -> dict:
+               model_seen: str | None = None, model_also: str | None = None, mission_id: uuid.UUID | None = None,
+               now: datetime | None = None) -> dict:
     """Keep one photo with the soil and air it was taken in. `row` and `col` count from 0, as the rover's do."""
     now = now or utcnow()
     if part not in PARTS:
@@ -96,7 +98,8 @@ async def save(session: AsyncSession, data: bytes, *, zone_name: str, part: str,
     path.write_bytes(data)
     photo = PlantPhoto(id=photo_id, zone_id=snap.zone.id, planting_id=snap.planting.id if snap.planting else None, crop_day=snap.day, tree_row=row, tree_col=col,
                        part=part, filename=filename, taken_at=now, readings={"values": values, "simulated": bool(mission and mission.simulated)},
-                       model_name=model_name, model_label=model_label, model_seen=_text(model_seen), farmer_label=farmer_label, note=_text(note))
+                       model_name=model_name, model_label=model_label, model_seen=_text(model_seen), model_also=model_also,
+                       mission_id=mission_id, farmer_label=farmer_label, note=_text(note))
     session.add(photo)
     try:
         await session.commit()

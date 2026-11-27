@@ -1,69 +1,74 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CircleCheck, Circle, OctagonX, Play, Plus, Sprout } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import RoverMap, { RoverLegend } from "../components/RoverMap";
 import { TreePhotoCheck } from "../components/TreePhoto";
 import Farm3D from "../components/Farm3D";
+import SafeStop from "../components/SafeStop";
 import { farmBlocks, photoKeys, roverBlock } from "../lib/farm3d";
 import { EF, Kpis, More, Notice, Panel, Tag, Toolbar } from "../components/ui";
 import { api, loadProblem, type RoverCell } from "../lib/api";
 import { todayIso } from "../lib/format";
-import { CORNERS, DEFAULT_ROUTE, ROVER, STATUS_WORD, cellName, cornerCell, estimate, fullLitresOf, headingAt, isRoute, litresOf, minutes, roundPlan, route as routeOf,
-  spotKey, stopInfo, throughStops, type Corner, type Route } from "../lib/rover";
+import { CORNERS, DEFAULT_ROUTE, ROVER, STATUS_WORD, cellName, cornerCell, estimate, fullLitresOf, headingAt, litresOf, minutes, roundPlan, route as routeOf,
+  routeKey, savedRoute, spotKey, stopInfo, throughStops, type Corner, type Route } from "../lib/rover";
+import PlantCard, { InspectionSummary, treeParam } from "../components/PlantCard";
+import { useInspection } from "../lib/useInspection";
 import { useData } from "../lib/useData";
 import { ago, usePoll } from "../lib/usePoll";
 
 type Simulate = "normal" | "rain" | "low_battery";
 
 // The middle check names the start tree and the way to face, from the route: see placeCheck().
-const MANUAL = ["Rows clear of people, animals and hoses", "Rover at the start tree", "Camera clean, probe tip clean"];
+const MANUAL = ["Rows clear of people and hoses", "Rover at the start tree", "Camera and probe clean"];
 const placeCheck = (path: [number, number][]) =>
   path.length === 0 ? "Place a plant on the map first"
     : path.length > 1 ? `Rover on ${cellName(...path[0])}, facing ${cellName(...path[1])}` : `Rover on ${cellName(...path[0])}`;
 
-// The route is set once for a block and kept on this device, so the next round starts where the rover is parked.
-const routeKey = (zone: string) => `agrirover.route.${zone}`;
-function savedRoute(zone: string): Route {
-  try {
-    const x: unknown = JSON.parse(localStorage.getItem(routeKey(zone)) ?? "null");
-    return isRoute(x) ? x : DEFAULT_ROUTE;
-  } catch { return DEFAULT_ROUTE; }
-}
+// How the camera looks at a plant, kept for each block on this device like the route: forward, turning to face it, or sideways.
+type CameraMode = "left" | "right" | "side";
+const CAMERA: Record<CameraMode, string> = { left: "Forward: turn left to look", right: "Forward: turn right to look", side: "Sideways: no turn" };
+const cameraKey = (zone: string) => `agrirover.camera.${zone}`;
+const savedCamera = (zone: string): CameraMode => {
+  const x = localStorage.getItem(cameraKey(zone));
+  return x === "left" || x === "right" || x === "side" ? x : "left";
+};
 const SIMULATE: Record<Simulate, string> = { normal: "Normal round", rain: "Rain starts on the way", low_battery: "Battery runs low on the way" };
 const LABEL: Record<string, string> = {
   soil_moisture: "Moisture %", soil_ec: "EC mS/cm", soil_ph: "pH", soil_temperature: "Soil °C",
   nitrogen: "N (trend)", phosphorus: "P (trend)", potassium: "K (trend)", air_temperature: "Air °C", air_humidity: "RH %",
 };
 
+const BATTERY_START_V = 11.6;                  // about a third left on a 3S pack: enough for a round to come back
+
+function Battery({ volts, pct, real }: { volts: number | null; pct: number | null; real: boolean }) {
+  const low = volts != null && volts < BATTERY_START_V;
+  return (
+    <li className={`chk chk-batt${volts == null ? "" : low ? " chk-low" : " chk-ok"}`}>
+      <span className="batt" aria-hidden><i style={{ width: `${pct ?? 0}%` }} /></span>
+      {volts == null ? "Battery not measured" : <>Battery {volts.toFixed(2)} V · {pct}%{low ? (real ? " · charge first" : " · last round") : ""}{!real && <span className="muted"> · sim</span>}</>}
+    </li>
+  );
+}
+
 function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return <li className={ok ? "chk chk-ok" : "chk"}>{ok ? <CircleCheck size={15} aria-hidden /> : <Circle size={15} aria-hidden />}{children}</li>;
 }
 
-/** What the photo check said about a plant the rover flagged: kept in Health › Photo library for an expert to confirm. */
-function PhotoCheckLine({ check }: { check?: RoverCell["check"] }) {
-  if (!check) return <span className="muted">Checking the photo… (real rover only)</span>;
-  return (
-    <>
-      <b>{check.title}</b>{check.also && <span className="muted"> · or {check.also.toLowerCase()}</span>}
-      {check.seen && <div className="small">{check.seen}</div>}
-      {check.problem && <div className="small muted">{check.problem}</div>}
-      <div className="small muted">Triage, not a diagnosis.{check.photoId && <> Kept in <Link to="/photos">Health › Photo library</Link>.</>}</div>
-    </>
-  );
-}
-
-/** One tree as the rover found it: the photo if one came with the round, what the probe read, and what it should get today. */
-function CellView({ cell, frame, held }: { cell?: RoverCell; frame?: string | null; held?: boolean }) {
+/** One tree as the rover found it: what the photo check said (the same card as Plant health), the photo if one came with
+ *  the round, what the probe read, and what it should get today. */
+function CellView({ cell, frame, held, zone, checking }: { cell?: RoverCell; frame?: string | null; held?: boolean; zone: string;
+  /** a photo of this plant is with the photo check now */ checking?: boolean }) {
   if (!cell) return <p className="small muted">The rover's photos and readings appear here during a round.</p>;
   const a = cell.advice;
   return (
-    <div className={frame ? "rc-cam" : undefined}>
-      {frame && <img src={`data:image/jpeg;base64,${frame}`} alt={`Photo of ${cellName(cell.row, cell.col)}`} />}
+    <div className={frame && !cell.check ? "rc-cam" : undefined}>
+      {cell.check ? <PlantCard zone={zone} row={cell.row} col={cell.col} finding={cell.check} link="health" />
+        : checking && <p className="small muted">Checking this plant's photo…</p>}
+      {frame && !cell.check && <img src={`data:image/jpeg;base64,${frame}`} alt={`Photo of ${cellName(cell.row, cell.col)}`} />}
       <table className="tbl kv"><tbody>
         <tr><th scope="row">Tree</th><td><b>{cellName(cell.row, cell.col)}</b>{!cell.plant && " · no tree seen"}</td></tr>
         {a && cell.plant && <tr><th scope="row">Water today</th><td>{held ? <span className="muted">Held: induction stress</span> : <><b>{a.litres} L</b> of {a.fullLitres} L full demand</>}</td></tr>}
         {cell.plant && <tr><th scope="row">Leaf cover</th><td>{Math.round((cell.canopy ?? 0) * 100)} %{cell.flagged && <> <Tag kind="warn">Yellow {Math.round((cell.chlorosis ?? 0) * 100)} %</Tag></>}</td></tr>}
-        {cell.flagged && <tr><th scope="row">Photo check</th><td><PhotoCheckLine check={cell.check} /></td></tr>}
         {Object.keys(LABEL).filter((k) => cell.readings?.[k] !== undefined).map((k) => (
           <tr key={k}><th scope="row">{LABEL[k]}</th><td>{cell.readings[k]}</td></tr>
         ))}
@@ -113,6 +118,7 @@ export function TreeTable({ cells, picked, onPick, held }: { cells: RoverCell[];
  *  and the schedule is on Plan, so neither is repeated here. */
 export default function Rover() {
   const { data, error } = usePoll(api.roverLive, 1000);
+  const roverTest = usePoll(api.roverTest, 5000);
   const zones = useData(api.zones);
   const cycles = useData(api.cycles);
   const adviceNow = usePoll(api.advice, 30000);
@@ -139,6 +145,16 @@ export default function Rover() {
   const [making, setMaking] = useState<false | "new" | "map">(false);
   const [nb, setNb] = useState({ label: "T2 Tomato", crop: "Tomato", rows: "2", cols: "3", rowM: "0.8", plantM: "0.5" });
   const [saving, setSaving] = useState(false);
+  // Plant Inspection: photo-check every plant (not only yellow ones), and how the camera looks at each plant
+  const [inspectAll, setInspectAll] = useState(true);
+  const [camera, setCamera] = useState<CameraMode>("left");
+  // ?zone=t1&tree=1-3 from Plant health: that block, that plant
+  const [search] = useSearchParams();
+  useEffect(() => {
+    const z = search.get("zone"), t = treeParam(search.get("tree"));
+    if (z) { setZone(z); setView("map"); }
+    if (t) setPicked(t);
+  }, [search]);
 
   const beds = zones.data ?? [];
   const growing = (cycles.data ?? []).filter((c) => c.status === "active");
@@ -155,7 +171,11 @@ export default function Rover() {
     setView("map");
   }, [bed, pm?.updatedAt]);       // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (bed) setPlan(savedRoute(bed)); }, [bed]);
+  useEffect(() => { if (bed) { setPlan(savedRoute(bed)); setCamera(savedCamera(bed)); } }, [bed]);
+  function changeCamera(next: CameraMode) {
+    setCamera(next);
+    if (bed) localStorage.setItem(cameraKey(bed), next);
+  }
   function changeRoute(next: Route) {
     setPlan(next);
     if (bed) localStorage.setItem(routeKey(bed), JSON.stringify(next));
@@ -240,16 +260,30 @@ export default function Rover() {
   const released = !rover?.estop;
   // a plant map must be saved, and hold a plant, before a round: the rover visits what the server holds
   const mapReady = !pm || (planPath.length > 0 && !dirty);
-  const ready = online && released && !raining && ticked.every(Boolean) && sizeOk && Boolean(bed) && !running && mapReady;
+  const realV = roverTest.data?.rover.batteryV ?? null;
+  const battV = realV ?? m?.battery ?? null;
+  const battPct = battV == null ? null : Math.max(0, Math.min(100, Math.round(((battV - ROVER.batteryStopV) / (12.6 - ROVER.batteryStopV)) * 100)));
+  const battOk = battV == null || battV >= BATTERY_START_V;
+  const battBlocks = realV != null && !battOk;          // a simulated rover starts every round full
+  const ready = online && released && !raining && !battBlocks && ticked.every(Boolean) && sizeOk && Boolean(bed) && !running && mapReady;
   // during a round the map shows the plants the rover was sent to
   const shownPlants = running && m?.stops ? new Set(m.stops.map(([a, b]) => spotKey(a, b))) : plants;
 
   // a new round starts by following the rover again
   const missionId = m?.missionId;
-  useEffect(() => setPicked(null), [missionId]);
+  // only a new round clears the pick: not the page's first load, which may come with a plant from Plant health
+  const lastMission = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (missionId && lastMission.current && missionId !== lastMission.current) setPicked(null);
+    if (missionId) lastMission.current = missionId;
+  }, [missionId]);
 
   const frame = useData(() => (picked ? api.roverFrame(picked[0], picked[1]) : Promise.resolve(null)), [picked?.[0], picked?.[1], missionId]);
-  const cells = m?.cells ?? storedCells;
+  // the round's photo checks, the same report Plant health shows; a stored round's cells get their findings from it
+  const inspection = useInspection(shownZone, running ? 2000 : 10000);
+  const findings = new Map((inspection.data?.plants ?? []).filter((p) => p.finding).map((p) => [spotKey(p.row, p.col), p.finding]));
+  const cells = (m?.cells ?? storedCells).map((x) => (x.check || !findings.has(spotKey(x.row, x.col)) ? x : { ...x, check: findings.get(spotKey(x.row, x.col)) }));
+  const insp = inspection.data?.summary;
   const shownCell = picked ? cells.find((x) => x.row === picked[0] && x.col === picked[1])
     : m?.cell ? cells.find((x) => x.row === m.cell![0] && x.col === m.cell![1]) : undefined;
   const shownFrame = picked && m ? frame.data?.frame : m?.frame;
@@ -258,7 +292,8 @@ export default function Rover() {
     setProblem(null);
     try {
       await api.startSurvey({ zoneId: bed, rows: r, cols: c, cellM: tm, rowM: rm, simulate, start: plan.start, along: plan.along,
-                              ...(plants ? { stops: asPairs(plants) } : {}) });
+                              ...(plants ? { stops: asPairs(plants) } : {}),
+                              ...(inspectAll ? { inspect: true } : {}), ...(camera !== "side" ? { look: camera } : {}) });
       setTicked(MANUAL.map(() => false));            // the checks are for each round
     } catch (e) { setProblem((e as Error).message); }
   }
@@ -340,9 +375,17 @@ export default function Rover() {
                       <Farm3D blocks={[block]} focus={shownZone} height={sceneH}
                               selected={picked ? { zone: shownZone, row: picked[0], col: picked[1] } : null}
                               onPick={(t) => setPicked([t.row, t.col])}
-                              rover={running && m?.cell ? { zone: shownZone, row: m.cell[0], col: m.cell[1], heading: step >= 0 ? headingAt(path, step) : 0 } : null} />
-                      <div className="f3-legend"><span><i className="lg-bang" />Look at</span><span><i className="lg-yellow" />Yellow leaves</span><span><i className="lg-photo" />Photo saved</span></div>
-                      {hasRound && !running && <div className="f3-hint">Drag to turn · click a tree</div>}
+                              rover={(running || stop) && m?.cell ? { zone: shownZone, row: m.cell[0], col: m.cell[1], heading: step >= 0 ? headingAt(path, step) : 0 } : null} />
+                      {stop && m && !running ? (
+                        <SafeStop reason={m.reason} label={stop.label} simulated={m.simulated !== false} scenario={m.simulate}
+                                  rows={rowsNow} cols={colsNow} cells={cells} scanned={scanned ?? 0} planned={planned}
+                                  trees={trees} flagged={flagged} litres={litresOf(cells)} battery={m.battery} />
+                      ) : (
+                        <>
+                          <div className="f3-legend"><span><i className="lg-bang" />Look at</span><span><i className="lg-yellow" />Yellow leaves</span><span><i className="lg-photo" />Photo saved</span></div>
+                          {hasRound && !running && <div className="f3-hint">Drag to turn · click a tree</div>}
+                        </>
+                      )}
                     </>
                   );
                 })() : (
@@ -356,6 +399,13 @@ export default function Rover() {
                     </div>
                     <div className="panel-foot rm-foot"><RoverLegend crop={shownPlants ? pm?.crop ?? crop : undefined} />
                       {!running && <span className="small muted">{placing ? "Tap a spot to place or remove a plant" : `${hasRound ? "Tap a tree · " : ""}Tap a corner dot to start there`}</span>}</div>
+                    {insp && insp.inspected > 0 && (
+                      <div className="pc-strip">
+                        <span className="small"><b>Plant Inspection</b>{inspection.data?.live && running ? " · in progress" : ""}</span>
+                        <InspectionSummary s={insp} />
+                        <Link className="btn btn-sm" to={`/crop?zone=${encodeURIComponent(shownZone)}`}>See the report in Plant health</Link>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -381,14 +431,14 @@ export default function Rover() {
                 ) : running ? (
                   <div className="hf-tree">
                     <div className="hf-tree-head"><b>At this tree</b></div>
-                    <CellView cell={shownCell} frame={shownFrame} held={held} />
+                    <CellView cell={shownCell} frame={shownFrame} held={held} zone={shownZone} checking={Boolean(m?.inspect || shownCell?.flagged)} />
                   </div>
                 ) : picked && shownCell ? (
                   <div className="hf-tree">
                     <div className="hf-tree-head">
                       <button type="button" className="linkbtn small" onClick={() => setPicked(null)}><ArrowLeft size={14} aria-hidden /> Today's round</button>
                     </div>
-                    <CellView cell={shownCell} frame={shownFrame} held={held} />
+                    <CellView cell={shownCell} frame={shownFrame} held={held} zone={shownZone} />
                     {shownCell.plant && (
                       <TreePhotoCheck key={`${shownZone}-${shownCell.row}-${shownCell.col}`} zone={shownZone} row={shownCell.row} col={shownCell.col}
                                       soil={false} onSaved={() => savedPhotos.reload()} />
@@ -399,8 +449,7 @@ export default function Rover() {
                     <div className="rv-round-head"><b>Today's round</b><Link className="linkbtn small" to="/plan">Schedule</Link></div>
                     {pm && plants ? (
                       <div className="rv-route">
-                        <p className="erp-hint"><b>{plants.size} {crop.trim().toLowerCase() || "plant"} plant{plants.size === 1 ? "" : "s"}</b> on {rows} rows × {cols} spots.
-                          The rover drives the route and stops at each plant.</p>
+                        <p className="erp-hint"><b>{plants.size} {crop.trim().toLowerCase() || "plant"} plant{plants.size === 1 ? "" : "s"}</b> · {rows} × {cols} spots</p>
                         <div className="rv-plants">
                           <button type="button" className={`btn btn-sm ${placing ? "" : "btn-ghost"}`} aria-pressed={placing}
                                   onClick={() => { setPlacing(!placing); setView("map"); setPicked(null); }}>
@@ -455,15 +504,26 @@ export default function Rover() {
                           </span>
                         </EF>
                       </div>
-                      <p className="erp-hint">{planPath.length ? `${placeCheck(planPath)}, then ${pm ? "each plant in turn" : "every tree once"}. Or tap a corner dot on the map.` : placeCheck(planPath)}</p>
                     </div>
-                    <p className="erp-hint">{est ? `${est.trees} stops · ${est.distanceM.toFixed(est.distanceM < 10 ? 1 : 0)} m · about ${minutes(est.seconds)} on a real rover (probe time is an estimate)` : `At most ${ROVER.maxTrees} trees, 40 a side, spacing 0.2 to 10 m`}</p>
+                    <div className="rv-route">
+                      <div className="erp-label">Plant Inspection</div>
+                      <label className="chk-man">
+                        <input type="checkbox" checked={inspectAll} onChange={(e) => setInspectAll(e.target.checked)} />Camera check every plant
+                      </label>
+                      <EF label="Camera">
+                        <select className="erp-select" value={camera} onChange={(e) => changeCamera(e.target.value as CameraMode)}>
+                          {(Object.keys(CAMERA) as CameraMode[]).map((k) => <option key={k} value={k}>{CAMERA[k]}</option>)}
+                        </select>
+                      </EF>
+                    </div>
+                    <p className="erp-hint">{est ? `${est.trees} stops · ${est.distanceM.toFixed(est.distanceM < 10 ? 1 : 0)} m · ~${minutes(est.seconds)}` : `At most ${ROVER.maxTrees} trees, 40 a side, spacing 0.2 to 10 m`}</p>
                     <div>
                       <div className="erp-label" style={{ marginBottom: 4 }}>Before starting</div>
                       <ul className="chks">
                         <Check ok={online}>Rover online</Check>
+                        <Battery volts={battV} pct={battPct} real={realV != null} />
                         <Check ok={released}>E-stop released</Check>
-                        <Check ok={!raining}>No rain on the field nodes</Check>
+                        <Check ok={!raining}>No rain</Check>
                       </ul>
                       {MANUAL.map((text, i) => (
                         <label key={text} className="chk-man">
@@ -484,7 +544,7 @@ export default function Rover() {
           { k: "Stops", v: hasRound && scanned !== null ? `${scanned} of ${planned}` : "—" },
           { k: "Trees seen", v: hasRound ? trees : "—" },
           { k: "Water today", v: !hasRound ? "—" : held ? "Held: stress" : `${litresOf(cells).toFixed(0)} L` },
-          { k: "Yellow leaves", v: hasRound ? flagged : "—" },
+          insp && insp.inspected > 0 ? { k: "Problems found", v: `${insp.problems} of ${insp.inspected}` } : { k: "Yellow leaves", v: hasRound ? flagged : "—" },
           { k: `Battery (stops at ${ROVER.batteryStopV} V)`, v: m?.battery != null ? `${m.battery.toFixed(2)} V` : "—" },
         ]} />
         {hasRound && <TreeTable cells={cells} held={held} picked={picked} onPick={pickFromTable} />}

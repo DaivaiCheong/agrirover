@@ -119,8 +119,10 @@ export default function RoverMap({ rows, cols, cells, at, selected, onPick, phot
               {litres > 0 && words && <text x={x + PX / 2} y={top + PX / 2 + 4} className="rm-ml">{litres < 10 ? litres.toFixed(1) : Math.round(litres)}</text>}
               {c.flagged && <rect x={x + 3} y={top + 3} width={PX - 6} height={PX - 6} className="rm-outline" />}
               {c.flagged && words && <text x={x + PX - 9} y={top + 15} className="rm-bang">!</text>}
-              {c.check && c.check.label && c.check.label !== "healthy" && (
-                <rect x={x + 6} y={top + PX - 12} width={PX - 12} height={5} rx={2} className="rm-checked"><title>{c.check.title}</title></rect>
+              {c.check && (
+                <rect x={x + 6} y={top + PX - 12} width={PX - 12} height={5} rx={2}
+                      className={`rm-checked rm-k-${c.check.kind ?? (c.check.label === "healthy" ? "healthy" : c.check.label ? "problem" : "unsure")}`}>
+                  <title>{c.check.title}</title></rect>
               )}
               {photos?.has(spotKey(c.row, c.col)) && <circle cx={x + 9} cy={top + PX - 9} r={4} className="rm-photo" />}
             </g>

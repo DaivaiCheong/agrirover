@@ -200,6 +200,10 @@ class PlantPhoto(Base):
     model_name: Mapped[str | None] = mapped_column(String(48))
     model_label: Mapped[str | None] = mapped_column(String(32))
     model_seen: Mapped[str | None] = mapped_column(Text)
+    model_also: Mapped[str | None] = mapped_column(String(32))            # the model's next closest match
+    # The rover round that took it (a Plant Inspection), so a round's photos and answers can be shown together.
+    # No foreign key: the photo is saved while the round runs, before its report is stored.
+    mission_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)
     farmer_label: Mapped[str | None] = mapped_column(String(32))
     note: Mapped[str | None] = mapped_column(Text)
     expert_label: Mapped[str | None] = mapped_column(String(32))

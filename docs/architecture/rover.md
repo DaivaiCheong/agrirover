@@ -1,5 +1,7 @@
 # AgriRover: the orchard rover
 
+> **Since 27 Nov 2026 the rover is an ESP32 with no computer on board:** see [rover-esp32.md](rover-esp32.md) for the new architecture. The Pi described below is replaced by rover-brain on the farm server.
+
 **The goal since 6 Nov 2026:** the rover checks guava leaf nutrients, block by block, following the LENS concept: collect, scan, act ([plan](../PLAN.md), [comparison](../PICKETA-RESEARCH.md)). **The nutrient round is not built.** No scanner is chosen, and the software has no leaf stop. What exists is the record it will feed: lab results under Plant health, Leaf tests.
 
 **What runs today, in simulation:** the rover goes to every guava tree once a day. At each tree it photographs the canopy from the side, lowers a soil probe,

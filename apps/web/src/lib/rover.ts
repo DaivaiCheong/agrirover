@@ -22,6 +22,15 @@ export const DEFAULT_ROUTE: Route = { start: "sw", along: "rows" };
 export const isRoute = (x: unknown): x is Route =>
   typeof x === "object" && x !== null && CORNERS.includes((x as Route).start) && ((x as Route).along === "rows" || (x as Route).along === "across");
 
+// The route is set once for a block and kept on this device, so the next round starts where the rover is parked.
+export const routeKey = (zone: string) => `agrirover.route.${zone}`;
+export function savedRoute(zone: string): Route {
+  try {
+    const x: unknown = JSON.parse(localStorage.getItem(routeKey(zone)) ?? "null");
+    return isRoute(x) ? x : DEFAULT_ROUTE;
+  } catch { return DEFAULT_ROUTE; }
+}
+
 /** Every tree once, serpentine, from the start corner, in lanes along the rows or across them. The same path as rover/planner.py route(). */
 export function route(rows: number, cols: number, r: Route = DEFAULT_ROUTE): [number, number][] {
   const base = r.along === "rows" ? serpentine(rows, cols) : serpentine(cols, rows).map(([a, b]) => [b, a] as [number, number]);

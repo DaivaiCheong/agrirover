@@ -14,6 +14,8 @@ Rover (devices/rover-01/...):
     status          rover -> server  online / offline                   (retained)
     mission/state   rover -> server  progress, then the final summary   (retained)
     mission/result  rover -> server  full survey report, stored in survey_mission and survey_finding
+    drive/evt       ESP32 -> server  answers to a test move (plain frames, not JSON)      services/rover_test.py
+    camera/status   ESP32-CAM -> server  online / offline, photo URL                     (retained)
 """
 from __future__ import annotations
 
@@ -36,6 +38,7 @@ from app.services import rover_photos
 from app.services.disease import get_classifier
 from app.services.metrics import SOIL_PROBE_METRICS, Refused, clean
 from app.services.rover_live import live as rover_live, store_report
+from app.services.rover_test import TOPIC_CAMERA_STATUS, TOPIC_EVT, tester as rover_test
 
 log = logging.getLogger("ingest")      # not "mqtt": aiomqtt owns that logger and pins it to WARNING
 
@@ -158,10 +161,14 @@ async def _consume() -> None:
                 password=settings.mqtt_password or None,
             ) as client:
                 for topic in (TOPIC_TELEMETRY, TOPIC_VALVE_STATE,
-                              TOPIC_MISSION_STATE, TOPIC_MISSION_RESULT, TOPIC_ROVER_STATUS):
+                              TOPIC_MISSION_STATE, TOPIC_MISSION_RESULT, TOPIC_ROVER_STATUS, TOPIC_CAMERA_STATUS):
                     await client.subscribe(topic, qos=1)
+                await client.subscribe(TOPIC_EVT, qos=0)
                 log.info("mqtt connected, subscribed")
                 async for msg in client.messages:
+                    if str(msg.topic) == TOPIC_EVT:                # the motor controller's own frames
+                        rover_test.on_evt(msg.payload.decode("ascii", "replace"))
+                        continue
                     try:
                         payload = json.loads(msg.payload.decode())
                     except json.JSONDecodeError:
@@ -184,8 +191,11 @@ async def _consume() -> None:
                         # Authoritative actuator position — always recorded as
                         # reported, never as commanded.
                         log.info("valve state %s %s", topic, payload)
+                    elif topic == TOPIC_CAMERA_STATUS:
+                        rover_test.on_camera_status(payload)
                     elif topic.endswith("/status"):
                         rover_live.on_status(payload)
+                        rover_test.on_rover_status(payload)
                     elif topic.endswith("/mission/state"):
                         rover_live.on_state(payload)
                         if rover_photos.wanted(payload):          # a flagged plant: keep and check its photo, off the loop

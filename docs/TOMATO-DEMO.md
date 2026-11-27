@@ -95,6 +95,61 @@ fine-tune one and score it against this check with `scripts/eval_photo_check.py`
 
 The soil probe is not on the rover yet: a real round records no soil readings (`rover/probe.py`).
 
+## Plant Inspection video
+
+**Title:** "AgriRover Plant Inspection: a rover that checks every tomato plant for disease and nutrient problems".
+
+**The problem it solves.** Problems are found late because nobody can walk every plant every day. A farmer cannot
+easily tell a disease from a feed shortage, so the wrong spray or fertiliser is bought. Experts are far away. The rover
+looks at every plant, names the likely problem (triage), says what to do now and why, and keeps the photo for an
+expert, all on the farm, with no internet.
+
+**What the screens show.** Rover: the plant map; each plant gets a coloured bar as its photo is checked (red disease,
+amber nutrient, purple pest, green healthy); the strip under the map counts them; tap a plant for its card (the rover's
+photo, the finding, *Looks like*, *Do now*, *Why it happens*). Plant health › Inspection: the same map and the round's
+report, problems listed with their photos; a plant opens the same card. Each card links to the same plant on the
+other page. Photo library: every inspection photo, for an expert to confirm.
+
+**What it can name** (tomato guide, `apps/api/app/services/tomato_diseases.py`): early and late blight, Septoria,
+bacterial spot, leaf mould, leaf curl and mosaic viruses, wilt; nitrogen, phosphorus, potassium, magnesium, zinc,
+iron and boron shortages and blossom-end rot (calcium); whitefly, leaf miner, fruit borer. The rule it reads first:
+signs on **old leaves** point to N, P, K or Mg (they move to new growth); on **young leaves** to Ca, Zn, Fe or B (they
+cannot move). A shortage card says which nutrient blocks it (Mulder's chart: high potassium blocks magnesium, high
+phosphorus blocks zinc and iron, …).
+
+### Set up the floor
+
+- **Plant map:** on Rover, shrink T1 to **1 row × 5 or 6 spots, 0.5 m apart**, keep the plants on, **Save plant map**.
+  Tape a straight lane and a mark at each spot.
+- **Printed leaves:** A5, **matte** paper (gloss reflects), one close-up leaf per sheet, filling the frame. A good set:
+  2 healthy, early blight, late blight or Septoria, leaf curl virus, and one or two shortages (magnesium: yellow between
+  green veins; nitrogen: pale old leaves; potassium: scorched edges).
+- **Where they stand:** the camera faces forward, so the rover turns to look. Tape each sheet upright on a box
+  **35-40 cm to the left of its spot**, facing the lane, its centre at camera height. Even light, no sun patches.
+- **Rover screen, before Start round:** *Camera check every plant* on; *Camera: Forward, turn left to look*.
+- **Settings:** `.env` has `OLLAMA_MODEL=gemma4` and `PHOTO_MATCHES=true` (names on, as triage). The first check after a
+  restart takes about two minutes while gemma4 loads: run one rehearsal round first.
+
+### Rehearse without the rover (10 minutes)
+
+Put the same pictures (as files) in a folder, then on the PC: `cd edge/rover-agent`, set `MQTT_HOST=localhost`,
+`python -m rover run --sim-hardware --photos <folder> --speedup 10`. Start a round from the Rover screen: each plant
+gets a finding within a few seconds. Check each answer is the one you want to show; swap any picture it gets wrong.
+**Stop it (Ctrl+C) before the real rover connects**: both would answer as ROVER-01. Checked on 27 Nov with a field
+photo of early blight: all three stops came back "Possible early blight, or Septoria leaf spot".
+
+### Shot list
+
+1. Rover screen: the plant map, *Camera check every plant*, the checklist ticked → **Start round**.
+2. The rover drives the lane, stops, turns to each sheet, turns back (film from the side).
+3. The screen: bars appear plant by plant; tap a plant mid-round: its photo and finding.
+4. **See the report in Plant health**: the summary ("6 inspected · 2 disease · 1 nutrient · 3 healthy"), the list.
+5. Open a nutrient plant: *Do now* and *Why it happens* (Mulder's chart) → **Show on the rover map** to come back.
+6. Photo library: the expert confirms one photo.
+
+Say on camera: it is a triage, not a diagnosis, and an expert confirms before treating; the rover does not read the
+soil yet. The models were measured on guava photos, not yet on tomato.
+
 ## 1. The farm server (on the PC)
 
 ```powershell

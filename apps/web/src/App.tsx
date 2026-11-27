@@ -24,6 +24,7 @@ import RoverAbout from "./pages/RoverAbout";
 import RoverGrowth from "./pages/RoverGrowth";
 import RoverHistory from "./pages/RoverHistory";
 import RoverSop from "./pages/RoverSop";
+import RoverTest from "./pages/RoverTest";
 import Settings from "./pages/Settings";
 import Stock from "./pages/Stock";
 import Beds from "./pages/Beds";
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/rover/growth" element={rover(<RoverGrowth />)} />
         <Route path="/rover/sop" element={rover(<RoverSop />)} />
         <Route path="/rover/history" element={rover(<RoverHistory />)} />
+        <Route path="/rover/test" element={rover(<RoverTest />)} />
         <Route path="/cycles" element={<Cycles />} />
         <Route path="/cycles/:id" element={<CycleCop />} />
         <Route path="/cycles/:id/orchard" element={<OrchardCycle />} />

@@ -4,7 +4,10 @@
     python -m rover sim --battery 11.3   ... and watch the low-battery guard stop it
     python -m rover run                  on the rover: MQTT + motor controller + Pi camera
     python -m rover run --sim-hardware   full-stack demo: real broker, simulated rover
+    python -m rover run --sim-hardware --photos DIR   ... photographing the pictures in DIR, one per stop
     python -m rover jog forward 0.5      on the rover: one measured move, to calibrate (also: jog turn 90)
+    python -m rover snap --camera-url http://192.168.1.12/capture   one photo from the rover's ESP32-CAM, saved
+    python -m rover run --camera-url URL   photograph each plant with the ESP32-CAM (or set ROVER_CAMERA_URL)
 
 Settings come from the environment, and from a .env file in the folder it is run in (see .env.example here).
 """
@@ -13,10 +16,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
 import time
 
-from rover.camera import SimCamera, SimField
+from rover.camera import FolderCamera, SimCamera, SimField
 from rover.config import RoverConfig, load_env_file
 from rover.drive import Pose, SimDrive
 from rover.mission import MissionReport, MissionRunner, MissionSpec, SimOptions, planned_stats
@@ -28,8 +32,11 @@ from rover.safety import Guards, SafetyStop
 
 def sim_runner(cfg: RoverConfig, spec: MissionSpec, seed: int, guards: Guards,
                battery_v: float = 12.6, on_frame=None,
-               speedup: float = 0.0, simulated: bool = True) -> tuple[MissionRunner, SimField]:
-    """speedup 0 = instant; 1 = real time; 10 = ten times faster than the real rover."""
+               speedup: float = 0.0, simulated: bool = True, camera=None,
+               photos_real: bool = False) -> tuple[MissionRunner, SimField]:
+    """speedup 0 = instant; 1 = real time; 10 = ten times faster than the real rover.
+    `camera`: photograph with this instead of the simulated camera (e.g. a FolderCamera of real leaf photos);
+    `photos_real`: its pictures are of real plants, so the farm server should check them."""
     sim = spec.sim or SimOptions()
     field = SimField(spec.rows, spec.cols, seed=seed, base=sim.base,
                      moisture_spread=12.0 if sim.moisture_spread is None else sim.moisture_spread,
@@ -41,10 +48,12 @@ def sim_runner(cfg: RoverConfig, spec: MissionSpec, seed: int, guards: Guards,
     drive = SimDrive(cfg.drive, Pose((first.col + 0.5) * spec.cell_m, (first.row + 0.5) * row_m, start_heading(path)),
                      fence=(spec.cols * spec.cell_m, spec.rows * row_m),
                      battery_v=battery_v, sleep=sleep)
-    return MissionRunner(cfg, drive, SimCamera(field), guards, on_frame=on_frame, simulated=simulated, probe=SimProbe(field)), field
+    return MissionRunner(cfg, drive, camera or SimCamera(field), guards, on_frame=on_frame, simulated=simulated,
+                         probe=SimProbe(field), photos_real=photos_real), field
 
 
-def live_sim_runner(cfg: RoverConfig, spec: MissionSpec, guards: Guards, seed: int = 7, speedup: float = 40.0) -> MissionRunner:
+def live_sim_runner(cfg: RoverConfig, spec: MissionSpec, guards: Guards, seed: int = 7, speedup: float = 40.0,
+                    camera=None, photos_real: bool = False) -> MissionRunner:
     """The simulated rover on the real broker. Everything but the wheels and the camera is the real software,
     and a scripted event ends the survey through the same path a real one would."""
     sim = spec.sim or SimOptions()
@@ -60,7 +69,7 @@ def live_sim_runner(cfg: RoverConfig, spec: MissionSpec, guards: Guards, seed: i
 
     return sim_runner(cfg, spec, seed if sim.seed is None else sim.seed, guards,
                       battery_v=12.6 if sim.battery_v is None else sim.battery_v,
-                      on_frame=on_frame, speedup=pace)[0]
+                      on_frame=on_frame, speedup=pace, camera=camera, photos_real=photos_real)[0]
 
 
 def agreement(report: MissionReport, field: SimField) -> dict[str, float]:
@@ -141,22 +150,59 @@ def cmd_jog(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_snap(args: argparse.Namespace) -> int:
+    """One photo from the rover's ESP32-CAM, saved to a file: to aim the camera and check it is on the network."""
+    from rover.camera import CameraError, HttpCamera
+    url = args.camera_url or os.environ.get("ROVER_CAMERA_URL")
+    if not url:
+        print("give --camera-url http://<camera ip>/capture, or set ROVER_CAMERA_URL", file=sys.stderr)
+        return 2
+    cam = HttpCamera(url, flash=args.flash)
+    t0 = time.monotonic()
+    try:
+        img = cam.capture(Cell(0, 0))
+    except CameraError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    with open(args.out, "wb") as fh:
+        fh.write(cam.last_jpeg or b"")
+    print(f"{args.out}: {img.shape[1]} x {img.shape[0]} px, {len(cam.last_jpeg or b'') // 1024} kB, "
+          f"{(time.monotonic() - t0) * 1000:.0f} ms")
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     cfg = RoverConfig.from_env()
     guards = Guards()
     if args.sim_hardware:
+        if args.photos:
+            try:
+                FolderCamera(args.photos)    # refuse a missing or empty folder now, not at the first mission
+            except ValueError as exc:
+                print(f"--photos: {exc}", file=sys.stderr)
+                return 2
+
         def runner_for(spec: MissionSpec) -> MissionRunner:
-            return live_sim_runner(cfg, spec, guards, args.seed, args.speedup)
+            # with --photos: real leaf pictures, from the first one again on every round
+            camera = FolderCamera(args.photos) if args.photos else None
+            return live_sim_runner(cfg, spec, guards, args.seed, args.speedup, camera=camera,
+                                   photos_real=camera is not None)
     else:
-        from rover.camera import NoCamera, OpenCVCamera, PiCamera
+        from rover.camera import HttpCamera, NoCamera, OpenCVCamera, PiCamera
         drive = serial_drive(cfg)
-        camera = NoCamera() if args.no_camera else OpenCVCamera() if args.usb_camera else PiCamera()
+        url = args.camera_url or os.environ.get("ROVER_CAMERA_URL")
+        camera = (NoCamera() if args.no_camera else HttpCamera(url, flash=args.flash) if url
+                  else OpenCVCamera() if args.usb_camera else PiCamera())
 
         def runner_for(spec: MissionSpec) -> MissionRunner:
             # Before each mission a person stands the rover on the start tree, facing its second stop.
             return MissionRunner(cfg, drive, camera, guards)
 
     from rover.link import RoverLink
+    if sys.platform == "win32":
+        # aiomqtt needs add_reader/add_writer, which Windows' default (Proactor) loop lacks: rehearsing on a Windows PC
+        # otherwise never connects. The rover itself runs Linux, where this changes nothing.
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     try:
         asyncio.run(RoverLink(cfg, runner_for, guards).run_forever())
     except KeyboardInterrupt:
@@ -183,7 +229,11 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("run", help="connect to the farm broker and wait for missions")
     r.add_argument("--sim-hardware", action="store_true", help="simulated drive and camera")
     r.add_argument("--usb-camera", action="store_true", help="USB webcam instead of the Pi camera")
+    r.add_argument("--camera-url", default=None, help="the ESP32-CAM's photo URL, http://<ip>/capture (default ROVER_CAMERA_URL)")
+    r.add_argument("--flash", action="store_true", help="with the ESP32-CAM: light each photo with its LED")
     r.add_argument("--no-camera", action="store_true", help="drive the round without a camera (every stop reads 'no plant seen')")
+    r.add_argument("--photos", metavar="DIR", default=None,
+                   help="with --sim-hardware: photograph the pictures in DIR (.jpg/.jpeg/.png, in name order, one per stop)")
     r.add_argument("--seed", type=int, default=7)
     r.add_argument("--speedup", type=float, default=40.0,
                    help="with --sim-hardware: 1 = real time, 40 = 40x faster (default), 0 = instant")
@@ -195,7 +245,15 @@ def main(argv: list[str] | None = None) -> int:
     j.add_argument("--port", default=None, help="the motor controller's serial port (default ROVER_SERIAL_PORT)")
     j.set_defaults(func=cmd_jog)
 
+    c = sub.add_parser("snap", help="one photo from the rover's ESP32-CAM, saved to a file")
+    c.add_argument("--camera-url", default=None, help="http://<ip>/capture (default ROVER_CAMERA_URL)")
+    c.add_argument("--flash", action="store_true", help="light the photo with the camera's LED")
+    c.add_argument("--out", default="snap.jpg")
+    c.set_defaults(func=cmd_snap)
+
     args = p.parse_args(argv)
+    if args.cmd == "run" and args.photos and not args.sim_hardware:
+        p.error("--photos needs --sim-hardware")
     if args.cmd == "jog" and not (0 < args.amount <= 3 if args.move == "forward" else 0 < abs(args.amount) <= 360):
         p.error("forward takes 0-3 metres; turn takes -360 to 360 degrees, not 0")
     load_env_file()                                    # the rover's own .env, if there is one; set variables win

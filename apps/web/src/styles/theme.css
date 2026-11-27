@@ -796,8 +796,40 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .sw-crop{width:12px;height:12px;border-radius:50%;background:#D9432F;display:inline-block;box-shadow:inset 0 3px 0 -1px var(--plant)}
 .sw-seen{width:10px;height:10px;border-radius:50%;background:var(--ok);display:inline-block}
 .rv-plants{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-/* the photo check named a problem at this plant: a bar under it, beside the yellow-leaf outline */
+/* the photo check's finding at this plant: a bar under it, coloured by kind; a green dot when healthy */
 .rm-checked{fill:var(--alert);stroke:#fff;stroke-width:1}
+.rm-k-disease{fill:#C0392B} .rm-k-nutrient{fill:#D68910} .rm-k-pest{fill:#7D3C98} .rm-k-problem{fill:#C0392B}
+.rm-k-healthy{fill:var(--ok)} .rm-k-unsure{fill:var(--ink-faint)}
+/* Plant Inspection: one plant's card, and the round's summary chips */
+.pc{display:grid;gap:8px}
+.pc-head{display:flex;gap:10px;align-items:center}
+.pc-title{font-size:16px;font-weight:700;color:var(--ink)}
+.pc-kind{font-weight:600}
+.pc-disease .pc-head svg,.pc-disease .pc-kind{color:#C0392B}
+.pc-nutrient .pc-head svg,.pc-nutrient .pc-kind{color:#B9770E}
+.pc-pest .pc-head svg,.pc-pest .pc-kind{color:#7D3C98}
+.pc-healthy .pc-head svg,.pc-healthy .pc-kind{color:var(--ok)}
+.pc-unsure .pc-head svg{color:var(--ink-faint)}
+.pc-photo{width:100%;max-height:220px;object-fit:cover;border-radius:var(--r-sm);border:1px solid var(--line)}
+.pc-seen{font-size:13px;color:var(--ink-muted);font-style:italic;margin:0}
+.pc-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pc-sum{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pc-sum-n{font-size:13px;color:var(--ink-muted);margin-right:4px}
+.pc-sum-n b{color:var(--ink);font-size:15px}
+.pc-chip{display:inline-flex;align-items:center;gap:4px;border:1.5px solid var(--line-strong);background:var(--surface);border-radius:var(--r-pill);
+  padding:2px 10px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--ink)}
+.pc-chip:disabled{cursor:default}
+.pc-chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.pc-chip.pc-disease svg{color:#C0392B} .pc-chip.pc-nutrient svg{color:#B9770E} .pc-chip.pc-pest svg{color:#7D3C98} .pc-chip.pc-healthy svg{color:var(--ok)}
+.pc-strip{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line)}
+.pi-list{list-style:none;margin:0;padding:0}
+.pi-item{display:flex;gap:10px;align-items:center;width:100%;padding:8px 14px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;text-align:left;cursor:pointer}
+.pi-item:hover{background:var(--surface-alt)}
+.pi-item img{width:44px;height:44px;object-fit:cover;border-radius:6px;flex:0 0 44px}
+.pc-dot{width:10px;height:6px;border-radius:2px;display:inline-block}
+.pc-dot.pc-healthy{background:var(--ok)} .pc-dot.pc-disease{background:#C0392B} .pc-dot.pc-nutrient{background:#D68910} .pc-dot.pc-pest{background:#7D3C98}
+.pc-kind.pc-disease{color:#C0392B} .pc-kind.pc-nutrient{color:#B9770E} .pc-kind.pc-pest{color:#7D3C98} .pc-kind.pc-healthy{color:var(--ok)}
+.pi-item .pi-blank{width:44px;height:44px;border-radius:6px;background:var(--surface-sunk);flex:0 0 44px}
 .rv-route{display:grid;gap:6px}
 .rv-route .seg{width:max-content}
 .rm-done{fill:none;stroke:var(--ink);stroke-width:2;opacity:.55;stroke-linejoin:round;pointer-events:none}
@@ -1043,3 +1075,40 @@ details.stagecard > summary::-webkit-details-marker{display:none}
 .rv-round-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .rv-options{margin-top:8px}
 .rv-map{display:flex;flex-direction:column;justify-content:space-between}
+
+/* ---- Safe stop: laid over the 3D block when a round stops itself (components/SafeStop.tsx) ---- */
+.ss{position:absolute;inset:0;z-index:3;pointer-events:none;font-family:inherit}
+.ss-tl,.ss-tr,.ss-bar{background:rgba(17,24,20,.82);color:#e9efe9;border:1px solid rgba(255,255,255,.12);border-radius:10px;
+  backdrop-filter:blur(3px);box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.ss-tl{position:absolute;left:12px;top:12px;padding:10px 12px;max-width:46%}
+.ss-tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9fe0b0;margin-bottom:8px}
+.ss-grid{display:grid;gap:3px;width:min(260px,100%)}
+.ss-c{display:inline-block;aspect-ratio:1;min-width:6px;border-radius:2px}
+.ss-ok{background:#3fae5f}.ss-water{background:#3c8fd6}.ss-flag{background:#e0a32a}.ss-todo{background:rgba(255,255,255,.14)}
+.ss-key{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:10.5px;color:#b9c4bb}
+.ss-key .ss-c{width:9px;height:9px;margin-right:4px;vertical-align:-1px}
+.ss-tr{position:absolute;right:12px;top:12px;padding:10px 14px;min-width:220px}
+.ss-tr-h{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#b9c4bb;margin-bottom:6px}
+.ss-tr ul{list-style:none;margin:0;padding:0;font-size:12.5px;line-height:1.75}
+.ss-tr li i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#7d8a80;margin-right:8px;vertical-align:1px}
+.ss-tr li.hit{color:#fff;font-weight:600}.ss-tr li.hit i{background:#ff6b5b;box-shadow:0 0 0 3px rgba(255,107,91,.25)}
+.ss-banner{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);max-width:92%;text-align:center;white-space:nowrap;
+  background:rgba(206,63,48,.94);color:#fff;border-radius:10px;padding:14px 22px;box-shadow:0 10px 30px rgba(120,20,10,.35)}
+.ss-banner-h{display:flex;align-items:center;justify-content:center;gap:8px;font-size:17px;font-weight:800;letter-spacing:.04em}
+.ss-banner-s{margin-top:4px;font-size:13px;opacity:.92}
+.ss-bar{position:absolute;left:12px;right:12px;bottom:12px;display:grid;grid-template-columns:repeat(5,1fr);padding:10px 14px}
+.ss-bar div{display:flex;flex-direction:column;gap:2px;padding:0 10px;border-left:1px solid rgba(255,255,255,.1)}
+.ss-bar div:first-child{border-left:0;padding-left:0}
+.ss-bar span{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9aa69c}
+.ss-bar b{font-size:17px;font-weight:700;color:#fff}
+.ss-bar b.ss-red{color:#ff7a6b}
+@media (max-width:700px){.ss-tr{display:none}.ss-tl{max-width:70%}.ss-bar{grid-template-columns:repeat(3,1fr)}.ss-bar div:nth-child(n+4){display:none}}
+
+/* Battery line in "Before starting" */
+.chk-batt{display:flex;align-items:center;gap:7px}
+.batt{position:relative;display:inline-block;width:24px;height:12px;border:1.5px solid currentColor;border-radius:3px;flex:none;margin-right:1px}
+.batt::after{content:"";position:absolute;right:-4px;top:3px;width:2px;height:4px;background:currentColor;border-radius:0 1px 1px 0}
+.batt i{position:absolute;left:1px;top:1px;bottom:1px;max-width:calc(100% - 2px);background:var(--ink-muted);border-radius:1px}
+.chk-batt.chk-ok .batt i{background:var(--ok)}
+.chk-batt.chk-low{color:var(--alert)}
+.chk-batt.chk-low .batt i{background:var(--alert)}

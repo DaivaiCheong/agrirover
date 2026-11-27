@@ -22,6 +22,8 @@ log = logging.getLogger("rover.mission")
 
 MAX_CELLS = 400
 MIN_SPACING_M, MAX_SPACING_M = 0.2, 10.0
+LOOK = (None, "left", "right")
+LOOK_TURN = {"left": 90.0, "right": -90.0}        # positive = left, counter-clockwise (planner)
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")     # also used as a folder name for reports
 
 
@@ -81,6 +83,10 @@ class MissionSpec:
     along: str = "rows"                 # lanes along the rows, or "across" them
     # The spots that hold a plant (a plant map): the rover stops at these only. None: every spot.
     stops: frozenset[Cell] | None = None
+    inspect: bool = False               # send a photo of every plant, not only the yellowing ones
+    # The camera faces forward. "left" / "right": the plants stand beside the lane, so at each stop the rover turns
+    # 90 degrees toward the plant, photographs it and turns back. None: the camera sees the plant ahead / below.
+    look: str | None = None
 
     @property
     def row_spacing(self) -> float:
@@ -120,7 +126,8 @@ class MissionSpec:
                        cell_m=float(cell), sim=SimOptions.from_payload(payload.get("sim")),
                        row_m=None if row is None else float(row),
                        start=start if isinstance(start, str) else repr(start),
-                       along=along if isinstance(along, str) else repr(along), stops=stops)
+                       along=along if isinstance(along, str) else repr(along), stops=stops,
+                       inspect=payload.get("inspect", False), look=payload.get("look"))
         except KeyError as exc:
             raise ValueError(f"missing field {exc}") from None
         spec.validate(limits)
@@ -142,6 +149,10 @@ class MissionSpec:
             raise ValueError(f"start must be one of {', '.join(CORNERS)}")
         if self.along not in ALONG:
             raise ValueError(f"along must be one of {', '.join(ALONG)}")
+        if not isinstance(self.inspect, bool):
+            raise ValueError("inspect must be true or false")
+        if self.look not in LOOK:
+            raise ValueError("look must be left, right or left out")
         if self.stops is not None:
             if not self.stops:
                 raise ValueError("stops must name at least one spot")
@@ -231,12 +242,15 @@ def _now() -> str:
 class MissionRunner:
     def __init__(self, cfg: RoverConfig, drive, camera, guards: Guards | None = None,
                  cal: Calibration = DEFAULT_CALIBRATION, classifier=None,
-                 on_frame: Callable | None = None, simulated: bool = False, probe=None):
+                 on_frame: Callable | None = None, simulated: bool = False, probe=None, photos_real: bool = False):
+        """`photos_real`: the camera's pictures are real plants even though the rover is simulated (rehearsing with
+        a folder of leaf photos), so the farm server should check them."""
         self.cfg, self.drive, self.camera = cfg, drive, camera
         self.probe = probe or NoProbe()
         self.guards = guards or Guards()
         self.cal, self.classifier, self.on_frame = cal, classifier, on_frame
         self.simulated = simulated
+        self.photos_real = photos_real
 
     def _check(self) -> None:
         battery = self.drive.battery_v()
@@ -263,12 +277,14 @@ class MissionRunner:
                 state = {"missionId": spec.mission_id, "status": "running", "zoneId": spec.zone_id,
                          "rows": spec.rows, "cols": spec.cols, "cellM": spec.cell_m, "rowM": spec.row_spacing,
                          "start": spec.start, "along": spec.along, "stops": stops, "simulated": self.simulated,
+                         "photosReal": self.photos_real, "inspect": spec.inspect, "look": spec.look,
                          "cell": None if cell is None else [cell.row, cell.col],
                          "cellsScanned": len(results), "cellsTotal": spec.stop_count, "battery": self.drive.battery_v()}
                 if seen and results and cell is not None:      # what the camera just saw, for whoever is watching
                     state["observation"] = results[-1].to_dict()
                     state["frame"] = thumbnail(img)
-                    if results[-1].obs.flagged:                # yellow leaves: a photo the farm server can check and keep
+                    # every plant on an inspection round, else yellow leaves only: a photo the farm server can check
+                    if spec.inspect or results[-1].obs.flagged:
                         state["photo"] = photo_jpeg(img)
                 on_progress(state)
             except Exception:                  # noqa: BLE001 — a failed status message must not end the mission
@@ -287,9 +303,13 @@ class MissionRunner:
                     progress(cell)
                     continue
                 self._check()
+                if spec.look:                  # the camera faces forward: face the plant beside the lane
+                    self.drive.turn(LOOK_TURN[spec.look])
                 img = self.camera.capture(cell)
                 if self.on_frame is not None:
                     self.on_frame(cell, img)
+                if spec.look:                  # and back along the lane, in place, before the next leg
+                    self.drive.turn(-LOOK_TURN[spec.look])
                 obs = analyze(img, self.cal)
                 if obs.flagged and self.classifier is not None:
                     hit = self.classifier.classify(img)

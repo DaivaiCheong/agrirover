@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
     daily_message_time: str = "06:05"          # farm-local HH:MM
+    rover_camera_url: str = ""                 # the ESP32-CAM's photo URL if it has not reported one on MQTT
     rover_round_time: str = "07:00"            # farm-local HH:MM: when the day's rounds are planned to start
 
     admin_email: str = "admin@aiautofarm.local"

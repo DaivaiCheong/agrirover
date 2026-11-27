@@ -94,7 +94,9 @@ class RoverConfig:
 
     @property
     def topic_status(self) -> str:
-        return f"{self._dev}/status"
+        # This program's own status. devices/rover-01/status belongs to the rover's ESP32 (its last will says offline
+        # when the rover itself goes), so the brain never writes there: docs/architecture/rover-esp32.md
+        return f"{self._dev}/brain/status"
 
     @property
     def topic_farm_telemetry(self) -> str:
