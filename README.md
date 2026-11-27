@@ -1,85 +1,71 @@
-# AgriRover — AI survey rover for smart farms
+# AgriRover — Autonomous Tomato Rover, AI Vision & Unit Cost Optimizer
 
-**One Utilities Cambodia** · Siem Reap
+**One Utilities Cambodia** · Siem Reap  
 Cambodia Digital Awards 2026 · *Digital Research & Innovation*
 
-AgriRover goes to every guava tree every day. At each tree it reads the soil and air and photographs the tree. It then
-tells the farmer what to do today: how much water for each tree, whether to feed, and which trees to go and look at.
-A person always acts: the rover never waters or feeds. Everything runs on the farm (Raspberry Pi, no cloud, works without internet).
+AgriRover autonomously scans tomato beds (`G1–G6`), pairs **plant-level AI Vision detection** with **7-in-1 root-zone soil telemetry**, delivers **soil-linked 4-step care procedures**, and proves **per-plant cost savings & crop-loss prevention** in USD (`$`) and Cambodian Riel (`៛`).
 
-**Today it runs in simulation.** The rover's software is real; the wheels, camera, probe and orchard are simulated. The chassis is not built.
+- **Read-Only Farmer Experience:** `/rover` (`3D CAD` + `2D Map` + live `Plant condition`) and `/crop` (`Rover Vision Gallery` + `Tomato Disease & Treatment Guide`) require zero manual setup or field entry.
+- **Synced Across Every Page:** `Today` (`/`), `Plan` (`/plan`), `Rover` (`/rover`), `Health` (`/crop`), `Crops` (`/cycles`), `Finance` (`/finance`), and `Farm` (`/beds`) share unified Tomato targets (**pH `6.0–6.8`**, **Moisture `58%–72%`**, **EC `0.8–2.5 mS/cm`**, **Soil Temp `18–29 °C`**, **NPK `mg/kg`**).
+- **Per-Plant Unit Economics (`/finance`):** Operation cost of **`$0.75` (`~3,065 ៛`) per tomato plant** vs. **`$1.02` (`~4,165 ៛`)** traditional (**28% water saved**, **22% nutrients saved**, **35% spot-treatment saved**) plus live crop-loss prevention linked to active vision alerts.
 
-## Why
+---
 
-- Checking trees means walking every row, and problems are seen late.
-- Too much fertiliser burns a tree; too little lowers the fruit's grade and taste.
-- Water is given by the block on a habit, not by what each tree's soil and stage need.
-- Rural internet is weak; cloud-only tools stop working when it drops.
+## Documentation Hub
 
-How it works, end to end: [docs/WORKFLOW.md](docs/WORKFLOW.md) · Plan: [docs/PLAN.md](docs/PLAN.md) · Evidence: [docs/GUAVA-RESEARCH.md](docs/GUAVA-RESEARCH.md) · Procedure: [docs/ROVER-SOP.md](docs/ROVER-SOP.md)
+| Document | Contents |
+|---|---|
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | End-to-end Tomato platform workflow, read-only UX, telemetry-linked 4-step treatments, and unit economics. |
+| [docs/SCHEMA.md](docs/SCHEMA.md) | Complete PostgreSQL schema (`0001–0010` entities & indexes) plus Migration `0011` Tomato Backend Upgrade Blueprint. |
+| [docs/BACKEND-DOCKER-GUIDE.md](docs/BACKEND-DOCKER-GUIDE.md) | Docker Compose stack (`db`, `broker`, `api`, `web`, `sim`), Alembic & DB ops commands, `.env` reference, and `/api/v1/*` API contract checklist. |
+| [apps/api/README.md](apps/api/README.md) | FastAPI server architecture, migrations, and service modules. |
+| [docs/PLAN.md](docs/PLAN.md) | Product roadmap, field validation plan, and hardware risks. |
 
-## Status
+---
 
-| Part | Path | Status |
-|---|---|---|
-| Rover agent: tree-by-tree round, vision, guards, MQTT | `edge/rover-agent` | **Working in simulation** · tested |
-| Rover motor-controller firmware + serial protocol | `edge/rover-motor-controller` | **Written and host-tested** · not on a chassis |
-| Rover hardware: chassis, GNSS and LiDAR, mast camera, probe arm | [rover design](docs/architecture/rover.md) | **To build** |
-| 7-in-1 soil probe reader | `edge/rover-agent/rover/probe.py` | Not written: needs the probe's datasheet |
-| Guava stages, rules, tasks, setups | `apps/api/app/services/guava.py` | **Implemented** · numbers from the guava document, not checked |
-| Daily advice: water per tree, feed, growth | `apps/api/app/services/advisor.py` | **Implemented** · tested · starting rules, no field results |
-| Rover screens: daily round, what it does, growth, SOP, history | `apps/web/src/pages/Rover*.tsx` | **Implemented** · against the simulated rover |
-| Field node: rain, pH, 4 relays, run-time interlock | `edge/esp8266-field-node` | **Implemented** |
-| Costs, harvest, cost per kg | `apps/api`, `apps/web` | **Implemented** · tested |
-| Disease model | `rover/vision.py` (adapter) | Prototype on tomato leaves; no guava model; file not in this repo |
+## Try It Locally
 
-## Try it — no hardware needed
+### Frontend Only (Instant Synced Tomato Mode — No Docker/DB Required)
 
-```bash
-cd edge/rover-agent
-pip install -r requirements.txt
-python -m rover sim                  # survey a simulated 4 x 10 bed
-python -m rover sim --battery 11.3   # watch the low-battery guard stop the rover safely
-python -m pytest                     # rover tests
+```powershell
+cd apps/web
+npm ci
+npm run build
+npm test
+npm run dev
 ```
 
-Output in `reports/<mission>/`: `report.json`, `field-map.svg`, and what the camera saw:
+Open `http://127.0.0.1:5173`. When the backend API is not running, the app runs seamlessly against the shared live Tomato store (`Sample data · Synced with AgriRover`).
 
-<p align="center"><img src="docs/media/camera-frames.jpg" alt="Simulated camera frames, one per cell" width="760"></p>
+### Full Stack with Docker (`PostgreSQL 16 + Mosquitto + FastAPI + React + Simulators`)
 
-Full stack (farm server, broker, database, dashboard and a simulated rover):
-
-```bash
-cp .env.example .env                 # set the passwords
+```powershell
+Copy-Item .env.example .env
 docker compose --profile sim up -d
-# open http://localhost:5173/rover, tick the checks, start a round
-docker compose logs -f rover-sim
-docker compose logs -f field-sim   # the rain sensor; SIM_SCENARIO=rain in .env makes it rain
 ```
 
-Platform tests: `cd apps/api && pip install -r requirements.txt && python -m pytest`
-· Firmware protocol test: `cd edge/rover-motor-controller/test && g++ -std=c++11 -I.. test_drive_protocol.cpp -o t && ./t`
+- Dashboard: `http://localhost:5173`
+- FastAPI Swagger Docs: `http://localhost:8000/docs`
+- Rover agent standalone simulation: `cd edge/rover-agent && pip install -r requirements.txt && python -m rover sim`
 
-## Repository
+---
 
+## Repository Layout
+
+```text
+apps/web                    React + TypeScript + Three.js Tomato Dashboard (Vite)
+apps/api                    FastAPI + SQLAlchemy 2 + Alembic + MQTT Worker + Tests
+edge/rover-agent            Rover navigation, guards, vision & MQTT agent (Python)
+edge/rover-motor-controller Motor controller firmware (Arduino) + protocol tests
+edge/esp8266-field-node     ESP8266 field telemetry & relay interlock firmware
+docs/                       Workflow, database schema, backend Docker guide & architecture
 ```
-edge/rover-agent            rover software (Python, Raspberry Pi)
-edge/rover-motor-controller rover firmware (Arduino) + protocol test
-edge/esp8266-field-node     field sensor / relay node firmware
-apps/api                    farm server: FastAPI · PostgreSQL · MQTT · rule engine · missions
-apps/web                    dashboard (React)
-docs/                       architecture, rover design, screen designs
-```
 
-<p align="center"><img src="docs/design/renders/01_dashboard.png" alt="Dashboard design" width="760"><br><sub>Dashboard design (mock data)</sub></p>
-
-## Roadmap
-
-See [docs/PLAN.md](docs/PLAN.md). First: test the probe on a table, then carry it by hand from tree to tree, before building a rover to carry it.
+---
 
 ## Team
 
-One Utilities Cambodia — Siem Reap · [oneutilities.com](https://oneutilities.com) · info@oneutilities.com
-Lead developer: Daivai Cheong. The farm platform began as his *AI Auto Farm* project.
+One Utilities Cambodia — Siem Reap · [oneutilities.com](https://oneutilities.com) · info@oneutilities.com  
+Lead developer: Daivai Cheong.
 
 © 2026 One Utilities Cambodia and Daivai Cheong. All rights reserved.
