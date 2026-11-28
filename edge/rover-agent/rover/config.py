@@ -27,6 +27,34 @@ class GuardLimits:
 
 
 @dataclass(frozen=True)
+class Calibration:
+    """How fast this chassis moves at pwm_cruise, measured on the floor with `python -m rover jog`.
+    The rover drives by time, so these numbers are what make it stop at the right spot."""
+    pwm_cruise: int = 150            # 0-255; the firmware never runs above 200
+    mps_at_cruise: float = 0.20      # metres a second, driving straight
+    dps_at_cruise: float = 45.0      # degrees a second, turning on the spot
+
+
+def load_env_file(path: str = ".env") -> list[str]:
+    """Read KEY=value lines into the environment, without overriding what is already set. For the rover's own
+    settings file on the Pi; no extra package needed. Returns the keys it set."""
+    if not os.path.isfile(path):
+        return []
+    added = []
+    with open(path, encoding="utf-8-sig") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = (part.strip() for part in line.split("=", 1))
+            value = value.split(" #", 1)[0].strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+                added.append(key)
+    return added
+
+
+@dataclass(frozen=True)
 class RoverConfig:
     device_code: str = "ROVER-01"
     farm_id: str = "farm-01"
@@ -41,6 +69,7 @@ class RoverConfig:
     report_dir: str = "reports"
     drive: DriveLimits = field(default_factory=DriveLimits)
     guard: GuardLimits = field(default_factory=GuardLimits)
+    calibration: Calibration = field(default_factory=Calibration)
 
     # ---- MQTT topics (the API and the dashboard use the same names) ----
     @property
@@ -65,7 +94,9 @@ class RoverConfig:
 
     @property
     def topic_status(self) -> str:
-        return f"{self._dev}/status"
+        # This program's own status. devices/rover-01/status belongs to the rover's ESP32 (its last will says offline
+        # when the rover itself goes), so the brain never writes there: docs/architecture/rover-esp32.md
+        return f"{self._dev}/brain/status"
 
     @property
     def topic_farm_telemetry(self) -> str:
@@ -83,4 +114,9 @@ class RoverConfig:
             serial_port=_env("ROVER_SERIAL_PORT", "/dev/ttyUSB0"),
             serial_baud=_env("ROVER_SERIAL_BAUD", 115200, int),
             report_dir=_env("ROVER_REPORT_DIR", "reports"),
+            # 11.1 V suits a 3S pack; 6.6 a 2S pack. 0 turns the battery stop off: only when no divider is wired.
+            guard=GuardLimits(battery_min_v=_env("ROVER_BATTERY_MIN_V", 11.1, float)),
+            calibration=Calibration(pwm_cruise=_env("ROVER_PWM_CRUISE", 150, int),
+                                    mps_at_cruise=_env("ROVER_MPS_AT_CRUISE", 0.20, float),
+                                    dps_at_cruise=_env("ROVER_DPS_AT_CRUISE", 45.0, float)),
         )

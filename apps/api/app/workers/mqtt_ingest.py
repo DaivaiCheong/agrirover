@@ -1,4 +1,12 @@
-"""MQTT ingest worker storing field telemetry and rover scans directly into MongoDB."""
+"""MQTT ingest worker: field telemetry and the rover's messages, into MongoDB and the live rover state.
+
+    farm/{farm}/zone/{zone}/telemetry   field node -> server   soil probe and air readings (services/metrics.py)
+    devices/rover-01/status             rover -> server        online / offline, e-stop                  (retained)
+    devices/rover-01/mission/state      rover -> server        progress (with a photo at a flagged plant), then the summary
+    devices/rover-01/mission/result     rover -> server        the full report, stored in `surveys`
+    devices/rover-01/camera/status      ESP32-CAM -> server    online / offline, photo URL              (retained)
+    devices/rover-01/drive/evt          ESP32 -> server        answers to a test move (plain frames, not JSON)
+"""
 from __future__ import annotations
 
 import asyncio
@@ -14,8 +22,10 @@ import aiomqtt
 
 from app.core.config import settings
 from app.core.db import get_database
+from app.services import photo_check, rover_photos
 from app.services.metrics import Refused, clean
 from app.services.rover_service import live, store_survey_report
+from app.services.rover_test import TOPIC_CAMERA_STATUS, TOPIC_EVT, tester
 
 log = logging.getLogger("ingest")
 
@@ -98,24 +108,43 @@ async def store_telemetry(db: Any, topic: str, payload: object, now: datetime | 
     return len(docs)
 
 
-async def handle_message(db: Any, topic: str, payload: object) -> None:
-    """One MQTT message. Separate from the loop so tests can drive it without a broker."""
+_background: set[asyncio.Task] = set()
+
+
+def _spawn(job) -> asyncio.Task:
+    """Run a slow job (a photo check takes seconds) beside the loop; keep a reference so it is not collected."""
+    async def guarded() -> None:
+        try:
+            await job
+        except Exception:                                 # noqa: BLE001: a failed check must not touch the round
+            log.exception("rover photo check failed")
+    task = asyncio.create_task(guarded())
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+    return task
+
+
+async def handle_message(db: Any, topic: str, payload: object) -> asyncio.Task | None:
+    """One MQTT message. Separate from the loop so tests can drive it without a broker. Returns the photo-check task
+    when the message started one."""
     if topic.endswith("/telemetry"):
         await store_telemetry(db, topic, payload)
+    elif topic == TOPIC_CAMERA_STATUS:
+        tester.on_camera_status(payload)
     elif topic.endswith("/status") and isinstance(payload, dict):
-        live.status = str(payload.get("status", "unknown"))
-        if "estop" in payload:
-            live.estop = bool(payload["estop"])
-        live.heard()
-        code = str(payload.get("device") or live.code)
-        if live.status == "online":
-            await touch_device(db, settings.farm_name, code=code)
+        live.on_status(payload)
+        tester.on_rover_status(payload)
+        if payload.get("status") == "online":
+            await touch_device(db, settings.farm_name, code=str(payload.get("device") or live.code), firmware=payload.get("fw"))
     elif topic.endswith("/mission/state") and isinstance(payload, dict):
-        live.update_mission(payload)
+        live.on_state(payload)
+        if rover_photos.wanted(payload):
+            return _spawn(rover_photos.keep_and_check(db, payload, classifier=photo_check.get_classifier()))
     elif topic.endswith("/mission/result") and isinstance(payload, dict) and payload.get("zoneId"):
         await store_survey_report(db, settings.farm_name, payload)
-        live.add_result_cells(payload)
+        live.on_result(payload)
         await touch_device(db, settings.farm_name, code=str(payload.get("device") or live.code))
+    return None
 
 
 async def _mqtt_loop() -> None:
@@ -127,12 +156,16 @@ async def _mqtt_loop() -> None:
                 username=settings.mqtt_username or None,
                 password=settings.mqtt_password or None,
             ) as client:
-                for topic in (TOPIC_TELEMETRY, TOPIC_MISSION_STATE, TOPIC_MISSION_RESULT, TOPIC_ROVER_STATUS):
-                    await client.subscribe(topic)
+                for topic in (TOPIC_TELEMETRY, TOPIC_MISSION_STATE, TOPIC_MISSION_RESULT, TOPIC_ROVER_STATUS, TOPIC_CAMERA_STATUS):
+                    await client.subscribe(topic, qos=1)
+                await client.subscribe(TOPIC_EVT, qos=0)
                 broker.connected, broker.since, broker.last_error = True, datetime.now(timezone.utc).isoformat(), None
                 log.info("connected to the farm broker at %s:%s", settings.mqtt_host, settings.mqtt_port)
                 db = get_database()
                 async for msg in client.messages:
+                    if str(msg.topic) == TOPIC_EVT:                  # the motor controller's own frames, not JSON
+                        tester.on_evt(msg.payload.decode("ascii", "replace"))
+                        continue
                     try:
                         payload = json.loads(msg.payload.decode())
                     except Exception:

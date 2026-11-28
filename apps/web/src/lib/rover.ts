@@ -12,27 +12,71 @@ export function serpentine(rows: number, cols: number): [number, number][] {
   return path;
 }
 
-/** Degrees the rover faces on arriving at step i: 0 along the row, -90 towards the next row. It starts facing along row 1. */
-export function headingAt(path: [number, number][], i: number): number {
-  if (i <= 0 || i >= path.length) return 0;
-  const [r0, c0] = path[i - 1], [r1, c1] = path[i];
-  if (r1 !== r0) return -90;
-  return c1 > c0 ? 0 : 180;
+/** Where the round starts: s = row 1, n = the last row; w = tree 1, e = the last tree. The same names as rover/planner.py. */
+export type Corner = "sw" | "se" | "nw" | "ne";
+/** Lanes along each row (tree to tree), or across the rows (row to row, the same tree number). */
+export type Along = "rows" | "across";
+export type Route = { start: Corner; along: Along };
+export const CORNERS: Corner[] = ["sw", "se", "nw", "ne"];
+export const DEFAULT_ROUTE: Route = { start: "sw", along: "rows" };
+export const isRoute = (x: unknown): x is Route =>
+  typeof x === "object" && x !== null && CORNERS.includes((x as Route).start) && ((x as Route).along === "rows" || (x as Route).along === "across");
+
+// The route is set once for a block and kept on this device, so the next round starts where the rover is parked.
+export const routeKey = (zone: string) => `agrirover.route.${zone}`;
+export function savedRoute(zone: string): Route {
+  try {
+    const x: unknown = JSON.parse(localStorage.getItem(routeKey(zone)) ?? "null");
+    return isRoute(x) ? x : DEFAULT_ROUTE;
+  } catch { return DEFAULT_ROUTE; }
 }
 
-/** Distance and time on a real rover: its moves, turns, photos and probe stops. */
-export function estimate(rows: number, cols: number, rowM: number, treeM: number) {
-  const path = serpentine(rows, cols);
+/** Every tree once, serpentine, from the start corner, in lanes along the rows or across them. The same path as rover/planner.py route(). */
+export function route(rows: number, cols: number, r: Route = DEFAULT_ROUTE): [number, number][] {
+  const base = r.along === "rows" ? serpentine(rows, cols) : serpentine(cols, rows).map(([a, b]) => [b, a] as [number, number]);
+  const flipRow = r.start[0] === "n", flipCol = r.start[1] === "e";
+  return base.map(([row, col]) => [flipRow ? rows - 1 - row : row, flipCol ? cols - 1 - col : col]);
+}
+
+export const spotKey = (row: number, col: number) => `${row},${col}`;
+
+/** The part of the route from its first plant to its last: the rover drives all of it, through the empty spots between,
+ *  and stops at the plants only. The same as through_stops() in rover/planner.py. Empty when no plant is on the route. */
+export function throughStops(path: [number, number][], plants: Set<string>): [number, number][] {
+  const at = path.flatMap(([r, c], i) => (plants.has(spotKey(r, c)) ? [i] : []));
+  return at.length ? path.slice(at[0], at[at.length - 1] + 1) : [];
+}
+
+/** The corner tree a start corner names, as [row, col] from 0. */
+export const cornerCell = (rows: number, cols: number, c: Corner): [number, number] => [c[0] === "n" ? rows - 1 : 0, c[1] === "e" ? cols - 1 : 0];
+
+/** Screen degrees for a step: 0 towards the last tree, 180 towards tree 1, -90 towards the last row (up the map), 90 towards row 1. */
+function stepHeading(a: [number, number], b: [number, number]): number {
+  if (b[0] !== a[0]) return b[0] > a[0] ? -90 : 90;
+  return b[1] > a[1] ? 0 : 180;
+}
+
+/** Degrees the rover faces on arriving at step i. On the start tree it faces its second stop, as the person placed it. */
+export function headingAt(path: [number, number][], i: number): number {
+  if (path.length < 2 || i < 0 || i >= path.length) return 0;
+  return i === 0 ? stepHeading(path[0], path[1]) : stepHeading(path[i - 1], path[i]);
+}
+
+/** Distance and time on a real rover: its moves, turns, photos and probe stops. With `plants`, only through them. */
+export function estimate(rows: number, cols: number, rowM: number, treeM: number, r: Route = DEFAULT_ROUTE, plants?: Set<string>) {
+  const full = route(rows, cols, r);
+  const path = plants ? throughStops(full, plants) : full;
+  const stops = plants ? path.filter(([a, b]) => plants.has(spotKey(a, b))).length : path.length;
   let distanceM = 0, turns = 0;
   for (let i = 1; i < path.length; i++) {
     distanceM += path[i][0] !== path[i - 1][0] ? rowM : treeM;
-    const before = i === 1 ? 0 : headingAt(path, i - 1);
+    const before = headingAt(path, i - 1);
     const delta = Math.abs(headingAt(path, i) - before);
     turns += Math.min(delta, 360 - delta);
   }
   return {
-    trees: path.length, distanceM, areaM2: rows * cols * rowM * treeM,
-    seconds: distanceM / ROVER.cruiseMps + turns / ROVER.turnDps + path.length * (ROVER.photoS + ROVER.probeS),
+    trees: stops, distanceM, areaM2: rows * cols * rowM * treeM,
+    seconds: distanceM / ROVER.cruiseMps + turns / ROVER.turnDps + stops * (ROVER.photoS + ROVER.probeS),
   };
 }
 

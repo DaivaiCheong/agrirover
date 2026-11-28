@@ -24,7 +24,7 @@
 | 3 | Clean the camera and the probe tip | No soil on the probe: old soil gives false readings |
 | 4 | Check the probe in water and in dry soil | Moisture reads high and low as expected |
 | 5 | Walk the rows | No people, animals, hoses, ladders or fruit crates |
-| 6 | Put the rover at the first tree | Row 1, tree 1, facing along row 1 |
+| 6 | Put the rover at the start tree | On the tree the Rover screen names, facing the next one (for example "Rover on R1 T1, facing R1 T2"). Change the start corner or the lanes under **Route**, or tap a corner dot on the map |
 | 7 | Test the e-stop, the power cut and the bumper | Each stops the wheels. Then release |
 
 ## During the round

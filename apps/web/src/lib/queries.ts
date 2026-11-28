@@ -69,6 +69,10 @@ export const qk = {
   leafTests: ["leafTests"] as const,
   symptoms: ["symptoms"] as const,
   diagnosis: (zone: string, symptom: string) => ["diagnosis", zone, symptom] as const,
+  plantMaps: ["plantMaps"] as const,
+  inspection: (zone: string) => ["inspection", zone] as const,
+  roverTest: ["rover", "test"] as const,
+  treeContext: (zone: string, row: number, col: number) => ["treeContext", zone, row, col] as const,
 };
 
 /** What changes together. A save invalidates a group; the pages showing any of it refresh. */
@@ -77,7 +81,8 @@ const GROUP = {
   beds: [qk.zones, qk.conditions, qk.advice, ["schedule"], ["orchard"], ["diagnosis"]],
   money: [qk.costs, ["cop"], ["compare"], qk.financeSample],
   stock: [qk.stock, ["stock", "moves"]],
-  rounds: [qk.surveys, qk.conditions, qk.advice, ["schedule"], ["orchard"], ["growth"], ["diagnosis"], qk.devices, qk.status, ["photos"]],
+  rounds: [qk.surveys, qk.conditions, qk.advice, ["schedule"], ["orchard"], ["growth"], ["diagnosis"], qk.devices, qk.status, ["photos"],
+           ["inspection"], ["telemetry"]],
 } satisfies Record<string, QueryKey[]>;
 
 type Meta = { invalidates?: QueryKey[]; success?: string | ((data: unknown, vars: unknown) => string); inlineError?: boolean };
@@ -124,7 +129,7 @@ export const useConditions = () => useQuery({ queryKey: qk.conditions, queryFn: 
 export const useAdvice = () => useQuery({ queryKey: qk.advice, queryFn: api.advice, refetchInterval: 60_000 });
 export const useSchedule = (days: number) =>
   useQuery({ queryKey: qk.schedule(days), queryFn: () => api.schedule(days), placeholderData: keepPreviousData });
-export const useSurveys = () => useQuery({ queryKey: qk.surveys, queryFn: api.surveys });
+export const useSurveys = (refreshMs?: number) => useQuery({ queryKey: qk.surveys, queryFn: api.surveys, refetchInterval: refreshMs });
 export const useSurvey = (id: string | null | undefined) =>
   useQuery({ queryKey: qk.survey(id ?? "-"), queryFn: () => api.survey(id as string), enabled: Boolean(id), staleTime: Infinity });
 export const useRoverLive = (fast = false) =>
@@ -165,7 +170,17 @@ export const useDevices = () => useQuery({ queryKey: qk.devices, queryFn: api.de
 export const usePhotos = (status: "all" | "confirmed" | "to_confirm" = "all") =>
   useQuery({ queryKey: qk.photos(status), queryFn: () => api.photos(status) });
 export const usePhotoLabels = () => useQuery({ queryKey: qk.photoLabels, queryFn: api.photoLabels, staleTime: Infinity });
-export const useDiseaseGuide = () => useQuery({ queryKey: qk.diseaseGuide, queryFn: api.diseaseGuide, staleTime: Infinity });
+export const useDiseaseGuide = () => useQuery({ queryKey: qk.diseaseGuide, queryFn: () => api.diseaseGuide("tomato"), staleTime: Infinity });
+/** Where the plants stand in each block (Rover › Setup), so a round stops at the plants only. */
+export const usePlantMaps = () => useQuery({ queryKey: qk.plantMaps, queryFn: api.plantMaps });
+/** The rover's own boards (ESP32 and ESP32-CAM), as they last reported. */
+export const useRoverTest = (refreshMs = 5000) =>
+  useQuery({ queryKey: qk.roverTest, queryFn: api.roverTest, refetchInterval: refreshMs, staleTime: 0, retry: 0 });
+/** A block's newest Plant Inspection; refreshed while photo checks arrive one by one during a round. */
+export const useInspection = (zone: string | null | undefined, refreshMs = 3000) =>
+  useQuery({ queryKey: qk.inspection(zone ?? "-"), queryFn: () => api.inspection(zone as string), enabled: Boolean(zone), refetchInterval: refreshMs });
+export const useTreeContext = (zone: string, row: number, col: number) =>
+  useQuery({ queryKey: qk.treeContext(zone, row, col), queryFn: () => api.treeContext(zone, row, col) });
 export const useLeafTests = () => useQuery({ queryKey: qk.leafTests, queryFn: api.leafTests });
 export const useSymptoms = () => useQuery({ queryKey: qk.symptoms, queryFn: api.symptoms, staleTime: Infinity });
 export const useDiagnosis = (zone: string, symptom: string) =>
@@ -371,6 +386,18 @@ export const useAddSale = () =>
   });
 export const useDeleteSale = () =>
   useAction((id: string) => api.deleteSale(id), { invalidates: [["sales"], ...GROUP.money], success: "Sale deleted." });
+
+type PlantMapBody = Parameters<typeof api.savePlantMap>[1];
+export const useSavePlantMap = () =>
+  useAction(({ zone, body }: { zone: string; body: PlantMapBody }) => api.savePlantMap(zone, body), {
+    invalidates: [qk.plantMaps, ["inspection"]],
+    inlineError: true,
+  });
+export const useNewPlantBlock = () =>
+  useAction((body: PlantMapBody & { label: string }) => api.newPlantBlock(body), {
+    invalidates: [qk.plantMaps, ...GROUP.beds],
+    inlineError: true,
+  });
 
 export const useStartRound = () =>
   useAction((b: SurveyInput) => api.startSurvey(b), {

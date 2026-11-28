@@ -139,7 +139,9 @@ async def test_rover_status_estop_and_a_round_nobody_answers(api_client, monkeyp
     assert r.status_code == 202, r.text
     topic, payload, _ = sent[-1]
     assert topic == "devices/rover-01/mission/set"
-    assert payload["sim"] == {"rainAtCell": 3}
+    # rain starts 40 % of the way along; the same block always gets the same simulated plants
+    assert payload["sim"]["rainAtCell"] == 2 and payload["sim"]["speedup"] == 40 and isinstance(payload["sim"]["seed"], int)
+    assert (payload["start"], payload["along"]) == ("sw", "rows")
     assert (await api_client.post("/api/v1/missions", json={"zoneId": "g1", "rows": 1, "cols": 1})).status_code == 409
 
     # nobody answers: the round is lost, not queued for ever

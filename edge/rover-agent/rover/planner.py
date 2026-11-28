@@ -5,6 +5,10 @@ along row 0 eastwards, across to the next row, along row 1 westwards, and so on.
 A cell here is one tree. The path never crosses itself, so the wheels do not cross
 ground already driven, and each stop is next to the last.
 
+The person setting up the round chooses the start corner and whether the lanes run
+along the rows or across them (route()); the rover is placed on the start tree,
+facing its second stop.
+
 Frame: x east (along a row, increasing column), y north (increasing row).
 Heading 0 deg = east, 90 deg = north; a positive turn is counter-clockwise.
 """
@@ -31,6 +35,11 @@ class Move:
 
 _HEADING = {(0, 1): 0.0, (1, 0): 90.0, (0, -1): 180.0, (-1, 0): -90.0}
 
+# Start corners: s = row 1 (row 0), n = the last row; w = tree 1 (col 0), e = the last tree.
+CORNERS = ("sw", "se", "nw", "ne")
+# Lanes: along each row (tree to tree), or across the rows (row to row, the same tree number).
+ALONG = ("rows", "across")
+
 
 def wrap_deg(deg: float) -> float:
     """Normalise to (-180, 180]."""
@@ -48,6 +57,40 @@ def serpentine(rows: int, cols: int) -> list[Cell]:
     return path
 
 
+def route(rows: int, cols: int, start: str = "sw", along: str = "rows") -> list[Cell]:
+    """Every tree once, serpentine, from the `start` corner, in lanes `along` the rows or across them."""
+    if start not in CORNERS:
+        raise ValueError(f"start must be one of {', '.join(CORNERS)}")
+    if along not in ALONG:
+        raise ValueError(f"along must be one of {', '.join(ALONG)}")
+    if along == "rows":
+        base = [(c.row, c.col) for c in serpentine(rows, cols)]
+    else:                                   # lanes are the columns: walk serpentine on the transposed grid
+        base = [(c.col, c.row) for c in serpentine(cols, rows)]
+    flip_row, flip_col = start[0] == "n", start[1] == "e"
+    return [Cell(rows - 1 - r if flip_row else r, cols - 1 - c if flip_col else c) for r, c in base]
+
+
+def through_stops(path: list[Cell], stops) -> list[Cell]:
+    """The part of `path` from its first stop to its last. The rover drives all of it, through the empty spots
+    between, so it never leaves the lanes; it stops only at the stops (the spots that hold a plant)."""
+    want = set(stops)
+    at = [i for i, cell in enumerate(path) if cell in want]
+    if not at:
+        raise ValueError("no stop is on the route")
+    return path[at[0]:at[-1] + 1]
+
+
+def start_heading(path: list[Cell]) -> float:
+    """The way the rover faces on the start tree: towards its second stop (east for a single tree)."""
+    if len(path) < 2:
+        return 0.0
+    step = (path[1].row - path[0].row, path[1].col - path[0].col)
+    if step not in _HEADING:
+        raise ValueError(f"cells {path[0]} and {path[1]} are not adjacent")
+    return _HEADING[step]
+
+
 def _forward(metres: float, max_step_m: float | None) -> list[Move]:
     """One move, or several no longer than the longest step the drive will take."""
     if not max_step_m or metres <= max_step_m:
@@ -56,16 +99,18 @@ def _forward(metres: float, max_step_m: float | None) -> list[Move]:
     return [Move("forward", metres / pieces)] * pieces
 
 
-def plan(path: list[Cell], cell_m: float, start_heading: float = 0.0, row_m: float | None = None,
+def plan(path: list[Cell], cell_m: float, heading: float | None = None, row_m: float | None = None,
          max_step_m: float | None = None) -> list[list[Move]]:
     """Moves to reach each tree of `path`. legs[i] takes the rover from path[i-1]
     to path[i]; legs[0] is empty because the rover starts at the first tree.
-    cell_m is tree to tree along a row, row_m between rows (the same if not given)."""
+    cell_m is tree to tree along a row, row_m between rows (the same if not given).
+    `heading` is the way the rover faces at the start; by default, towards the second stop."""
     if cell_m <= 0 or (row_m is not None and row_m <= 0):
         raise ValueError("spacing must be positive")
     row_m = row_m or cell_m
     legs: list[list[Move]] = [[]]
-    heading = start_heading
+    if heading is None:
+        heading = start_heading(path)
     for a, b in zip(path, path[1:]):
         step = (b.row - a.row, b.col - a.col)
         if step not in _HEADING:

@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     ollama_api_key: str | None = None
     photo_matches: bool = False
     photo_dir: str = "farm-photos"
+    # a simulated round's camera draws coloured squares: checking those wastes the model, unless a test asks for it
+    check_simulated_photos: bool = False
+    # the ESP32-CAM's photo URL, when it has not reported one itself over MQTT (Rover › Test)
+    rover_camera_url: str | None = None
 
     farm_name: str = "farm-01"
 

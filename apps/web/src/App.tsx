@@ -9,6 +9,16 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Plan = lazy(() => import("./pages/Plan"));
 const Rover = lazy(() => import("./pages/Rover"));
 const RoverHistory = lazy(() => import("./pages/RoverHistory"));
+const RoverSoil = lazy(() => import("./pages/RoverSoil"));
+const RoverDays = lazy(() => import("./pages/RoverDays"));
+const RoverSetup = lazy(() => import("./pages/RoverSetup"));
+const RoverAdvice = lazy(() => import("./pages/RoverAdvice"));
+const RoverRound = lazy(() => import("./pages/RoverRound"));
+const RoverPlants = lazy(() => import("./pages/RoverPlants"));
+const RoverAbout = lazy(() => import("./pages/RoverAbout"));
+const RoverGrowth = lazy(() => import("./pages/RoverGrowth"));
+const RoverSop = lazy(() => import("./pages/RoverSop"));
+const RoverTest = lazy(() => import("./pages/RoverTest"));
 const Cycles = lazy(() => import("./pages/Cycles"));
 const CycleCop = lazy(() => import("./pages/CycleCop"));
 const OrchardCycle = lazy(() => import("./pages/OrchardCycle"));
@@ -50,7 +60,17 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/plan" element={<Plan />} />
         <Route path="/rover" element={rover(<Rover />)} />
+        <Route path="/rover/soil" element={rover(<RoverSoil />)} />
         <Route path="/rover/history" element={rover(<RoverHistory />)} />
+        <Route path="/rover/days" element={rover(<RoverDays />)} />
+        <Route path="/rover/setup" element={rover(<RoverSetup />)} />
+        <Route path="/rover/advice" element={rover(<RoverAdvice />)} />
+        <Route path="/rover/round" element={rover(<RoverRound />)} />
+        <Route path="/rover/plants" element={rover(<RoverPlants />)} />
+        <Route path="/rover/about" element={rover(<RoverAbout />)} />
+        <Route path="/rover/growth" element={rover(<RoverGrowth />)} />
+        <Route path="/rover/sop" element={rover(<RoverSop />)} />
+        <Route path="/rover/test" element={rover(<RoverTest />)} />
         <Route path="/rover/*" element={<Navigate to="/rover" replace />} />
         <Route path="/cycles" element={<Cycles />} />
         <Route path="/cycles/:id" element={<CycleCop />} />

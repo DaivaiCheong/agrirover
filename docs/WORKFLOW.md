@@ -118,3 +118,31 @@ docker compose --profile sim up -d
 | `http://localhost:5173` | AgriRover Farmer Web App (`apps/web`) |
 | `http://localhost:8000/docs` | FastAPI OpenAPI / Swagger UI (`apps/api`) |
 | `http://localhost:8000/health` | API Healthcheck (`{"status": "ok", "db": "mongodb", "zones": 6}`) |
+
+---
+
+## Rover Section (merged from the `uat` line)
+
+The `uat` branch's rover work runs on the MongoDB API. The Rover section's tabs, left to right:
+
+| Tab | What it does | API |
+|---|---|---|
+| Block view (`/rover`) | 3D or 2D block, start a round, watch it plant by plant | `GET /missions/live`, `POST /missions`, `GET /missions/{id}` |
+| Soil (`/rover/soil`) | One row a plant with its soil; the farmer adds what the probe cannot read; start a round after the checks | `GET /plant-maps`, `GET /inspections/{zone}`, `POST /missions` |
+| History (`/rover/history`) | Rounds and readings over time, per block and per plant | `GET /missions`, `GET /missions/{id}`, `GET /telemetry/{zone}` |
+| Day by day (`/rover/days`) | One plant, one row a day: the day's last round and what the farmer logged | `GET /missions/{id}` |
+| Setup (`/rover/setup`) | The block's plant map (where the plants stand), the route (start corner, lanes) and the camera; a new block with its map | `GET/PUT /plant-maps/{zone}`, `POST /plant-maps` |
+| Advice, Round, Plants | The rover simulation in the browser: a round replayed and the advice it gives | none (runs in the page) |
+| What it does, Growth, SOP | How the rover works, leaf cover round by round, and the operating procedure | `GET /advice/{zone}/growth` |
+| Test (`/rover/test`) | The real rover's boards: jog the wheels, stop, take a camera photo | `GET /rover/test`, `POST /rover/test/move`, `POST /rover/test/stop`, `GET /rover/test/photo` |
+
+The rover bar above the tabs shows the rover's state and charge, and holds the e-stop on every rover screen.
+
+**A round with a plant map** sends `stops` (the spots with a plant), the route (`start`, `along`), `inspect` (a photo of every
+plant) and `look` (which way the camera turns). Photos the rover sends during a round are saved to Health › Photos with
+the round's id and checked by the photo model when `OLLAMA_MODEL` is set; without one, each plant's finding says so. Health ›
+Plant gallery shows the newest Plant Inspection of every block with a plant map (`GET /inspections/{zone}`).
+
+**MQTT topics added:** `devices/rover-01/camera/status` (the ESP32-CAM) and `devices/rover-01/drive/evt` (the ESP32's
+answers to a test move). Firmware: `edge/rover-motor-controller`, `edge/rover-camera`; wiring: `docs/hardware/rover-wiring.svg`;
+design: [rover-esp32.md](architecture/rover-esp32.md).

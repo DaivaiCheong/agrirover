@@ -3,10 +3,12 @@ import { BookOpen, Camera, Eye, EyeOff } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import PlantSoilModal from "../components/PlantSoilModal";
 import { FastFocusBlocks, MulderQuickCheck } from "../components/FastFocusCard";
+import PlantInspection from "../components/PlantInspection";
+import { treeParam } from "../components/PlantCard";
 import RoverVisionPhoto from "../components/RoverVisionPhoto";
 import { Empty, ErrorNotice, Panel, Tag } from "../components/ui";
 import { useFarmFocus } from "../lib/farmContext";
-import { errorText, useAdvice, useConditions, useLatestRounds, usePhotos, useSurveys, useZones } from "../lib/queries";
+import { errorText, useAdvice, useConditions, useLatestRounds, usePhotos, usePlantMaps, useSurveys, useZones } from "../lib/queries";
 import {
   buildBlockSoilRows,
   defaultBlockSoilProfile,
@@ -46,6 +48,7 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
   const advice = useAdvice();
   const surveys = useSurveys();
   const photos = usePhotos("all");
+  const plantMaps = usePlantMaps();
   const focus = useFarmFocus();
   const zoneFilter = focus.zone ?? "all";
   const setZoneFilter = (z: string) => focus.setZone(z === "all" ? null : z);
@@ -171,6 +174,9 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
       {pageError && <ErrorNotice error={errorText(pageError)} onRetry={() => { zones.refetch(); surveys.refetch(); }} />}
       {activeTab === "gallery" ? (
         <>
+          {(plantMaps.data ?? []).length > 0 && (
+            <PlantInspection key={contextZone ?? ""} maps={plantMaps.data!} asked={contextZone ?? focus.zone} askedTree={treeParam(params.get("tree"))} />
+          )}
           <Panel
             title="Plant gallery"
             icon={Camera}

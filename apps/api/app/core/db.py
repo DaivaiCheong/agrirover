@@ -54,6 +54,8 @@ async def ensure_indexes(db: Any) -> None:
     await db.leaf_tests.create_index("id", unique=True)
     await db.photos.create_index("id", unique=True)
     await db.finance_workbooks.create_index("farmName", unique=True)
+    await db.plant_maps.create_index([("farmName", 1), ("zone", 1)], unique=True)
+    await db.photos.create_index([("farmName", 1), ("missionId", 1)])
 
 
 async def get_db() -> AsyncGenerator[Any, None]:

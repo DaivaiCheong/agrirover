@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import io
 import os
@@ -12,9 +13,10 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.db import get_db
-from app.services import farm_service
+from app.services import farm_service, photo_check, photo_store
 from app.services.clock import farm_today
 from app.services.errors import Invalid, NotFound
+from app.services.photo_store import latest_cell
 from app.services.tomato import (
     DISEASES,
     PARAM_META,
@@ -287,15 +289,8 @@ async def photo_labels():
     }
 
 
-async def _latest_cell(db, farm_name: str, zone: str, row: int, col: int) -> tuple[dict | None, dict | None]:
-    survey = await db.surveys.find_one({"farmName": farm_name, "zone": zone, "status": {"$in": ["completed", "aborted"]}},
-                                       {"_id": 0}, sort=[("startedAt", -1)])
-    cell = next((c for c in (survey or {}).get("cells", []) if c["row"] == row and c["col"] == col), None)
-    return survey, cell
-
-
 async def tree_context(db, farm_name: str, zone: str, row: int, col: int) -> dict:
-    survey, cell = await _latest_cell(db, farm_name, zone, row, col)
+    survey, cell = await latest_cell(db, farm_name, zone, row, col)
     cyc = await db.cycles.find_one({"farmName": farm_name, "zone": zone, "status": "active"}, {"_id": 0})
     pub = cycle_public_dict(cyc, farm_today()) if cyc else None
     readings, worst = [], None
@@ -369,80 +364,48 @@ async def save_photo(
     farm: str | None = None,
     db=Depends(get_db),
 ):
-    fname = farm or settings.farm_name
-    z = await db.zones.find_one({"farmName": fname, "zone": zone}, {"_id": 0})
-    if z is None:
-        raise NotFound(f"unknown bed {zone!r}")
     data = await photo.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "photo larger than 8 MB")
     if not data:
         raise Invalid("the photo is empty")
-    pid = str(uuid.uuid4())
-    suffix = Path(photo.filename or "").suffix.lower()
-    if suffix not in (".jpg", ".jpeg", ".png", ".webp"):
-        suffix = ".jpg"
-    folder = Path(settings.photo_dir)
-    folder.mkdir(parents=True, exist_ok=True)
-    fpath = folder / f"{pid}{suffix}"
-    fpath.write_bytes(data)
-
-    now = datetime.now(timezone.utc)
-    cyc = await db.cycles.find_one({"farmName": fname, "zone": zone, "status": "active"}, {"_id": 0})
-    pub = cycle_public_dict(cyc, farm_today()) if cyc else None
-    readings = None
-    if row is not None and col is not None:
-        survey, cell = await _latest_cell(db, fname, zone, row, col)
-        if cell and cell.get("readings"):
-            readings = {"values": cell["readings"], "simulated": bool(survey.get("simulated"))}
-    doc = {
-        "id": pid,
-        "shortId": pid[:8],
-        "farmName": fname,
-        "zone": zone,
-        "zoneLabel": z.get("label") or zone.upper(),
-        "tree": f"R{row + 1} T{col + 1}" if row is not None and col is not None else None,
-        "part": part,
-        "takenAt": now.isoformat(),
-        "takenOn": farm_today().isoformat(),
-        "cropDay": pub["day"] if pub else None,
-        "readings": readings,
-        "modelName": settings.ollama_model if modelLabel else None,
-        "modelLabel": modelLabel,
-        "modelSeen": modelSeen,
-        "farmerLabel": label,
-        "note": note,
-        "expertLabel": None,
-        "expertName": None,
-        "expertNote": None,
-        "expertAt": None,
-        "filePath": str(fpath),
-    }
-    await db.photos.insert_one(dict(doc))
-    doc.pop("farmName", None)
-    doc.pop("filePath", None)
-    return doc
+    return await photo_store.save_photo(db, farm or settings.farm_name, data, zone=zone, part=part, row=row, col=col,
+                                        label=label, note=note, filename=photo.filename,
+                                        model_label=modelLabel, model_seen=modelSeen)
 
 
 @router.post("/photos/check", tags=["photos"])
 async def check_photo(photo: UploadFile = File(...), zone: str | None = None, row: int | None = None, col: int | None = None,
                       farm: str | None = None, db=Depends(get_db)):
-    """No photo model runs on this server yet, so it says so instead of guessing a disease."""
+    """The photo check (services/photo_check.py). Without a model it says so instead of guessing a disease."""
+    fname = farm or settings.farm_name
     data = await photo.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "photo larger than 8 MB")
-    tree = await tree_context(db, farm or settings.farm_name, zone, row, col) if zone and row is not None and col is not None else None
-    return {
-        "status": "uncertain",
-        "label": None,
-        "confidence": None,
-        "seen": None,
-        "matches": [],
-        "note": "No photo model is set up on this server. Save the photo so an expert can confirm it, and compare it with the guide.",
-        "symptom": None,
-        "correlation": None,
-        "tree": tree,
-    }
+    tree = await tree_context(db, fname, zone, row, col) if zone and row is not None and col is not None else None
+    out = {"status": "uncertain", "label": None, "confidence": None, "seen": None, "matches": [], "symptom": None,
+           "correlation": None, "tree": tree}
+    classifier = photo_check.get_classifier()
+    if classifier is None:
+        return {**out, "note": f"{photo_check.NO_MODEL} Save the photo so an expert can confirm it, and compare it with the guide."}
+    try:
+        result = await asyncio.to_thread(classifier.classify, data, photo_check.TOMATO)
+    except photo_check.ModelUnavailable as exc:
+        return {**out, "note": f"The photo check could not run: {exc}."}
+    if result is None:
+        return {**out, "note": "The model is not sure. Take a closer, sharper photo in daylight, or ask an expert."}
+    if result.label in (photo_check.HEALTHY, photo_check.PROBLEM):
+        word = "Looks healthy." if result.label == photo_check.HEALTHY else "Something is wrong. Compare it with the guide."
+        return {**out, "status": "ok", "label": result.label, "seen": result.seen, "note": f"{word} A first look, not a diagnosis."}
+    guide = photo_check.TOMATO.by_id
+    matches = [guide[x] for x in (result.label, result.also) if x in guide]
+    symptom = guide[result.label].get("symptom")
+    correlation = None
+    if zone and symptom in SYMPTOMS:
+        bed = next((c for c in await farm_service.zone_conditions(db, fname) if c["zone"] == zone), None)
+        correlation = correlate(symptom, bed, source="photo") if bed else None
+    return {**out, "status": "ok", "label": result.label, "seen": result.seen, "matches": matches, "symptom": symptom,
+            "correlation": correlation, "note": "Possible matches to compare with the plant: a first look, not a diagnosis."}
 
 
 @router.get("/photos/export.zip", tags=["photos"])

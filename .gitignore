@@ -52,3 +52,7 @@ build/
 
 # database backups
 backups/
+pgdata.*/
+
+# downloaded test images (PlantVillage), not ours to commit
+test-photos/

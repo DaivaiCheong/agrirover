@@ -7,7 +7,8 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.db import get_database
-from app.routers import cycles_routes, farm_routes, finance_routes, health_routes, missions_routes
+from app.routers import (cycles_routes, farm_routes, finance_routes, health_routes, inspections, missions_routes, plant_maps,
+                         rover_test)
 from app.services.errors import Conflict, Invalid, NotFound
 from app.services.seed import seed_farm
 from app.workers.mqtt_ingest import ingest_lifespan
@@ -71,6 +72,9 @@ app.include_router(cycles_routes.router, prefix=V1)
 app.include_router(missions_routes.router, prefix=V1)
 app.include_router(finance_routes.router, prefix=V1)
 app.include_router(health_routes.router, prefix=V1)
+app.include_router(plant_maps.router, prefix=V1)
+app.include_router(inspections.router, prefix=V1)
+app.include_router(rover_test.router, prefix=V1)
 
 
 @app.get("/", tags=["system"], include_in_schema=False)

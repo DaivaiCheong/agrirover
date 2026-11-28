@@ -21,7 +21,7 @@ describe("the day's rounds", () => {
     expect(roundPlan([{ zone: "g9", bedLabel: "g9", grid: null } as unknown as Cycle], "07:00", [], "2026-11-05")).toEqual([]);
   });
 });
-import { cellName, estimate, fullLitresOf, headingAt, kindOf, litresOf, minutes, serpentine, stopInfo } from "./rover";
+import { CORNERS, DEFAULT_ROUTE, throughStops, cellName, cornerCell, estimate, fullLitresOf, headingAt, isRoute, kindOf, litresOf, minutes, route, serpentine, stopInfo } from "./rover";
 import type { RoverCell } from "./api";
 
 const cell = (over: Partial<RoverCell>): RoverCell => ({ row: 0, col: 0, plant: true, flagged: false, readings: {}, ...over });
@@ -38,6 +38,48 @@ describe("the rover's round", () => {
   it("faces the way it is going", () => {
     const path = serpentine(2, 2);
     expect([0, 1, 2, 3].map((i) => headingAt(path, i))).toEqual([0, 0, -90, 180]);
+  });
+});
+
+describe("the route set on the map", () => {
+  // the same sequences as edge/rover-agent/tests/test_planner.py, so the map draws what the rover drives
+  it("matches the rover's planner", () => {
+    expect(route(2, 3, { start: "se", along: "rows" })).toEqual([[0, 2], [0, 1], [0, 0], [1, 0], [1, 1], [1, 2]]);
+    expect(route(2, 3, { start: "sw", along: "across" })).toEqual([[0, 0], [1, 0], [1, 1], [0, 1], [0, 2], [1, 2]]);
+    expect(route(2, 2, { start: "ne", along: "across" })).toEqual([[1, 1], [0, 1], [0, 0], [1, 0]]);
+    expect(route(4, 7)).toEqual(serpentine(4, 7));
+  });
+  it("visits every tree once from any corner, next to the last", () => {
+    for (const start of CORNERS) for (const along of ["rows", "across"] as const) {
+      const path = route(3, 4, { start, along });
+      expect(path[0]).toEqual(cornerCell(3, 4, start));
+      expect(new Set(path.map(String)).size).toBe(12);
+      for (let i = 1; i < path.length; i++) expect(Math.abs(path[i][0] - path[i - 1][0]) + Math.abs(path[i][1] - path[i - 1][1])).toBe(1);
+    }
+  });
+  it("starts facing the second stop", () => {
+    expect(headingAt(route(3, 4, { start: "ne", along: "rows" }), 0)).toBe(180);
+    expect(headingAt(route(3, 4, { start: "nw", along: "across" }), 0)).toBe(90);     // down the map, towards row 1
+    expect(headingAt(route(3, 4, { start: "sw", along: "across" }), 0)).toBe(-90);
+  });
+  it("counts row spacing for lanes across the rows", () => {
+    // 3 rows × 2 trees across: 2 + 2 row gaps of 5 m and one tree gap of 3 m
+    expect(estimate(3, 2, 5, 3, { start: "sw", along: "across" }).distanceM).toBe(23);
+  });
+  it("goes from the first plant to the last, through the empty spots, like the rover's through_stops", () => {
+    // the tomato demo: 2 rows of 3 spots, plants on R1 T1, R1 T3, R2 T1, R2 T2
+    const plants = new Set(["0,0", "0,2", "1,0", "1,1"]);
+    expect(throughStops(route(2, 3), plants)).toEqual([[0, 0], [0, 1], [0, 2], [1, 2], [1, 1], [1, 0]]);
+    expect(throughStops(route(2, 3), new Set(["1,1", "1,2"]))).toEqual([[1, 2], [1, 1]]);
+    expect(throughStops(route(2, 3), new Set())).toEqual([]);
+    const e = estimate(2, 3, 0.8, 0.5, DEFAULT_ROUTE, plants);
+    expect(e.trees).toBe(4);                                  // stops at the 4 plants, not the 6 spots
+    expect(e.distanceM).toBeCloseTo(0.5 * 4 + 0.8);
+    expect(estimate(2, 3, 0.8, 0.5, DEFAULT_ROUTE, new Set(["1,1", "1,2"])).distanceM).toBeCloseTo(0.5);
+  });
+  it("only takes a saved route that is whole", () => {
+    expect(isRoute({ start: "ne", along: "across" })).toBe(true);
+    expect([isRoute(null), isRoute({ start: "up", along: "rows" }), isRoute({ start: "sw" })]).toEqual([false, false, false]);
   });
 });
 

@@ -58,6 +58,8 @@ export type BedConditions = {
   zone: string; label: string | null; areaM2: number | null; crop: string | null; cropName: string | null;
   variety: string | null; day: number | null; recordedAt: string | null; rated: boolean; status: RatingStatus;
   basis: string; source: string; stage: CondStage | null; params: CondParam[]; alerts: CondAlert[];
+  /** What each reading should be, and why: sent for a tomato block (services/tomato.py). */
+  rules?: { label: string; target: string; critical: string; note: string }[];
 };
 
 export type TelemetrySeries = {
@@ -146,12 +148,50 @@ export type TreeAdvice = { row: number; col: number; plant: boolean; litres: num
 export type RoverCell = {
   row: number; col: number; plant: boolean; flagged: boolean; readings: Record<string, number>; canopy?: number | null; chlorosis?: number | null;
   disease?: string | null; disease_confidence?: number | null; advice?: TreeAdvice | null;
+  /** What the photo check said about a plant the real rover flagged, during its round (services/rover_photos.py). */
+  check?: RoverPhotoCheck | null;
+};
+/** What kind of finding: the farmer does something different for each. */
+export type FindingKind = "healthy" | "disease" | "nutrient" | "pest" | "problem" | "unsure";
+export type RoverPhotoCheck = {
+  status: "ok" | "uncertain" | "unavailable"; label: string | null; title: string; seen: string | null; also: string | null;
+  crop: "guava" | "tomato"; photoId: string | null; problem: string | null;
+  kind?: FindingKind;
+  /** The best match's guide entry, cut down: what it looks like, what to do now, and why it happens (Mulder's chart for a feed shortage). */
+  card?: { id: string; title: string; group: string; signs: string; steps: string[]; askFirst: boolean; why: string | null; do: string } | null;
+};
+/** One plant on a Plant Inspection round (/inspections/{zone}): what the rover saw and what the photo check said. */
+export type InspectionPlant = {
+  row: number; col: number; name: string; plant: boolean | null; flagged: boolean | null; canopy: number | null; yellow: number | null;
+  readings: Record<string, number>; finding: RoverPhotoCheck | null;
+};
+export type Inspection = {
+  zone: string; label: string; crop: "guava" | "tomato"; missionId: string | null; status: string | null; live?: boolean;
+  inspect?: boolean | null; simulated?: boolean | null; rows?: number; cols?: number; startedAt?: string | null; finishedAt?: string | null;
+  plants: InspectionPlant[];
+  summary: { inspected: number; problems: number } & Record<FindingKind, number>;
 };
 export type LiveMission = {
   missionId: string; zoneId: string; rows: number; cols: number; cellM: number; rowM: number;
   status: "queued" | "running" | "completed" | "aborted" | "failed" | "rejected" | "lost";
   reason: string | null; cell: [number, number] | null; battery: number | null; frame: string | null;
   cellsScanned: number; cellsTotal: number; simulate: string | null; simulated: boolean | null; cells: RoverCell[];
+  /** The route set on the map; absent from an older server. */
+  start?: "sw" | "se" | "nw" | "ne"; along?: "rows" | "across";
+  /** The plants the rover stops at, when the block has a plant map. */
+  stops?: [number, number][] | null;
+  /** Plant Inspection: every plant's photo is checked; and which way the rover turns to look. */
+  inspect?: boolean; look?: "left" | "right" | null;
+};
+export type RoverTestMove = { move: string; ok: boolean; result: string; text: string; ackMs?: number; ms?: number; at?: number };
+export type RoverTestStatus = {
+  rover: { status: "online" | "offline" | "unknown"; fw: string | null; ip: string | null; rssi: number | null;
+           wifiDriving: boolean | null; estop: boolean | null; batteryV: number | null;
+           /** motor pins the firmware drives, "L:32,33,25;L:13,26,27;..." (en,fwd,back); null on firmware before 2.1.0 */
+           pins?: string | null; pinsSaved?: boolean | null };
+  camera: { status: "online" | "offline" | "unknown"; ip: string | null; url: string | null; sensor: boolean | null;
+            size: string | null; rssi: number | null; fw: string | null };
+  lastMove: RoverTestMove | null;
 };
 export type RoverLive = {
   rover: { code: string; status: "online" | "offline" | "unknown"; estop: boolean; lastSeenAt: string | null };
@@ -172,7 +212,18 @@ export type SurveySummary = {
   cellsFlagged: number | null; distanceM: number | null; estDurationS: number | null;
   startedAt: string; finishedAt: string | null;
 };
-export type SurveyInput = { zoneId: string; rows: number; cols: number; cellM: number; rowM: number; simulate: "normal" | "rain" | "low_battery" };
+export type SurveyInput = { zoneId: string; rows: number; cols: number; cellM: number; rowM: number; simulate: "normal" | "rain" | "low_battery";
+  start: "sw" | "se" | "nw" | "ne"; along: "rows" | "across";
+  /** The spots with a plant, [row, col] from 0: the rover stops at these only. Absent: every spot. */
+  stops?: [number, number][];
+  /** Plant Inspection: photo-check every plant, not only yellow ones. */
+  inspect?: boolean;
+  /** Camera faces forward: turn this way to look at each plant. Absent: no turn (camera faces sideways). */
+  look?: "left" | "right" };
+/** A block's grid of spots and the spots that hold a plant (the tomato demo). Rows and spots count from 0. */
+export type PlantMap = { zone: string; label: string; crop: string; rows: number; cols: number; rowM: number; plantM: number;
+  plants: [number, number][]; updatedAt: string | null };
+export type PlantMapInput = { crop: string; rows: number; cols: number; rowM: number; plantM: number; plants: [number, number][] };
 
 export type FeedAdvice = {
   action: "feed" | "hold" | "flush" | "wait" | "none"; reason: string; due: boolean; nextDay: number | null; aim: string; nitrogen: string; notes: string[];
@@ -397,16 +448,34 @@ export const api = {
   treeContext: (zone: string, row: number, col: number) =>
     request<TreeContext>(`/photos/tree?${new URLSearchParams({ zone, row: String(row), col: String(col) })}`),
   photoLabels: () => request<PhotoLabels>("/photos/labels"),
-  diseaseGuide: () => request<Disease[]>("/photos/guide"),
+  diseaseGuide: (crop: "guava" | "tomato" = "tomato") => request<Disease[]>(`/photos/guide?crop=${crop}`),
   confirmPhoto: (id: string, body: { label: string; name: string; note: string | null }) => send<SavedPhoto>("PUT", `/photos/${id}/confirm`, body),
   deletePhoto: (id: string) => send<void>("DELETE", `/photos/${id}`),
   // the rover: its real software, with simulated wheels, camera and probe until the hardware is built
   roverLive: () => request<RoverLive>("/missions/live"),
   roverFrame: (row: number, col: number) => request<{ frame: string | null }>(`/missions/live/frames/${row}/${col}`),
   roverEstop: (engaged: boolean) => send<{ estop: boolean }>("POST", "/missions/estop", { engaged }),
+  roverTest: () => request<RoverTestStatus>("/rover/test"),
+  roverTestMove: (move: "forward" | "back" | "left" | "right") => send<RoverTestMove>("POST", "/rover/test/move", { move }),
+  roverTestStop: () => send<{ stopped: boolean }>("POST", "/rover/test/stop"),
+  /** A fresh photo from the rover camera, as a blob URL; throws the API's words when there is none. */
+  roverTestPhoto: async (): Promise<string> => {
+    const res = await fetch(`${BASE}/rover/test/photo?t=${Date.now()}`);
+    if (!res.ok) {
+      let detail: unknown;
+      try { detail = (await res.json()).detail; } catch { /* no body */ }
+      throw new ApiError(readableDetail(detail, `${res.status} ${res.statusText}`));
+    }
+    return URL.createObjectURL(await res.blob());
+  },
   startSurvey: (body: SurveyInput) => send<{ missionId: string }>("POST", "/missions", body),
   surveys: () => request<SurveySummary[]>("/missions"),
   survey: (id: string) => request<SurveySummary & { cells: RoverCell[] }>(`/missions/${id}`),
+  // where the plants stand in a block, so the rover goes from plant to plant
+  plantMaps: () => request<PlantMap[]>("/plant-maps"),
+  inspection: (zone: string) => request<Inspection>(`/inspections/${encodeURIComponent(zone)}`),
+  savePlantMap: (zone: string, body: PlantMapInput) => send<PlantMap>("PUT", `/plant-maps/${encodeURIComponent(zone)}`, body),
+  newPlantBlock: (body: PlantMapInput & { label: string }) => send<PlantMap>("POST", "/plant-maps", body),
   advice: () => request<Advice[]>("/advice"),
   schedule: (days: number) => request<Schedule>(`/schedule?days=${days}`),
   growth: (zone: string) => request<Growth>(`/advice/${zone}/growth`),

@@ -2,8 +2,9 @@ import { Suspense, useEffect, type ReactNode } from "react";
 import { useQueryClient, useIsFetching } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
 import {
-  BookOpen, Bot, CalendarDays, Calculator, Camera, ChevronRight, Cpu, FlaskConical, GitCompare, History, Images, Leaf,
-  MapPin, Package, ReceiptText, RefreshCw, Scale, Settings, Sprout, Sun, Tractor, Wallet, Wheat, Wrench, type LucideIcon,
+  BookOpen, Bot, Box, CalendarDays, CalendarRange, Calculator, Camera, ChevronRight, ClipboardCheck, ClipboardList, Cpu,
+  FlaskConical, GitCompare, History, Images, Info, Leaf, MapPin, Package, Play, ReceiptText, RefreshCw, Scale, Settings,
+  SlidersHorizontal, Sprout, Sun, Tractor, TrendingUp, Wallet, Wheat, Wrench, type LucideIcon,
 } from "lucide-react";
 import { BRAND } from "../lib/brand";
 import { dayMonthYear } from "../lib/format";
@@ -18,8 +19,18 @@ export const SECTIONS = {
   today:   { to: "/",         label: "Today",   icon: Sun,          title: "Today",   tabs: [] as Tab[] },
   plan:    { to: "/plan",     label: "Plan",    icon: CalendarDays, title: "Plan",    tabs: [] as Tab[] },
   rover:   { to: "/rover",    label: "Rover",   icon: Bot,          title: "Rover",
-             tabs: [{ to: "/rover", label: "Block view", icon: Sprout },
-                    { to: "/rover/history", label: "History", icon: History }] },
+             tabs: [{ to: "/rover", label: "Block view", icon: Box },
+                    { to: "/rover/soil", label: "Soil", icon: Leaf },
+                    { to: "/rover/history", label: "History", icon: History },
+                    { to: "/rover/days", label: "Day by day", icon: CalendarRange },
+                    { to: "/rover/setup", label: "Setup", icon: SlidersHorizontal },
+                    { to: "/rover/advice", label: "Advice", icon: ClipboardCheck },
+                    { to: "/rover/round", label: "Round", icon: Play },
+                    { to: "/rover/plants", label: "Plants", icon: Sprout },
+                    { to: "/rover/about", label: "What it does", icon: Info },
+                    { to: "/rover/growth", label: "Growth", icon: TrendingUp },
+                    { to: "/rover/sop", label: "SOP", icon: ClipboardList },
+                    { to: "/rover/test", label: "Test", icon: Wrench }] },
   health:  { to: "/crop",     label: "Health",  icon: Camera,       title: "Plant health",
              tabs: [{ to: "/crop", label: "Plant gallery", icon: Camera },
                     { to: "/photos", label: "Photos", icon: Images },

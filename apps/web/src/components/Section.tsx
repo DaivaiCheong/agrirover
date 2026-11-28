@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import SampleNotice from "./SampleNotice";
 import { PageHead } from "./ui";
 import { SECTIONS, type SectionKey } from "./Shell";
+import RoverBar from "../features/rover/ui/RoverBar";
 
 const SUBTITLE: Partial<Record<SectionKey, string>> = {
   rover: "The rover's rounds: every plant it checked, its soil and its camera, and what to do next",
@@ -25,6 +26,7 @@ export default function Section({ id, children }: { id: Exclude<SectionKey, "tod
   return (
     <>
       <PageHead icon={s.icon} title={s.title} sub={SUBTITLE[id]} />
+      {id === "rover" && <RoverBar />}
       <nav className="tabs" aria-label={`${s.title} sections`}>
         {s.tabs.map((t) => (
           <Link key={t.to} to={t.to} className={`tab${here === t.to ? " tab-on" : ""}`}
