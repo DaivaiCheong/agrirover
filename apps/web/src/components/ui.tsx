@@ -44,7 +44,6 @@ export const Field = ({ label, hint, children }: { label: string; hint?: string;
   </label>
 );
 
-/** Title of a page: an icon, a short name and, for a record, what the record is. */
 export const PageHead = ({ icon: Icon, title, sub, actions }:
   { icon: LucideIcon; title: string; sub?: string; actions?: ReactNode }) => (
   <div className="head head-row">
@@ -59,7 +58,6 @@ export const PageHead = ({ icon: Icon, title, sub, actions }:
   </div>
 );
 
-/** The actions of a page that sits under a section's tabs. */
 export const Toolbar = ({ children }: { children: ReactNode }) => <div className="toolbar">{children}</div>;
 
 const NOTICE_ICON = { info: Info, ok: CircleCheck, warn: TriangleAlert, alert: CircleAlert } as const;
@@ -75,30 +73,30 @@ export const Empty = ({ children, icon: Icon }: { children: ReactNode; icon?: Lu
 
 type Kpi = { k: string; v: ReactNode; d?: ReactNode; icon?: LucideIcon; tone?: "ok" | "warn" | "alert" | "info" };
 
-/** The key figures of a list or record, in one row. While loading, the values are placeholders, never zeros. */
 export const Kpis = ({ items, loading = false }: { items: Kpi[]; loading?: boolean }) => (
   <div className="erp-summary-banner">
     {items.map((i) => (
       <div key={i.k} className={`erp-summary-item${i.tone ? ` kpi-${i.tone}` : ""}`}>
-        <span className="k">{i.icon && <i.icon size={14} aria-hidden />}{i.k}</span>
-        <span className="v">{loading ? <Skeleton w="60%" h={22} /> : i.v}</span>
+        <div className="kpi-head">
+          {i.icon && <span className="kpi-ico"><i.icon size={16} aria-hidden /></span>}
+          <span className="k">{i.k}</span>
+        </div>
+        <span className="v">{loading ? <Skeleton w="60%" h={24} /> : i.v}</span>
         {i.d && <span className="small muted">{loading ? <Skeleton w="80%" h={12} /> : i.d}</span>}
       </div>
     ))}
   </div>
 );
 
-/** A grey placeholder where data will be. */
 export const Skeleton = ({ w = "100%", h = 14, r }: { w?: number | string; h?: number | string; r?: number }) => (
   <span className="skel" style={{ width: w, height: h, borderRadius: r }} aria-hidden />
 );
 
-/** What a page shows while its first data loads. */
 export const PageSkeleton = ({ rows = 3 }: { rows?: number }) => (
   <main className="main stack" aria-busy="true" aria-label="Loading">
     <div className="erp-summary-banner">
       {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="erp-summary-item"><Skeleton w="50%" h={11} /><Skeleton w="70%" h={22} /><Skeleton w="85%" h={11} /></div>
+        <div key={i} className="erp-summary-item"><Skeleton w="50%" h={12} /><Skeleton w="70%" h={24} /><Skeleton w="85%" h={12} /></div>
       ))}
     </div>
     {Array.from({ length: rows }, (_, i) => (
@@ -107,7 +105,6 @@ export const PageSkeleton = ({ rows = 3 }: { rows?: number }) => (
   </main>
 );
 
-/** A failed load, with a way to try again. */
 export const ErrorNotice = ({ error, onRetry }: { error: string; onRetry?: () => void }) => (
   <p className="notice notice-alert" role="alert">
     <CircleAlert size={18} aria-hidden />
@@ -115,12 +112,10 @@ export const ErrorNotice = ({ error, onRetry }: { error: string; onRetry?: () =>
   </p>
 );
 
-/** A short label that opens to the sentence behind it, so explanations cost nothing until they are wanted. */
 export const More = ({ label, children }: { label: ReactNode; children: ReactNode }) => (
   <details className="xp"><summary>{label}</summary><div className="xp-body">{children}</div></details>
 );
 
-/** A dialog: closes on Escape, on the backdrop and on its close button. */
 export function Modal({ title, onClose, children, width }: { title: string; onClose: () => void; children: ReactNode; width?: number }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -143,7 +138,6 @@ export function Modal({ title, onClose, children, width }: { title: string; onCl
 
 export type FormMsg = { kind: "ok" | "alert"; text: string } | null;
 
-/** A dialog with one form. It stays open after a save, so a run of entries needs no reopening. */
 export function FormModal({ title, submit, onClose, onSubmit, msg, width, busy = false, danger = false, children }:
   { title: string; submit: string; onClose: () => void; onSubmit: (e: FormEvent) => void; msg?: FormMsg; width?: number;
     busy?: boolean; danger?: boolean; children: ReactNode }) {
@@ -163,10 +157,8 @@ export function FormModal({ title, submit, onClose, onSubmit, msg, width, busy =
   );
 }
 
-/** The message a dialog shows after a save failed. */
 export const failMsg = (err: unknown): FormMsg => ({ kind: "alert", text: errorText(err) });
 
-/** A compact labelled input for a dialog. */
 export const EF = ({ label, hint, children, req }: { label: string; hint?: ReactNode; req?: boolean; children: ReactNode }) => (
   <label className="erp-field">
     <span className="erp-label">{label}{req && <span className="req" aria-hidden>*</span>}</span>

@@ -1,10 +1,10 @@
-import { Suspense, useEffect, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient, useIsFetching } from "@tanstack/react-query";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   BookOpen, Bot, Box, CalendarDays, CalendarRange, Calculator, Camera, ChevronRight, ClipboardCheck, ClipboardList, Cpu,
-  FlaskConical, GitCompare, History, Images, Info, Leaf, MapPin, Package, Play, ReceiptText, RefreshCw, Scale, Settings,
-  SlidersHorizontal, Sprout, Sun, Tractor, TrendingUp, Wallet, Wheat, Wrench, type LucideIcon,
+  FlaskConical, GitCompare, History, Images, Info, Leaf, MapPin, Package, Play, Plus, ReceiptText, RefreshCw, Scale, Search,
+  Settings, SlidersHorizontal, Sparkles, Sprout, Sun, Tractor, TrendingUp, Wallet, Wheat, Wrench, type LucideIcon,
 } from "lucide-react";
 import { BRAND } from "../lib/brand";
 import { dayMonthYear } from "../lib/format";
@@ -14,7 +14,6 @@ import { PageSkeleton } from "./ui";
 
 type Tab = { to: string; label: string; icon: LucideIcon };
 
-/** The seven places a farmer goes. Everything else is a tab inside one of them. */
 export const SECTIONS = {
   today:   { to: "/",         label: "Today",   icon: Sun,          title: "Today",   tabs: [] as Tab[] },
   plan:    { to: "/plan",     label: "Plan",    icon: CalendarDays, title: "Plan",    tabs: [] as Tab[] },
@@ -53,7 +52,6 @@ export const SECTIONS = {
 
 export type SectionKey = keyof typeof SECTIONS;
 
-/** Which place a path belongs to. A crop's cost report belongs to Finance. */
 export function sectionOf(path: string): SectionKey {
   if (path === "/") return "today";
   if (path === "/plan") return "plan";
@@ -73,7 +71,6 @@ function tabOf(path: string, key: SectionKey): Tab | undefined {
 type Light = "ok" | "warn" | "alert" | "idle";
 const Dot = ({ kind }: { kind: Light }) => <i className={`dot dot-${kind}`} aria-hidden />;
 
-/** Server, farm broker and rover at a glance, on every page. Also tells every page when a rover round ends. */
 function StatusPills() {
   const qc = useQueryClient();
   const status = useStatus();
@@ -114,6 +111,67 @@ function StatusPills() {
   );
 }
 
+function QuickSearch() {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const zones = useZones();
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const results: { label: string; meta: string; to: string }[] = [];
+    for (const z of zones.data ?? []) {
+      const name = z.label ?? z.zone;
+      if (name.toLowerCase().includes(q) || z.zone.toLowerCase().includes(q)) {
+        results.push({ label: name, meta: "Block · Rover", to: `/rover?zone=${encodeURIComponent(z.zone)}` });
+      }
+    }
+    for (const [, section] of Object.entries(SECTIONS)) {
+      if (section.label.toLowerCase().includes(q)) {
+        results.push({ label: section.label, meta: "Section", to: section.to });
+      }
+      for (const t of section.tabs) {
+        if (t.label.toLowerCase().includes(q)) {
+          results.push({ label: t.label, meta: section.label, to: t.to });
+        }
+      }
+    }
+    return results.slice(0, 7);
+  }, [query, zones.data]);
+
+  return (
+    <div className="top-search-wrap">
+      <div className="top-search">
+        <Search size={15} aria-hidden />
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 160)}
+          placeholder="Search blocks, crops, pages…"
+          aria-label="Search blocks, crops, pages"
+        />
+      </div>
+      {open && matches.length > 0 && (
+        <div className="top-search-menu">
+          {matches.map((m) => (
+            <button
+              key={`${m.to}-${m.label}`}
+              type="button"
+              className="top-search-item"
+              onMouseDown={() => { navigate(m.to); setQuery(""); setOpen(false); }}
+            >
+              <span>{m.label}</span>
+              <small>{m.meta}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TopBar() {
   const { pathname } = useLocation();
   const qc = useQueryClient();
@@ -124,17 +182,28 @@ function TopBar() {
   const tab = tabOf(pathname, key);
   return (
     <header className="topbar">
-      <nav className="crumbs" aria-label="You are here">
-        <Link to={section.to}>{section.label}</Link>
-        {tab && tab.to !== section.to && (<><ChevronRight size={14} aria-hidden /><span>{tab.label}</span></>)}
-        {/^\/cycles\/[^/]+/.test(pathname) && (<><ChevronRight size={14} aria-hidden /><span>Crop</span></>)}
-      </nav>
+      <div className="topbar-left">
+        <QuickSearch />
+        <nav className="crumbs" aria-label="You are here">
+          <Link to={section.to}>{section.label}</Link>
+          {tab && tab.to !== section.to && (<><ChevronRight size={14} aria-hidden /><span>{tab.label}</span></>)}
+          {/^\/cycles\/[^/]+/.test(pathname) && (<><ChevronRight size={14} aria-hidden /><span>Crop</span></>)}
+        </nav>
+      </div>
       <div className="topbar-right">
         <StatusPills />
-        {status.data && <span className="topbar-date">{dayMonthYear(status.data.farmToday)}</span>}
+        {status.data && (
+          <span className="topbar-date">
+            <CalendarDays size={13} aria-hidden />
+            {dayMonthYear(status.data.farmToday)}
+          </span>
+        )}
+        <Link to="/cycles" className="iconbtn" aria-label="Manage crops" title="Manage crops">
+          <Plus size={16} aria-hidden />
+        </Link>
         <button type="button" className={`iconbtn${fetching ? " spinning" : ""}`} onClick={() => qc.invalidateQueries()}
                 aria-label="Refresh all data" title="Refresh all data">
-          <RefreshCw size={16} aria-hidden />
+          <RefreshCw size={15} aria-hidden />
         </button>
       </div>
     </header>
@@ -163,8 +232,8 @@ export default function Shell({ children }: { children: ReactNode }) {
     <div className="shell">
       <aside className="side">
         <Link to="/" className="brandmark">
-          <span className="brand-tile"><Leaf size={19} aria-hidden /></span>
-          <span className="brand">{BRAND.name}<small>Tomato precision farm</small></span>
+          <span className="brand-tile"><Leaf size={20} aria-hidden /></span>
+          <span className="brand">{BRAND.name} <b>AI</b><small>Tomato precision farm</small></span>
         </Link>
         <nav className="side-nav" aria-label="Main">
           {items.map(([key, s]) => (
@@ -174,14 +243,27 @@ export default function Shell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="side-foot">
-          <b>{status.data?.farm ?? "farm"}</b>
-          <span>Single-farm mode: anyone on this network can change the data.</span>
+        <div className="side-card">
+          <div className="side-card-head">
+            <span className="side-card-ico"><Sparkles size={15} aria-hidden /></span>
+            <span>Agronomy Guide</span>
+          </div>
+          <p>Review Mulder&apos;s chart rules, foliar recipes, and rover vision checks.</p>
+          <Link to="/guide" className="side-card-btn">
+            <span>Open Care Guide</span>
+            <ChevronRight size={14} aria-hidden />
+          </Link>
+          <div className="side-card-meta">
+            <span>{status.data?.farm ?? "farm-01"}</span>
+            <span>Single-farm mode</span>
+          </div>
         </div>
       </aside>
       <div className="content">
         <TopBar />
-        <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+        <div className="page-scroll">
+          <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+        </div>
       </div>
       <nav className="bottomnav" aria-label="Main">
         {items.map(([key, s]) => (

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { Fragment, useState, type FormEvent } from "react";
 import { Activity, ArrowDown, ArrowUp, ChevronDown, ChevronRight, Clock, Droplets, Layers, MapPin, Package, Plus, Sprout } from "lucide-react";
 import { Link } from "react-router-dom";
 import AddCropModal from "../components/AddCropModal";
@@ -42,20 +42,23 @@ const COLUMNS: { key: string; head: string; unit?: string }[] = [
 function CropCell({ b, c, onPlant }: { b?: BedConditions; c?: Cycle; onPlant: () => void }) {
   if (!c) {
     return (
-      <button type="button" className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); onPlant(); }}>
+      <button type="button" className="btn btn-sm btn-ghost crop-plant-btn" onClick={(e) => { e.stopPropagation(); onPlant(); }}>
         <Sprout size={14} aria-hidden />Plant tomato
       </button>
     );
   }
   return (
     <>
-      <Link to={`/cycles/${c.id}/tomato`} onClick={(e) => e.stopPropagation()}>{c.cropName}{c.variety ? ` (${c.variety})` : ""}</Link>
-      <div className="mono-sm muted" title={b?.stage?.title}>{b?.stage ? `Day ${b.stage.day} · ${b.stage.title}` : c.day ? `Day ${c.day}` : "Planned"}</div>
+      <Link className="crop-link" to={`/cycles/${c.id}/tomato`} onClick={(e) => e.stopPropagation()}>
+        {c.variety ?? c.cropName}
+      </Link>
+      <div className="crop-sub" title={b?.stage?.title}>
+        {b?.stage ? `Day ${b.stage.day} · ${b.stage.title}` : c.day ? `Day ${c.day}` : "Planned"}
+      </div>
     </>
   );
 }
 
-/** Every bed: its soil, its crop, its live readings and their history. Soil profiles are saved on the server. */
 export default function Beds() {
   const zones = useZones();
   const cycles = useCycles();
@@ -64,16 +67,18 @@ export default function Beds() {
   const advice = useAdvice();
   const { setZone } = useFarmFocus();
 
-  const [openBed, setOpenBed] = useState<string | null>(null);
+  const [openBeds, setOpenBeds] = useState<string[]>([]);
   const [hours, setHours] = useState<number>(RANGES[0].hours);
   const [showAddBed, setShowAddBed] = useState(false);
   const [soilOf, setSoilOf] = useState<ZoneNow | null>(null);
   const [plantingZone, setPlantingZone] = useState<string | null>(null);
 
+  const toggleBed = (zone: string) =>
+    setOpenBeds((prev) => (prev.includes(zone) ? prev.filter((item) => item !== zone) : [...prev, zone]));
+
   const rows = zones.data ?? [];
   const cycleOf = new Map((cycles.data ?? []).filter((c) => c.status === "active").map((c) => [c.zone, c]));
   const condOf = new Map((conditions.data ?? []).map((b) => [b.zone, b]));
-  const openCond = openBed ? condOf.get(openBed) : undefined;
 
   const totalArea = rows.reduce((s, z) => s + (z.areaM2 ?? 0), 0);
   const plants = [...cycleOf.values()].reduce((s, c) => s + (c.plantCount ?? 0), 0);
@@ -132,65 +137,77 @@ export default function Beds() {
                   {rows.map((z) => {
                     const b = condOf.get(z.zone);
                     const params = new Map((b?.params ?? []).map((p) => [p.metric, p]));
-                    const open = openBed === z.zone;
+                    const open = openBeds.includes(z.zone);
                     const c = cycleOf.get(z.zone);
                     const soil = z.soilProfile;
                     return (
-                      <tr key={z.zone} className={`pickable${open ? " open" : ""}`} onClick={() => { setOpenBed(open ? null : z.zone); setZone(z.zone); }}>
-                        <td>
-                          <button type="button" className="bedlink" aria-expanded={open} aria-label={`History of ${z.label ?? z.zone}`}>
-                            {open ? <ChevronDown size={15} aria-hidden /> : <ChevronRight size={15} aria-hidden />}
-                            <b>{z.label ?? z.zone}</b>
-                          </button>
-                          <div className="mono-sm muted">
-                            {z.areaM2 ? `${num(z.areaM2, 0)} m² · ` : ""}
-                            {soil ? `${soil.texture}, ${soil.rootingDepthCm} cm, ${soil.drainage.toLowerCase()}` : "No soil profile"}
-                            {" · "}
-                            <button type="button" className="linkbtn small" style={{ padding: 0 }} onClick={(e) => { e.stopPropagation(); setSoilOf(z); }}>
-                              {soil ? "edit soil" : "add soil"}
-                            </button>
-                            {b?.recordedAt ? ` · ${ago(b.recordedAt)}` : ""}
-                          </div>
-                        </td>
-                        <td className="status">{b && c ? <StatusBadge status={b.status} alerts={b.alerts.length} /> : <Tag>{c ? "No readings" : "Free"}</Tag>}</td>
-                        <td className="crop"><CropCell b={b} c={c} onPlant={() => setPlantingZone(z.zone)} /></td>
-                        <td className="r nowrap">{c?.plantCount ? <b>{c.plantCount}</b> : <span className="muted">0</span>}</td>
-                        {RIBBON_CELLS.map((cell) => (
-                          <td key={cell.key} className="m">
-                            {cell.metrics.map((m) => {
-                              const p = params.get(m);
-                              return p ? <Reading key={m} p={p} /> : null;
-                            })}
+                      <Fragment key={z.zone}>
+                        <tr className={`pickable${open ? " open" : ""}`} onClick={() => { toggleBed(z.zone); setZone(z.zone); }}>
+                          <td className="bed-col">
+                            <div className="bed-col-top">
+                              <button type="button" className="bedlink" aria-expanded={open} aria-label={`History of ${z.label ?? z.zone}`}>
+                                {open ? <ChevronDown size={15} aria-hidden /> : <ChevronRight size={15} aria-hidden />}
+                                <b>{z.label ?? z.zone}</b>
+                              </button>
+                              <button type="button" className="bed-edit-btn" onClick={(e) => { e.stopPropagation(); setSoilOf(z); }}>
+                                {soil ? "Edit soil" : "Add soil"}
+                              </button>
+                            </div>
+                            <div className="bed-col-meta">
+                              {z.areaM2 ? `${num(z.areaM2, 0)} m² · ` : ""}
+                              {soil ? `${soil.texture}, ${soil.rootingDepthCm} cm, ${soil.drainage.toLowerCase()}` : "No soil profile"}
+                              {b?.recordedAt ? ` · ${ago(b.recordedAt)}` : ""}
+                            </div>
                           </td>
-                        ))}
-                      </tr>
+                          <td className="status">{b && c ? <StatusBadge status={b.status} alerts={b.alerts.length} /> : <Tag>{c ? "No readings" : "Free"}</Tag>}</td>
+                          <td className="crop"><CropCell b={b} c={c} onPlant={() => setPlantingZone(z.zone)} /></td>
+                          <td className="r nowrap">{c?.plantCount ? <b>{c.plantCount}</b> : <span className="muted">0</span>}</td>
+                          {RIBBON_CELLS.map((cell) => (
+                            <td key={cell.key} className="m">
+                              {cell.metrics.map((m) => {
+                                const p = params.get(m);
+                                return p ? <Reading key={m} p={p} /> : null;
+                              })}
+                            </td>
+                          ))}
+                        </tr>
+                        {open && (
+                          <tr className="bed-expand-row">
+                            <td colSpan={4 + COLUMNS.length} className="bed-expand-cell">
+                              <div className="trend-section">
+                                <div className="trend-section-head">
+                                  <b>{z.label ?? z.zone} · history</b>
+                                  <button type="button" className="linkbtn" onClick={() => toggleBed(z.zone)}>Close</button>
+                                </div>
+                                {b ? (
+                                  <>
+                                    {b.alerts.length > 0 && (
+                                      <table className="tbl trend-alerts">
+                                        <tbody>
+                                          {b.alerts.map((a) => (
+                                            <tr key={a.id}>
+                                              <td className="nowrap"><span className={`tag tag-${a.severity === "critical" ? "alert" : "warn"}`}>{a.title}</span></td>
+                                              <td className="small">{a.message}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    )}
+                                    <BedTrends zone={b.zone} params={b.params} hours={hours} />
+                                    <p className="small muted trend-source">Source: {b.source}</p>
+                                  </>
+                                ) : (
+                                  <Empty>No history readings for this bed yet.</Empty>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {openCond && (
-            <div className="trend-section">
-              <div className="trend-section-head">
-                <b>{openCond.label ?? openCond.zone} · history</b>
-                <button type="button" className="linkbtn" onClick={() => setOpenBed(null)}>Close</button>
-              </div>
-              {openCond.alerts.length > 0 && (
-                <table className="tbl trend-alerts">
-                  <tbody>
-                    {openCond.alerts.map((a) => (
-                      <tr key={a.id}>
-                        <td className="nowrap"><span className={`tag tag-${a.severity === "critical" ? "alert" : "warn"}`}>{a.title}</span></td>
-                        <td className="small">{a.message}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              <BedTrends zone={openCond.zone} params={openCond.params} hours={hours} />
-              <p className="small muted trend-source">Source: {openCond.source}</p>
             </div>
           )}
         </Panel>

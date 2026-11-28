@@ -1,27 +1,24 @@
-/* The rover's top bar and E-stop. Scoped to .rb so no other page changes. Colours from the daylight field palette. */
-.rb{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 var(--gut) 8px;max-width:1240px;margin-left:auto;margin-right:auto;padding:8px 0}
-.rb-chip,.rb-batt,.rb-tag{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;border-radius:6px;
-  font-size:13px;font-weight:700;border:1px solid #D6DCD3;background:#fff;color:#17261C;white-space:nowrap}
-.rb-tag{font-weight:500;color:#56645B}
+.rb{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 auto 8px;max-width:1380px;padding:8px var(--gut)}
+.rb-chip,.rb-batt,.rb-tag{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border-radius:999px;
+  font-size:13px;font-weight:650;border:1px solid var(--line-strong);background:rgba(20,42,30,.72);color:var(--ink);white-space:nowrap}
+.rb-tag{font-weight:500;color:var(--ink-muted)}
 .rb-chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
-.rb-ok{color:#2E7D32;background:#E6F1E7;border-color:#2E7D32}
-.rb-info{color:#1D6FB0;background:#E5EFF8;border-color:#1D6FB0}
-.rb-warn{color:#8A6500;background:#FBF3D9;border-color:#E2A700}
-.rb-alert{color:#fff;background:#CF2A1E;border-color:#CF2A1E}
-.rb-wip{color:#56645B;background:#fff;border-color:#D6DCD3}
+.rb-ok{color:var(--ok);background:var(--ok-soft);border-color:rgba(120,220,103,.4)}
+.rb-info{color:var(--water);background:var(--water-soft);border-color:rgba(94,166,242,.4)}
+.rb-warn{color:var(--warn);background:var(--warn-soft);border-color:rgba(229,183,74,.45)}
+.rb-alert{color:#fff;background:#cf2a1e;border-color:#cf2a1e}
+.rb-wip{color:var(--ink-muted);background:rgba(20,42,30,.6);border-color:var(--line)}
 .rb-spacer{flex:1}
-.rb-problem{color:#CF2A1E;font-size:13px;font-weight:700}
+.rb-problem{color:var(--alert);font-size:13px;font-weight:700}
 
-/* E-stop: red button on a yellow collar, 64 px, never moves */
 .rb-estop,.rb-hold{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:64px;min-width:64px;padding:0 22px;
-  border-radius:999px;border:6px solid #F2C200;background:#CF2A1E;color:#fff;font:inherit;font-size:17px;font-weight:800;cursor:pointer;
-  box-shadow:0 0 0 1px #17261C inset}
-.rb-estop:focus-visible,.rb-hold:focus-visible{outline:3px solid #2E7D32;outline-offset:3px}
-.rb-hold{position:relative;overflow:hidden;background:#fff;color:#17261C;border-color:#CF2A1E;min-width:200px;padding:0 22px}
-.rb-fill{position:absolute;left:0;top:0;bottom:0;background:#F2C200}
+  border-radius:999px;border:6px solid #f2c200;background:#cf2a1e;color:#fff;font:inherit;font-size:17px;font-weight:800;cursor:pointer;
+  box-shadow:0 0 0 1px #0b1912 inset}
+.rb-estop:focus-visible,.rb-hold:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.rb-hold{position:relative;overflow:hidden;background:rgba(20,42,30,.92);color:#fff;border-color:#cf2a1e;min-width:200px;padding:0 22px}
+.rb-fill{position:absolute;left:0;top:0;bottom:0;background:#f2c200}
 .rb-hold-word{position:relative}
 
-/* On a phone the E-stop floats bottom right, above the app's own bottom navigation (about 65 px tall). */
 @media (max-width:768px){
   .rb-estop,.rb-hold{position:fixed;right:12px;bottom:76px;z-index:50;min-height:64px}
 }
