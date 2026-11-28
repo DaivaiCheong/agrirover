@@ -1,5 +1,14 @@
-import { buildBlockSoilRows, getBlockSoilProfile, targetsFromConditions, type PlantSoilRow } from "./soil";
-import type { BedConditions, Cycle, RoverCell, SavedPhoto, SurveySummary } from "./api";
+import { buildBlockSoilRows, defaultBlockSoilProfile, type PlantSoilRow } from "./soil";
+import type { Advice, BedConditions, Cycle, RoverCell, SavedPhoto, SurveySummary, ZoneNow } from "./api";
+import { evaluateSpreadsheet, type ComputedLedgerRow, type SpreadsheetInputs } from "./financeSpreadsheet";
+
+/**
+ * Block and farm economics, from the farm's own records:
+ *  - the BUDGET per plant comes from the Finance workbook (saved in MongoDB), never a constant
+ *  - SPENT comes from the cost ledger (typed costs and stock used on the crop)
+ *  - water comes from today's advice, which comes from the rover's last round
+ * Change the workbook in Finance and every page that shows a cost per plant follows.
+ */
 
 export type RoundDetail = SurveySummary & { cells: RoverCell[] };
 
@@ -7,8 +16,19 @@ export type FinanceScale = "plant" | "block" | "farm";
 
 export type CostCategoryId = "water" | "electricity" | "fertilizer" | "protection" | "substrate" | "labor";
 
+/** What the workbook says one plant costs and earns, and the rate to show riel with. */
+export type FinanceBasis = {
+  workbookPlants: number;
+  roverPerPlantUsd: number;
+  stdPerPlantUsd: number;
+  yieldKgPerPlant: number;
+  pricePerKg: number;
+  khrPerUsd: number;
+  rows: ComputedLedgerRow[];
+};
+
 export type CostCategoryLine = {
-  id: CostCategoryId;
+  id: string;
   label: string;
   unitLabel: string;
   estQtyLabel: string;
@@ -36,40 +56,21 @@ export type AlertRiskItem = {
   preventedRiel: number;
 };
 
-export type OptimizationLeverItem = {
-  id: string;
-  lever: string;
-  action: string;
-  impactUsd: number;
-  impactRiel: number;
-  impactNote: string;
-};
-
-export type RiskProtectionRow = {
-  id: string;
-  riskFactor: string;
-  statusText: string;
-  alertCount: number;
-  protectedUsd: number;
-  protectedRiel: number;
-  route: string;
-};
-
 export type BlockFinanceSummary = {
   zone: string;
-  cycleId: string;
+  cycleId: string | null;
   label: string;
-  variety: string;
+  variety: string | null;
   day: number;
-  stageTitle: string;
+  stageTitle: string | null;
   plantCount: number;
   areaM2: number;
   visionAlertCount: number;
   soilAttentionCount: number;
   waterTodayL: number;
-  waterCycleL: number;
-  waterFullCycleL: number;
-  waterSavedPct: number;
+  waterFullTodayL: number;
+  waterSavedPct: number | null;
+  waterPaused: boolean;
   costPerPlantUsd: number;
   costPerPlantRiel: number;
   spentToDateUsd: number;
@@ -81,6 +82,7 @@ export type BlockFinanceSummary = {
   savedTotalUsd: number;
   savedTotalRiel: number;
   expectedYieldKg: number;
+  pricePerKg: number;
   projectedRevenueUsd: number;
   projectedRevenueRiel: number;
   projectedProfitUsd: number;
@@ -93,7 +95,6 @@ export type FinanceScaleReport = {
   scale: FinanceScale;
   scopeTitle: string;
   plantCount: number;
-  waterCycleL: number;
   waterTodayL: number;
   lines: CostCategoryLine[];
   totalCostUsd: number;
@@ -117,160 +118,51 @@ export type FinanceScaleReport = {
   preventedLossUsd: number;
   preventedLossRiel: number;
   alerts: AlertRiskItem[];
-  levers: OptimizationLeverItem[];
-  riskLedger: RiskProtectionRow[];
 };
 
-export const KHR_PER_USD = 4085;
-export const BENCHMARK_FARM_PLANTS = 69;
-export const EXPECTED_KG_PER_PLANT = 4.5;
-export const PRICE_USD_PER_KG = 0.8;
-export const LITRES_PER_PLANT_CYCLE = 115;
+const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
 
-export const UNIT_REVENUE_USD = 3.6;
-export const UNIT_REVENUE_RIEL = 14700;
-export const UNIT_TOTAL_COST_USD = 0.82;
-export const UNIT_TOTAL_COST_RIEL = 3350;
-export const UNIT_TRAD_COST_USD = 1.15;
-export const UNIT_TRAD_COST_RIEL = 4700;
-export const UNIT_SAVED_USD = 0.33;
-export const UNIT_SAVED_RIEL = 1350;
-export const UNIT_PROFIT_USD = 2.78;
-export const UNIT_PROFIT_RIEL = 11350;
-
-type LedgerTemplate = {
-  id: CostCategoryId;
-  label: string;
-  unitLabel: string;
-  unitRateLabel: string;
-  stdQtyBase: number;
-  roverQtyBase: number;
-  qtyDecimals: number;
-  stdUsdBase: number;
-  roverUsdBase: number;
-  savedPct: number;
-  isFixed?: boolean;
-  note: string;
-};
-
-// 69-plant Tomato Cycle Accounting Ledger (sum Standard = $79.63, AgriRover = $56.58 / $0.82 per plant, Saved = $23.05)
-const FARM_LEDGER_TEMPLATES: LedgerTemplate[] = [
-  {
-    id: "water",
-    label: "Irrigation Water (m³)",
-    unitLabel: "m³",
-    unitRateLabel: "$0.55 / m³",
-    stdQtyBase: 11.0,
-    roverQtyBase: 7.94,
-    qtyDecimals: 2,
-    stdUsdBase: 6.05,
-    roverUsdBase: 4.37,
-    savedPct: 28,
-    note: "58–72% moisture-threshold precision drip (115 L/plant)",
-  },
-  {
-    id: "electricity",
-    label: "Electricity (Pump, Sensors & Rover)",
-    unitLabel: "kWh",
-    unitRateLabel: "$0.18 / kWh",
-    stdQtyBase: 38.0,
-    roverQtyBase: 26.5,
-    qtyDecimals: 1,
-    stdUsdBase: 6.84,
-    roverUsdBase: 4.77,
-    savedPct: 30,
-    note: "Shorter targeted drip pump runs & smart sensor sleep cycles",
-  },
-  {
-    id: "fertilizer",
-    label: "Fertilizers & Soil Amendments",
-    unitLabel: "kg",
-    unitRateLabel: "$1.15 / kg",
-    stdQtyBase: 14.5,
-    roverQtyBase: 11.2,
-    qtyDecimals: 1,
-    stdUsdBase: 16.68,
-    roverUsdBase: 12.88,
-    savedPct: 23,
-    note: "Mulder's balance skips heavy N where soil N ≥ 80 mg/kg",
-  },
-  {
-    id: "protection",
-    label: "Crop Protection & Bio-Treatments",
-    unitLabel: "L",
-    unitRateLabel: "$2.40 / L",
-    stdQtyBase: 4.2,
-    roverQtyBase: 2.6,
-    qtyDecimals: 1,
-    stdUsdBase: 10.08,
-    roverUsdBase: 6.24,
-    savedPct: 38,
-    note: "Spot-treats Health vision alerts rather than blanket spraying",
-  },
-  {
-    id: "substrate",
-    label: "Seedlings, Coco-Peat & Trellis Twine",
-    unitLabel: "plants",
-    unitRateLabel: "$0.22 / plant",
-    stdQtyBase: 69,
-    roverQtyBase: 69,
-    qtyDecimals: 0,
-    stdUsdBase: 15.18,
-    roverUsdBase: 15.18,
-    savedPct: 0,
-    isFixed: true,
-    note: "Fixed direct establishment input per transplanted tomato seedling",
-  },
-  {
-    id: "labor",
-    label: "Field Scouting & Application Labor",
-    unitLabel: "hrs",
-    unitRateLabel: "$1.55 / hr",
-    stdQtyBase: 16.0,
-    roverQtyBase: 8.5,
-    qtyDecimals: 1,
-    stdUsdBase: 24.8,
-    roverUsdBase: 13.14,
-    savedPct: 47,
-    note: "Autonomous 07:00 AM rover rounds replace daily manual bed walks",
-  },
-];
-
-/** Format USD alongside approximate Cambodian Riel (~X ៛). */
-export function usdAndRiel(usdVal: number, rielVal: number, digits = 2): string {
-  return `$${usdVal.toFixed(digits)} (~${Math.round(rielVal).toLocaleString()} ៛)`;
+/** USD in riel, rounded to 100 riel (to 10 below $5). */
+export function usdToRiel(usdVal: number, rate: number): number {
+  const raw = usdVal * rate;
+  return Math.abs(usdVal) >= 5 ? Math.round(raw / 100) * 100 : Math.round(raw / 10) * 10;
 }
 
-export function usdToRiel(usdVal: number): number {
-  return Math.round((usdVal * 4080) / 100) * 100;
+/** "$12.34 (~50,300 ៛)". */
+export function usdAndRiel(usdVal: number, rate: number, digits = 2): string {
+  return `$${usdVal.toFixed(digits)} (~${usdToRiel(usdVal, rate).toLocaleString()} ៛)`;
 }
 
-/** Each caught alert preserves ~1 fruiting tomato plant's harvest value ($3.60 / ~14,700 ៛ -> 7 alerts = $25.20 / ~102,900 ៛). */
-const PREVENTED_USD_PER_ALERT = UNIT_REVENUE_USD;
-const PREVENTED_RIEL_PER_ALERT = UNIT_REVENUE_RIEL;
-
-function formatQty(val: number, unit: string, decimals: number): string {
-  if (unit === "m³") {
-    const litres = Math.round(val * 1000).toLocaleString();
-    return `${val.toFixed(decimals)} m³ (${litres} L)`;
-  }
-  if (unit === "plants") {
-    const n = val === 1 ? "1 plant" : `${Math.round(val)} plants`;
-    return n;
-  }
-  return `${val.toFixed(decimals)} ${unit}`;
+/** The per-plant figures of the saved workbook. The rate is the farm's (Settings) when known. */
+export function financeBasis(wb: SpreadsheetInputs, khrPerUsd?: number | null): FinanceBasis {
+  const plants = Math.max(1, wb.plants);
+  const calc = evaluateSpreadsheet(wb);
+  return {
+    workbookPlants: plants,
+    roverPerPlantUsd: calc.totalRoverCostUsd / plants,
+    stdPerPlantUsd: calc.totalStdCostUsd / plants,
+    yieldKgPerPlant: wb.yieldKgPerPlant,
+    pricePerKg: wb.sellingPricePerKg,
+    khrPerUsd: khrPerUsd || wb.exchangeRate,
+    rows: calc.rows,
+  };
 }
 
 export function buildAllBlockEconomics(input: {
   cycles: Cycle[];
-  zones: { zone: string; label: string | null; areaM2?: number | null }[];
+  zones: Pick<ZoneNow, "zone" | "label" | "areaM2" | "soilProfile">[];
   conditions: BedConditions[];
   roundsByZone: Map<string, RoundDetail | undefined>;
+  basis: FinanceBasis;
+  advice?: Advice[];
   savedPhotos?: SavedPhoto[];
+  spentByCycle?: Map<string, number>;
 }): { blocks: BlockFinanceSummary[]; allRows: PlantSoilRow[] } {
-  const { cycles, zones, conditions, roundsByZone, savedPhotos = [] } = input;
+  const { cycles, zones, conditions, roundsByZone, basis, advice = [], savedPhotos = [], spentByCycle } = input;
   const cycleByZone = new Map(cycles.filter((c) => c.status === "active").map((c) => [c.zone, c]));
   const condByZone = new Map(conditions.map((c) => [c.zone, c]));
+  const adviceByZone = new Map(advice.map((a) => [a.zone, a]));
+  const rate = basis.khrPerUsd;
 
   const blocks: BlockFinanceSummary[] = [];
   const allRows: PlantSoilRow[] = [];
@@ -279,6 +171,7 @@ export function buildAllBlockEconomics(input: {
     const cycle = cycleByZone.get(z.zone);
     const round = roundsByZone.get(z.zone);
     const cond = condByZone.get(z.zone);
+    const adv = adviceByZone.get(z.zone);
     const rows =
       round?.rows && round?.cols
         ? buildBlockSoilRows({
@@ -287,372 +180,187 @@ export function buildAllBlockEconomics(input: {
             cols: round.cols,
             cells: round.cells,
             conditions: cond,
+            advice: adv,
             photos: savedPhotos,
-            profile: getBlockSoilProfile(z.zone),
+            profile: z.soilProfile ?? defaultBlockSoilProfile(z.zone),
             capturedAt: round.finishedAt ?? round.startedAt,
           })
         : [];
     allRows.push(...rows);
 
-    const activePlants = rows.length > 0 ? rows.filter((r) => r.plant).length : (cycle?.plantCount ?? 0);
-    const visionAlerts = rows.filter((r) => r.vision.status === "alert").length;
-    const soilAttention = rows.filter((r) => r.status === "attention").length;
-    const waterTodayL = Math.round(rows.reduce((s, r) => s + (r.waterLitres ?? 0), 0));
+    const plants = cycle ? cycle.plantCount ?? rows.filter((r) => r.plant).length : 0;
+    const visionAlerts = cycle ? rows.filter((r) => r.vision.status === "alert").length : 0;
+    const soilAttention = cycle ? rows.filter((r) => r.status === "attention").length : 0;
+    const waterTodayL = adv ? adv.water.litres : 0;
+    const waterFullTodayL = adv ? adv.water.fullLitres : 0;
+    const price = cycle?.expectedPriceUsdPerKg ?? basis.pricePerKg;
 
-    const waterCycleL = activePlants * LITRES_PER_PLANT_CYCLE;
-    const waterFullCycleL = Math.round(waterCycleL / 0.72);
-    const budgetUsd = Number((activePlants * UNIT_TOTAL_COST_USD).toFixed(2));
-    const budgetRiel = activePlants * UNIT_TOTAL_COST_RIEL;
-    const progress = cycle?.day ? Math.min(1, Math.max(0.35, cycle.day / 110)) : 0;
-    const spentToDateUsd = Number((budgetUsd * progress).toFixed(2));
-    const spentToDateRiel = Math.round((budgetRiel * progress) / 100) * 100;
-    const traditionalTotalUsd = Number(((activePlants / BENCHMARK_FARM_PLANTS) * 79.63).toFixed(2));
-    const savedTotalUsd = Number(Math.max(0, traditionalTotalUsd - budgetUsd).toFixed(2));
-    const savedTotalRiel = usdToRiel(savedTotalUsd);
-    const traditionalTotalRiel = budgetRiel + savedTotalRiel;
-    const expectedYieldKg = Number((activePlants * EXPECTED_KG_PER_PLANT).toFixed(1));
-    const projectedRevenueUsd = Number((activePlants * UNIT_REVENUE_USD).toFixed(2));
-    const projectedRevenueRiel = activePlants * UNIT_REVENUE_RIEL;
-    const projectedProfitUsd = Number((projectedRevenueUsd - budgetUsd).toFixed(2));
-    const projectedProfitRiel = projectedRevenueRiel - budgetRiel;
-    const preventedLossUsd = Number((visionAlerts * PREVENTED_USD_PER_ALERT).toFixed(2));
-    const preventedLossRiel = visionAlerts * PREVENTED_RIEL_PER_ALERT;
+    const budgetUsd = r2(plants * basis.roverPerPlantUsd);
+    const traditionalTotalUsd = r2(plants * basis.stdPerPlantUsd);
+    const savedTotalUsd = r2(Math.max(0, traditionalTotalUsd - budgetUsd));
+    const spentToDateUsd = cycle ? r2(spentByCycle?.get(cycle.id) ?? 0) : 0;
+    const expectedYieldKg = Number((plants * basis.yieldKgPerPlant).toFixed(1));
+    const projectedRevenueUsd = r2(expectedYieldKg * price);
+    const projectedProfitUsd = r2(projectedRevenueUsd - budgetUsd);
+    const preventedLossUsd = r2(visionAlerts * basis.yieldKgPerPlant * price);
 
     blocks.push({
       zone: z.zone,
-      cycleId: cycle?.id ?? `demo-cycle-${z.zone}`,
+      cycleId: cycle?.id ?? null,
       label: z.label ?? cycle?.bedLabel ?? z.zone.toUpperCase(),
-      variety: cycle?.variety ?? "Tomato (ready)",
+      variety: cycle?.variety ?? null,
       day: cycle?.day ?? 0,
-      stageTitle: cycle?.stageTitle ?? "Prepared / Awaiting planting",
-      plantCount: activePlants,
+      stageTitle: cycle?.stageTitle ?? null,
+      plantCount: plants,
       areaM2: z.areaM2 ?? cycle?.areaM2 ?? 0,
       visionAlertCount: visionAlerts,
       soilAttentionCount: soilAttention,
       waterTodayL,
-      waterCycleL,
-      waterFullCycleL,
-      waterSavedPct: 28,
-      costPerPlantUsd: UNIT_TOTAL_COST_USD,
-      costPerPlantRiel: UNIT_TOTAL_COST_RIEL,
+      waterFullTodayL,
+      waterSavedPct: adv && adv.water.fullLitres > 0 ? Math.round((adv.water.savedLitres / adv.water.fullLitres) * 100) : null,
+      waterPaused: Boolean(adv?.water.paused),
+      costPerPlantUsd: r2(basis.roverPerPlantUsd),
+      costPerPlantRiel: usdToRiel(basis.roverPerPlantUsd, rate),
       spentToDateUsd,
-      spentToDateRiel,
+      spentToDateRiel: usdToRiel(spentToDateUsd, rate),
       budgetUsd,
-      budgetRiel,
+      budgetRiel: usdToRiel(budgetUsd, rate),
       traditionalTotalUsd,
-      traditionalTotalRiel,
+      traditionalTotalRiel: usdToRiel(traditionalTotalUsd, rate),
       savedTotalUsd,
-      savedTotalRiel,
+      savedTotalRiel: usdToRiel(savedTotalUsd, rate),
       expectedYieldKg,
+      pricePerKg: price,
       projectedRevenueUsd,
-      projectedRevenueRiel,
+      projectedRevenueRiel: usdToRiel(projectedRevenueUsd, rate),
       projectedProfitUsd,
-      projectedProfitRiel,
+      projectedProfitRiel: usdToRiel(projectedProfitUsd, rate),
       preventedLossUsd,
-      preventedLossRiel,
+      preventedLossRiel: usdToRiel(preventedLossUsd, rate),
     });
   }
 
   return { blocks, allRows };
 }
 
-function buildScaledLedgerLines(plantCount: number, targetRoverTotal: number, targetStdTotal: number): CostCategoryLine[] {
-  const ratio = plantCount / BENCHMARK_FARM_PLANTS;
-  const raw = FARM_LEDGER_TEMPLATES.map((tpl) => {
-    const roverUsd = Number((tpl.roverUsdBase * ratio).toFixed(2));
-    const traditionalUsd = tpl.isFixed ? roverUsd : Number((tpl.stdUsdBase * ratio).toFixed(2));
-    const stdQty = tpl.stdQtyBase * ratio;
-    const roverQty = tpl.roverQtyBase * ratio;
-    return { tpl, roverUsd, traditionalUsd, stdQty, roverQty };
-  });
+function qtyLabel(val: number, unit: string, decimals: number): string {
+  if (unit === "plants") return `${Math.round(val)} plant${Math.round(val) === 1 ? "" : "s"}`;
+  if (unit === "m³") return `${val.toFixed(decimals)} m³ (${Math.round(val * 1000).toLocaleString()} L)`;
+  return `${val.toFixed(decimals)} ${unit}`;
+}
 
-  // Reconcile any 1-cent scaling residual on labor so column sums match COGS footer to the cent
-  const roverSum = Number(raw.reduce((s, x) => s + x.roverUsd, 0).toFixed(2));
-  const stdSum = Number(raw.reduce((s, x) => s + x.traditionalUsd, 0).toFixed(2));
-  const last = raw[raw.length - 1];
-  if (last && plantCount > 0) {
-    last.roverUsd = Number((last.roverUsd + (targetRoverTotal - roverSum)).toFixed(2));
-    last.traditionalUsd = Number((last.traditionalUsd + (targetStdTotal - stdSum)).toFixed(2));
-  }
-
-  return raw.map(({ tpl, roverUsd, traditionalUsd, stdQty, roverQty }) => {
-    const savedUsd = Number(Math.max(0, traditionalUsd - roverUsd).toFixed(2));
-    const perPlantUsd = plantCount > 0 ? Number((roverUsd / plantCount).toFixed(3)) : Number((tpl.roverUsdBase / BENCHMARK_FARM_PLANTS).toFixed(3));
-    const roverRiel = plantCount === 1 ? Math.round((roverUsd * KHR_PER_USD) / 5) * 5 : usdToRiel(roverUsd);
-    const traditionalRiel =
-      plantCount === 1 ? Math.round((traditionalUsd * KHR_PER_USD) / 5) * 5 : usdToRiel(traditionalUsd);
-    const savedRiel = Math.max(0, traditionalRiel - roverRiel);
-    const qtyDec = plantCount === 1 && tpl.qtyDecimals > 0 ? Math.min(3, tpl.qtyDecimals + 1) : tpl.qtyDecimals;
-
-    const estQtyLabel =
-      tpl.id === "water"
-        ? `${roverQty.toFixed(qtyDec)} m³ (${Math.round(plantCount * LITRES_PER_PLANT_CYCLE).toLocaleString()} L)`
-        : formatQty(roverQty, tpl.unitLabel, qtyDec);
-
+/** The workbook's ledger, scaled from its own plant count to `plantCount`. */
+function scaledLines(basis: FinanceBasis, plantCount: number): CostCategoryLine[] {
+  const ratio = plantCount / basis.workbookPlants;
+  const rate = basis.khrPerUsd;
+  return basis.rows.map((row) => {
+    const roverUsd = r2(row.roverCostUsd * ratio);
+    const traditionalUsd = r2(row.stdCostUsd * ratio);
+    const savedUsd = r2(Math.max(0, traditionalUsd - roverUsd));
+    const dec = plantCount === 1 && row.qtyDecimals > 0 ? Math.min(3, row.qtyDecimals + 1) : row.qtyDecimals;
+    const isFixed = row.roverQty === row.stdQty;
     return {
-      id: tpl.id,
-      label: tpl.label,
-      unitLabel: tpl.unitLabel,
-      estQtyLabel,
-      stdQtyLabel: tpl.isFixed ? "Fixed direct input" : `Std: ${formatQty(stdQty, tpl.unitLabel, qtyDec)}`,
-      unitRateLabel: tpl.unitRateLabel,
+      id: row.id,
+      label: row.label,
+      unitLabel: row.unit,
+      estQtyLabel: qtyLabel(row.roverQty * ratio, row.unit, dec),
+      stdQtyLabel: isFixed ? "Same in both" : `Std: ${qtyLabel(row.stdQty * ratio, row.unit, dec)}`,
+      unitRateLabel: `$${row.unitRateUsd.toFixed(row.rateDecimals)} / ${row.unit === "plants" ? "plant" : row.unit}`,
       roverUsd,
-      roverRiel,
-      perPlantUsd,
+      roverRiel: usdToRiel(roverUsd, rate),
+      perPlantUsd: Number((row.roverCostUsd / basis.workbookPlants).toFixed(3)),
       traditionalUsd,
-      traditionalRiel,
+      traditionalRiel: usdToRiel(traditionalUsd, rate),
       savedUsd,
-      savedRiel,
-      savedPct: tpl.savedPct,
-      isFixed: tpl.isFixed,
-      note: tpl.note,
+      savedRiel: usdToRiel(savedUsd, rate),
+      savedPct: row.stdCostUsd > 0 ? Math.round(((row.stdCostUsd - row.roverCostUsd) / row.stdCostUsd) * 100) : 0,
+      isFixed,
+      note: row.note,
     };
   });
 }
 
-function buildRiskProtectionLedger(scale: FinanceScale, alerts: AlertRiskItem[]): RiskProtectionRow[] {
-  if (scale === "plant") {
-    return [
-      {
-        id: "plant-early-care",
-        riskFactor: "Early Stress Detection Value",
-        statusText: "Protecting 1 fruiting tomato plant (~4.5 kg cycle yield)",
-        alertCount: 1,
-        protectedUsd: UNIT_REVENUE_USD,
-        protectedRiel: UNIT_REVENUE_RIEL,
-        route: "/crop",
-      },
-    ];
-  }
-
-  if (alerts.length === 0) {
-    return [
-      {
-        id: "healthy-block",
-        riskFactor: "Canopy & Root Health Status",
-        statusText: "0 active alerts — automated rover rounds monitoring daily",
-        alertCount: 0,
-        protectedUsd: 0,
-        protectedRiel: 0,
-        route: "/crop",
-      },
-    ];
-  }
-
-  const blight = alerts.filter((a) => /blight/i.test(a.condition));
-  const curl = alerts.filter((a) => /curl/i.test(a.condition));
-  const nutritionAndPest = alerts.filter((a) => !/blight|curl/i.test(a.condition));
-
-  const formatLocs = (items: AlertRiskItem[]) =>
-    items.map((i) => `${i.zone.toUpperCase()} ${i.plantName}`).join(", ");
-
-  const rows: RiskProtectionRow[] = [];
-  if (blight.length > 0) {
-    rows.push({
-      id: "early-blight",
-      riskFactor: "Early Blight (fungal risk)",
-      statusText: `${blight.length} plant${blight.length === 1 ? "" : "s"} flagged early (${formatLocs(blight)})`,
-      alertCount: blight.length,
-      protectedUsd: Number((blight.length * PREVENTED_USD_PER_ALERT).toFixed(2)),
-      protectedRiel: blight.length * PREVENTED_RIEL_PER_ALERT,
-      route: "/crop?tab=guide#early-blight",
-    });
-  }
-  if (nutritionAndPest.length > 0) {
-    rows.push({
-      id: "nutrition-pest",
-      riskFactor: "Nutrient, Calcium & Pest Stress",
-      statusText: `${nutritionAndPest.length} plant${nutritionAndPest.length === 1 ? "" : "s"} caught (${formatLocs(nutritionAndPest)})`,
-      alertCount: nutritionAndPest.length,
-      protectedUsd: Number((nutritionAndPest.length * PREVENTED_USD_PER_ALERT).toFixed(2)),
-      protectedRiel: nutritionAndPest.length * PREVENTED_RIEL_PER_ALERT,
-      route: "/crop?tab=guide#yellow-leaves",
-    });
-  }
-  if (curl.length > 0) {
-    rows.push({
-      id: "leaf-curl",
-      riskFactor: "Leaf Curl / Moisture Stress",
-      statusText: `${curl.length} plant${curl.length === 1 ? "" : "s"} mitigated (${formatLocs(curl)})`,
-      alertCount: curl.length,
-      protectedUsd: Number((curl.length * PREVENTED_USD_PER_ALERT).toFixed(2)),
-      protectedRiel: curl.length * PREVENTED_RIEL_PER_ALERT,
-      route: "/crop?tab=guide#leaf-curl",
-    });
-  }
-  return rows;
-}
-
 export function computeFinanceView(input: {
   scale: FinanceScale;
-  selectedZone: string;
+  selectedZone: string | null;
   blocks: BlockFinanceSummary[];
   allRows: PlantSoilRow[];
+  basis: FinanceBasis;
 }): FinanceScaleReport {
-  const { scale, selectedZone, blocks, allRows } = input;
+  const { scale, selectedZone, blocks, allRows, basis } = input;
+  const rate = basis.khrPerUsd;
   const activeBlocks = blocks.filter((b) => b.plantCount > 0);
-  const chosenBlock = blocks.find((b) => b.zone === selectedZone) ?? activeBlocks[0] ?? blocks[0];
+  const chosen = blocks.find((b) => b.zone === selectedZone) ?? activeBlocks[0] ?? blocks[0];
 
   const plantCount =
-    scale === "plant"
-      ? 1
-      : scale === "block"
-        ? chosenBlock?.plantCount ?? 0
-        : activeBlocks.reduce((s, b) => s + b.plantCount, 0);
-
+    scale === "plant" ? 1 : scale === "block" ? chosen?.plantCount ?? 0 : activeBlocks.reduce((s, b) => s + b.plantCount, 0);
   const scopeTitle =
     scale === "plant"
-      ? "1 Tomato Plant (Precision Unit Baseline)"
+      ? "One tomato plant"
       : scale === "block"
-        ? `${chosenBlock?.label ?? selectedZone} (${plantCount} active plants)`
-        : `Whole Farm · G1–G6 (${plantCount} active tomato plants)`;
+        ? `${chosen?.label ?? selectedZone} (${plantCount} plants)`
+        : `Whole farm (${plantCount} plants)`;
 
-  const scopedAlerts =
-    scale === "block"
-      ? allRows.filter((r) => r.zone === chosenBlock?.zone && r.vision.status === "alert")
-      : allRows.filter((r) => r.vision.status === "alert");
+  const inScope = (zone: string) => (scale === "block" ? zone === chosen?.zone : activeBlocks.some((b) => b.zone === zone));
+  const blockLabel = new Map(blocks.map((b) => [b.zone, b.label]));
+  const priceOf = new Map(blocks.map((b) => [b.zone, b.pricePerKg]));
+  const alerts: AlertRiskItem[] = scale === "plant"
+    ? []
+    : allRows
+        .filter((r) => r.vision.status === "alert" && inScope(r.zone))
+        .map((r) => {
+          const usd = r2(basis.yieldKgPerPlant * (priceOf.get(r.zone) ?? basis.pricePerKg));
+          return {
+            zone: r.zone,
+            blockLabel: blockLabel.get(r.zone) ?? r.zone.toUpperCase(),
+            plantName: r.name,
+            condition: r.vision.condition,
+            severity: r.vision.severity ?? "Moderate",
+            preventedUsd: usd,
+            preventedRiel: usdToRiel(usd, rate),
+          };
+        });
 
-  const blockNameMap = new Map(blocks.map((b) => [b.zone, b.label]));
-  const alerts: AlertRiskItem[] = scopedAlerts.map((r) => ({
-    zone: r.zone,
-    blockLabel: blockNameMap.get(r.zone) ?? r.zone.toUpperCase(),
-    plantName: r.name,
-    condition: r.vision.condition,
-    severity: r.vision.severity ?? "Moderate",
-    preventedUsd: UNIT_REVENUE_USD,
-    preventedRiel: UNIT_REVENUE_RIEL,
-  }));
-
-  const visionAlertCount = alerts.length;
-  const totalCostUsd = Number((UNIT_TOTAL_COST_USD * plantCount).toFixed(2));
-  const traditionalCostUsd =
-    plantCount === 1
-      ? UNIT_TRAD_COST_USD
-      : plantCount === BENCHMARK_FARM_PLANTS
-        ? 79.63
-        : Number(((plantCount / BENCHMARK_FARM_PLANTS) * 79.63).toFixed(2));
-  const totalSavedUsd = Number(Math.max(0, traditionalCostUsd - totalCostUsd).toFixed(2));
+  const lines = scaledLines(basis, plantCount);
+  const totalCostUsd = r2(lines.reduce((s, l) => s + l.roverUsd, 0));
+  const traditionalCostUsd = r2(lines.reduce((s, l) => s + l.traditionalUsd, 0));
+  const totalSavedUsd = r2(Math.max(0, traditionalCostUsd - totalCostUsd));
   const savedPct = traditionalCostUsd > 0 ? Math.round((totalSavedUsd / traditionalCostUsd) * 100) : 0;
 
-  const lines = buildScaledLedgerLines(plantCount, totalCostUsd, traditionalCostUsd);
-
-  const expectedYieldKg = Number((EXPECTED_KG_PER_PLANT * plantCount).toFixed(1));
-  const projectedRevenueUsd = Number((UNIT_REVENUE_USD * plantCount).toFixed(2));
-  const projectedProfitUsd = Number((projectedRevenueUsd - totalCostUsd).toFixed(2));
+  const expectedYieldKg = Number((basis.yieldKgPerPlant * plantCount).toFixed(1));
+  const projectedRevenueUsd = r2(expectedYieldKg * basis.pricePerKg);
+  const projectedProfitUsd = r2(projectedRevenueUsd - totalCostUsd);
   const netMarginPct = projectedRevenueUsd > 0 ? Number(((projectedProfitUsd / projectedRevenueUsd) * 100).toFixed(1)) : 0;
-
-  const projectedRevenueRiel = scale === "plant" ? UNIT_REVENUE_RIEL : usdToRiel(projectedRevenueUsd);
-  const projectedProfitRiel = scale === "plant" ? UNIT_PROFIT_RIEL : usdToRiel(projectedProfitUsd);
-  const totalCostRiel = scale === "plant" ? UNIT_TOTAL_COST_RIEL : Math.max(0, projectedRevenueRiel - projectedProfitRiel);
-  const totalSavedRiel = scale === "plant" ? UNIT_SAVED_RIEL : usdToRiel(totalSavedUsd);
-  const traditionalCostRiel = scale === "plant" ? UNIT_TRAD_COST_RIEL : totalCostRiel + totalSavedRiel;
-
-  const costPerPlantUsd = plantCount > 0 ? Number((totalCostUsd / plantCount).toFixed(2)) : UNIT_TOTAL_COST_USD;
-  const costPerPlantRiel = UNIT_TOTAL_COST_RIEL;
-  const tradPerPlantUsd = UNIT_TRAD_COST_USD;
-  const marginGainPerPlantUsd = UNIT_SAVED_USD;
-
+  const preventedLossUsd = r2(alerts.reduce((s, a) => s + a.preventedUsd, 0));
   const waterTodayL =
-    scale === "plant"
-      ? 2.2
-      : scale === "block"
-        ? chosenBlock?.waterTodayL ?? 0
-        : activeBlocks.reduce((s, b) => s + b.waterTodayL, 0);
-
-  const waterCycleL = LITRES_PER_PLANT_CYCLE * plantCount;
-
-  const preventedLossUsd =
-    scale === "plant" ? UNIT_REVENUE_USD : Number((visionAlertCount * PREVENTED_USD_PER_ALERT).toFixed(2));
-  const preventedLossRiel =
-    scale === "plant" ? UNIT_REVENUE_RIEL : visionAlertCount * PREVENTED_RIEL_PER_ALERT;
-
-  // Optimization lever financial impacts tie out cleanly to Water+Electricity, Fertilizer, and Crop Protection+Labor savings
-  const waterLine = lines.find((l) => l.id === "water");
-  const elecLine = lines.find((l) => l.id === "electricity");
-  const fertLine = lines.find((l) => l.id === "fertilizer");
-  const protLine = lines.find((l) => l.id === "protection");
-  const laborLine = lines.find((l) => l.id === "labor");
-
-  const irrSavedUsd = Number(((waterLine?.savedUsd ?? 0) + (elecLine?.savedUsd ?? 0)).toFixed(2));
-  const irrSavedRiel = (waterLine?.savedRiel ?? 0) + (elecLine?.savedRiel ?? 0);
-  const fertSavedUsd = Number((fertLine?.savedUsd ?? 0).toFixed(2));
-  const fertSavedRiel = fertLine?.savedRiel ?? 0;
-  const spotSavedUsd = Number(((protLine?.savedUsd ?? 0) + (laborLine?.savedUsd ?? 0)).toFixed(2));
-  const spotSavedRiel = (protLine?.savedRiel ?? 0) + (laborLine?.savedRiel ?? 0);
-
-  const highNRows = (scale === "block" ? allRows.filter((r) => r.zone === chosenBlock?.zone) : allRows).filter(
-    (r) => r.readings.n !== null && r.readings.n >= 80,
-  ).length;
-
-  const levers: OptimizationLeverItem[] = [
-    {
-      id: "precision-irrigation",
-      lever: "Precision Irrigation",
-      action:
-        plantCount === 0
-          ? "Ready for drip schedule once transplanted"
-          : `Delivers ~${LITRES_PER_PLANT_CYCLE} L/plant via 58–72% moisture probes`,
-      impactUsd: irrSavedUsd,
-      impactRiel: irrSavedRiel,
-      impactNote: `Water $${(waterLine?.savedUsd ?? 0).toFixed(2)} + pump $${(elecLine?.savedUsd ?? 0).toFixed(2)}`,
-    },
-    {
-      id: "mulder-guard",
-      lever: "Mulder Lockout Guard",
-      action:
-        highNRows > 0
-          ? `Skips Urea on ${highNRows} high-N reads; protects Ca/K uptake`
-          : "Balances N-K-Ca feed using live soil probe readings",
-      impactUsd: fertSavedUsd,
-      impactRiel: fertSavedRiel,
-      impactNote: `+8% marketable yield protected`,
-    },
-    {
-      id: "vision-spot-care",
-      lever: "Vision Spot-Care",
-      action:
-        scale === "plant"
-          ? "Treats stress only when AI vision flags early lesions"
-          : `Spot-treats ${visionAlertCount} flagged plant${visionAlertCount === 1 ? "" : "s"} vs. blanket spray`,
-      impactUsd: spotSavedUsd,
-      impactRiel: spotSavedRiel,
-      impactNote: `Inputs $${(protLine?.savedUsd ?? 0).toFixed(2)} + labor $${(laborLine?.savedUsd ?? 0).toFixed(2)}`,
-    },
-  ];
-
-  const riskLedger = buildRiskProtectionLedger(scale, alerts);
-
-  void targetsFromConditions;
+    scale === "plant" ? 0 : scale === "block" ? chosen?.waterTodayL ?? 0 : activeBlocks.reduce((s, b) => s + b.waterTodayL, 0);
 
   return {
     scale,
     scopeTitle,
     plantCount,
-    waterCycleL,
     waterTodayL,
     lines,
     totalCostUsd,
-    totalCostRiel,
-    costPerPlantUsd,
-    costPerPlantRiel,
+    totalCostRiel: usdToRiel(totalCostUsd, rate),
+    costPerPlantUsd: plantCount > 0 ? r2(totalCostUsd / plantCount) : r2(basis.roverPerPlantUsd),
+    costPerPlantRiel: usdToRiel(basis.roverPerPlantUsd, rate),
     traditionalCostUsd,
-    traditionalCostRiel,
-    tradPerPlantUsd,
+    traditionalCostRiel: usdToRiel(traditionalCostUsd, rate),
+    tradPerPlantUsd: r2(basis.stdPerPlantUsd),
     totalSavedUsd,
-    totalSavedRiel,
+    totalSavedRiel: usdToRiel(totalSavedUsd, rate),
     savedPct,
     expectedYieldKg,
     projectedRevenueUsd,
-    projectedRevenueRiel,
+    projectedRevenueRiel: usdToRiel(projectedRevenueUsd, rate),
     projectedProfitUsd,
-    projectedProfitRiel,
+    projectedProfitRiel: usdToRiel(projectedProfitUsd, rate),
     netMarginPct,
-    marginGainPerPlantUsd,
-    visionAlertCount,
+    marginGainPerPlantUsd: r2(basis.stdPerPlantUsd - basis.roverPerPlantUsd),
+    visionAlertCount: alerts.length,
     preventedLossUsd,
-    preventedLossRiel,
+    preventedLossRiel: usdToRiel(preventedLossUsd, rate),
     alerts,
-    levers,
-    riskLedger,
   };
 }

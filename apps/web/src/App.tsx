@@ -1,32 +1,49 @@
-import { useEffect, type ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { lazy, useEffect, type ReactNode } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Section from "./components/Section";
-import Shell from "./components/Shell";
+import Shell, { SECTIONS, sectionOf } from "./components/Shell";
 import { BRAND } from "./lib/brand";
-import CopSummary from "./pages/CopSummary";
-import Crop from "./pages/Crop";
-import CycleCop from "./pages/CycleCop";
-import Cycles from "./pages/Cycles";
-import Dashboard from "./pages/Dashboard";
-import Devices from "./pages/Devices";
-import Equipment from "./pages/Equipment";
-import Finance from "./pages/Finance";
-import Harvest from "./pages/Harvest";
-import OrchardCycle from "./pages/OrchardCycle";
-import Plan from "./pages/Plan";
-import Rover from "./pages/Rover";
-import RoverHistory from "./pages/RoverHistory";
-import Settings from "./pages/Settings";
-import Stock from "./pages/Stock";
-import Beds from "./pages/Beds";
+
+// Each page loads when it is first opened, so the first screen does not wait for the 3D views and charts.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Plan = lazy(() => import("./pages/Plan"));
+const Rover = lazy(() => import("./pages/Rover"));
+const RoverHistory = lazy(() => import("./pages/RoverHistory"));
+const Cycles = lazy(() => import("./pages/Cycles"));
+const CycleCop = lazy(() => import("./pages/CycleCop"));
+const OrchardCycle = lazy(() => import("./pages/OrchardCycle"));
+const Finance = lazy(() => import("./pages/Finance"));
+const Costs = lazy(() => import("./pages/Costs"));
+const CopSummary = lazy(() => import("./pages/CopSummary"));
+const Harvest = lazy(() => import("./pages/Harvest"));
+const Compare = lazy(() => import("./pages/Compare"));
+const Stock = lazy(() => import("./pages/Stock"));
+const Equipment = lazy(() => import("./pages/Equipment"));
+const Beds = lazy(() => import("./pages/Beds"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Devices = lazy(() => import("./pages/Devices"));
+const Crop = lazy(() => import("./pages/Crop"));
+const Photos = lazy(() => import("./pages/Photos"));
+const LeafTests = lazy(() => import("./pages/LeafTests"));
 
 const rover = (page: ReactNode) => <Section id="rover">{page}</Section>;
 const health = (page: ReactNode) => <Section id="health">{page}</Section>;
 const finance = (page: ReactNode) => <Section id="finance">{page}</Section>;
 const farm = (page: ReactNode) => <Section id="farm">{page}</Section>;
 
+/** The browser tab says where you are: "Cost ledger · Finance · AgriRover". */
+function useTitle() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const key = sectionOf(pathname);
+    const tab = (SECTIONS[key].tabs as readonly { to: string; label: string }[]).find((t) => t.to === pathname);
+    const parts = [tab && tab.label !== SECTIONS[key].label ? tab.label : null, SECTIONS[key].label, BRAND.name].filter(Boolean);
+    document.title = parts.join(" · ");
+  }, [pathname]);
+}
+
 export default function App() {
-  useEffect(() => { document.title = BRAND.name; }, []);
+  useTitle();
   return (
     <Shell>
       <Routes>
@@ -40,10 +57,10 @@ export default function App() {
         <Route path="/cycles/:id/orchard" element={<OrchardCycle />} />
         <Route path="/cycles/:id/tomato" element={<OrchardCycle />} />
         <Route path="/finance" element={finance(<Finance />)} />
-        <Route path="/costs" element={<Navigate to="/finance" replace />} />
+        <Route path="/costs" element={finance(<Costs />)} />
         <Route path="/harvest" element={finance(<Harvest />)} />
         <Route path="/cop" element={finance(<CopSummary />)} />
-        <Route path="/compare" element={<Navigate to="/cop" replace />} />
+        <Route path="/compare" element={finance(<Compare />)} />
         <Route path="/stock" element={farm(<Stock />)} />
         <Route path="/equipment" element={farm(<Equipment />)} />
         <Route path="/beds" element={farm(<Beds />)} />
@@ -51,8 +68,8 @@ export default function App() {
         <Route path="/devices" element={farm(<Devices />)} />
         <Route path="/crop" element={health(<Crop initialTab="gallery" />)} />
         <Route path="/guide" element={health(<Crop initialTab="guide" />)} />
-        <Route path="/leaf-tests" element={<Navigate to="/crop" replace />} />
-        <Route path="/photos" element={<Navigate to="/crop" replace />} />
+        <Route path="/photos" element={health(<Photos />)} />
+        <Route path="/leaf-tests" element={health(<LeafTests />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>

@@ -25,6 +25,16 @@ TOPIC_MISSION_RESULT = "devices/+/mission/result"
 TOPIC_ROVER_STATUS = "devices/+/status"
 
 
+class BrokerState:
+    """Whether the server is connected to the farm broker right now. Read by GET /status."""
+    connected = False
+    since: str | None = None
+    last_error: str | None = None
+
+
+broker = BrokerState()
+
+
 def _valid(payload: dict) -> bool:
     if not isinstance(payload, dict) or "metric" not in payload or "value" not in payload:
         return False
@@ -37,6 +47,22 @@ def _valid(payload: dict) -> bool:
 def extract_readings(payload: object) -> list[dict]:
     items = payload["measurements"] if isinstance(payload, dict) and isinstance(payload.get("measurements"), list) else [payload]
     return [m for m in items if _valid(m)]
+
+
+async def touch_device(db: Any, farm_name: str, *, code: str | None = None, zone: str | None = None,
+                       kind: str | None = None, firmware: str | None = None) -> None:
+    """A device spoke: remember when. Found by its code, or by the zone its field node serves."""
+    query: dict = {"farmName": farm_name}
+    if code:
+        query["code"] = code
+    elif zone and kind:
+        query.update({"zone": zone, "kind": kind})
+    else:
+        return
+    update: dict = {"lastSeenAt": datetime.now(timezone.utc).isoformat()}
+    if firmware:
+        update["firmwareVersion"] = firmware
+    await db.devices.update_one(query, {"$set": update})
 
 
 async def store_telemetry(db: Any, topic: str, payload: object, now: datetime | None = None) -> int:
@@ -66,7 +92,30 @@ async def store_telemetry(db: Any, topic: str, payload: object, now: datetime | 
         })
     if docs:
         await db.telemetry.insert_many(docs)
+        device = payload.get("device")
+        await touch_device(db, farm_name, code=str(device) if device else None, zone=zone_name, kind="field_node",
+                           firmware=payload.get("firmware"))
     return len(docs)
+
+
+async def handle_message(db: Any, topic: str, payload: object) -> None:
+    """One MQTT message. Separate from the loop so tests can drive it without a broker."""
+    if topic.endswith("/telemetry"):
+        await store_telemetry(db, topic, payload)
+    elif topic.endswith("/status") and isinstance(payload, dict):
+        live.status = str(payload.get("status", "unknown"))
+        if "estop" in payload:
+            live.estop = bool(payload["estop"])
+        live.heard()
+        code = str(payload.get("device") or live.code)
+        if live.status == "online":
+            await touch_device(db, settings.farm_name, code=code)
+    elif topic.endswith("/mission/state") and isinstance(payload, dict):
+        live.update_mission(payload)
+    elif topic.endswith("/mission/result") and isinstance(payload, dict) and payload.get("zoneId"):
+        await store_survey_report(db, settings.farm_name, payload)
+        live.add_result_cells(payload)
+        await touch_device(db, settings.farm_name, code=str(payload.get("device") or live.code))
 
 
 async def _mqtt_loop() -> None:
@@ -80,27 +129,25 @@ async def _mqtt_loop() -> None:
             ) as client:
                 for topic in (TOPIC_TELEMETRY, TOPIC_MISSION_STATE, TOPIC_MISSION_RESULT, TOPIC_ROVER_STATUS):
                     await client.subscribe(topic)
+                broker.connected, broker.since, broker.last_error = True, datetime.now(timezone.utc).isoformat(), None
+                log.info("connected to the farm broker at %s:%s", settings.mqtt_host, settings.mqtt_port)
                 db = get_database()
                 async for msg in client.messages:
-                    topic = str(msg.topic)
                     try:
                         payload = json.loads(msg.payload.decode())
                     except Exception:
                         continue
-                    if topic.endswith("/telemetry"):
-                        await store_telemetry(db, topic, payload)
-                    elif topic.endswith("/status") and isinstance(payload, dict):
-                        live.status = str(payload.get("status", "unknown"))
-                    elif topic.endswith("/mission/state") and isinstance(payload, dict):
-                        live.mission = {**(live.mission or {}), **payload}
-                        if isinstance(payload.get("cell"), list) and len(payload["cell"]) == 2 and payload.get("frame"):
-                            live.frames[(payload["cell"][0], payload["cell"][1])] = payload["frame"]
-                    elif topic.endswith("/mission/result") and isinstance(payload, dict):
-                        await store_survey_report(db, settings.farm_name, payload)
+                    try:
+                        await handle_message(db, str(msg.topic), payload)
+                    except Exception:
+                        log.exception("could not handle %s", msg.topic)
         except asyncio.CancelledError:
+            broker.connected = False
             raise
         except Exception as exc:
-            log.debug("mqtt ingest retry in 10s (%s)", exc)
+            if broker.connected or broker.last_error is None:
+                log.warning("farm broker unreachable (%s); retrying every 10 s", exc)
+            broker.connected, broker.last_error = False, str(exc)
             await asyncio.sleep(10)
 
 

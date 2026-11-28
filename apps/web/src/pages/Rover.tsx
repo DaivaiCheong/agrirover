@@ -1,24 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import PlantSoilModal from "../components/PlantSoilModal";
+import RoverControl from "../components/RoverControl";
 import RoverMap, { RoverLegend } from "../components/RoverMap";
 import SoilCad3D from "../components/SoilCad3D";
-import { Notice, Panel, Tag } from "../components/ui";
-import { api, loadProblem, type RoverCell } from "../lib/api";
+import { ErrorNotice, Notice, Panel, Tag } from "../components/ui";
+import type { RoverCell } from "../lib/api";
+import { useFarmFocus } from "../lib/farmContext";
+import {
+  errorText,
+  noteRoundState,
+  useAdvice,
+  useConditions,
+  useCycles,
+  usePhotos,
+  useRoverFrame,
+  useRoverLive,
+  useSurvey,
+  useSurveys,
+  useZones,
+} from "../lib/queries";
 import { cellName, headingAt, serpentine } from "../lib/rover";
 import {
   buildBlockSoilRows,
-  getBlockSoilProfile,
-  getRoverContext,
+  defaultBlockSoilProfile,
   parsePlantLabel,
   resolveBlockGrid,
-  setRoverContext,
   summarizePlantSoil,
   targetsFromConditions,
   type PlantSoilRow,
 } from "../lib/soil";
-import { useData } from "../lib/useData";
-import { ago, usePoll } from "../lib/usePoll";
+import { ago } from "../lib/usePoll";
 
 function StatusDot({ status }: { status: PlantSoilRow["status"] }) {
   const label = status === "optimal" ? "Optimal" : status === "attention" ? "Needs attention" : "Unrecorded";
@@ -35,52 +48,56 @@ function VisionConditionBadge({ plant }: { plant: PlantSoilRow }) {
 
 export default function Rover() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialCtx = useMemo(() => {
-    const qZone = searchParams.get("zone");
-    const qPlant = searchParams.get("plant");
-    if (qZone) return { zone: qZone, plant: qPlant };
-    return getRoverContext();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const focus = useFarmFocus();
 
-  const zones = useData(api.zones);
-  const { data: liveData, error: liveError } = usePoll(api.roverLive, 2500);
-  const cycles = useData(api.cycles);
-  const conditions = usePoll(api.conditions, 30000);
-  const adviceNow = usePoll(api.advice, 30000);
-  const savedPhotos = useData(() => api.photos("all"));
+  const zones = useZones();
+  const cycles = useCycles();
+  const conditions = useConditions();
+  const adviceNow = useAdvice();
+  const savedPhotos = usePhotos("all");
+  const history = useSurveys();
+  const [fast, setFast] = useState(false);
+  const live = useRoverLive(fast);
+  const liveData = live.data;
 
-  const [zone, setZone] = useState<string>(initialCtx?.zone ?? "");
   const [filter, setFilter] = useState<"all" | "attention" | "vision">("all");
   const [view, setView] = useState<"3d" | "map">("3d");
-  const [selected, setSelected] = useState<[number, number] | null>(() => parsePlantLabel(initialCtx?.plant));
   const [focusSeq, setFocusSeq] = useState(0);
   const [detailOpen, setDetailOpen] = useState(false);
-
   const viewportRef = useRef<HTMLDivElement>(null);
+
+  // the block and plant come from the link first (shared from another page), then from the farm-wide focus
+  const qZone = searchParams.get("zone");
+  const qPlant = searchParams.get("plant");
+  useEffect(() => {
+    if (qZone && (qZone !== focus.zone || (qPlant ?? null) !== focus.plant)) focus.setFocus(qZone, qPlant);
+  }, [qZone, qPlant]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const beds = zones.data ?? [];
   const growing = (cycles.data ?? []).filter((c) => c.status === "active");
-  const activeZone = zone || growing[0]?.zone || beds[0]?.zone || "";
+  const zone = qZone ?? focus.zone;
+  const activeZone = (zone && beds.some((b) => b.zone === zone) ? zone : null) ?? growing[0]?.zone ?? beds[0]?.zone ?? "";
+  const selected = parsePlantLabel(qZone ? qPlant : focus.plant);
   const activeBed = beds.find((b) => b.zone === activeZone);
   const activeCycle = growing.find((c) => c.zone === activeZone);
   const blockLabel = activeBed?.label ?? activeCycle?.bedLabel ?? activeZone ?? "";
+  const blockLabels = useMemo(() => new Map(beds.map((b) => [b.zone, b.label ?? b.zone])), [beds]);
 
   const liveMission = liveData?.mission ?? null;
-  const activeMission =
-    liveMission && (liveMission.status === "queued" || liveMission.status === "running" || liveMission.zoneId === activeZone)
-      ? liveMission
-      : null;
+  const running = liveMission?.status === "queued" || liveMission?.status === "running";
+  useEffect(() => setFast(running), [running]);
+  useEffect(() => {
+    noteRoundState(qc, liveMission?.missionId, liveMission?.status, blockLabels.get(liveMission?.zoneId ?? ""), liveMission?.reason);
+  }, [qc, liveMission?.missionId, liveMission?.status, liveMission?.zoneId, liveMission?.reason, blockLabels]);
+  const activeMission = liveMission && running && liveMission.zoneId === activeZone ? liveMission : null;
 
-  const history = useData(api.surveys, [liveMission?.missionId, liveMission?.status]);
   const surveyList = history.data ?? [];
   const lastSurvey = activeMission
     ? undefined
     : surveyList.find((s) => s.zone === activeZone && (s.status === "completed" || s.status === "aborted"));
-  const lastRound = useData(
-    () => (!lastSurvey ? Promise.resolve(null) : api.survey(lastSurvey.id)),
-    [lastSurvey?.id],
-  );
+  const lastRound = useSurvey(lastSurvey?.id);
 
   const adviceList = adviceNow.data ?? [];
   const blockAdvice = adviceList.find((a) => a.zone === activeZone);
@@ -88,14 +105,12 @@ export default function Rover() {
   const targets = useMemo(() => targetsFromConditions(blockConditions), [blockConditions]);
 
   const storedCells: RoverCell[] = useMemo(() => {
-    if (!lastSurvey) return [];
-    const roundDetail = lastRound.data?.id === lastSurvey.id ? lastRound.data : null;
-    if (!roundDetail) return [];
+    if (!lastSurvey || lastRound.data?.id !== lastSurvey.id) return [];
     const adviceByKey = new Map((blockAdvice?.trees ?? []).map((t) => [`${t.row},${t.col}`, t]));
-    return roundDetail.cells.map((c) => ({ ...c, advice: c.advice ?? adviceByKey.get(`${c.row},${c.col}`) ?? null }));
+    return lastRound.data.cells.map((c) => ({ ...c, advice: c.advice ?? adviceByKey.get(`${c.row},${c.col}`) ?? null }));
   }, [lastSurvey, lastRound.data, blockAdvice]);
 
-  const cells = activeMission?.cells ?? storedCells;
+  const cells = activeMission?.cells?.length ? activeMission.cells : storedCells;
   const grid = resolveBlockGrid({
     rows: activeMission?.rows ?? lastSurvey?.rows,
     cols: activeMission?.cols ?? lastSurvey?.cols,
@@ -105,7 +120,7 @@ export default function Rover() {
     zone: activeBed,
   });
 
-  const blockProfile = activeBed?.soilProfile ?? getBlockSoilProfile(activeZone);
+  const blockProfile = activeBed?.soilProfile ?? defaultBlockSoilProfile(activeZone);
   const capturedAt = activeMission
     ? new Date().toISOString()
     : (lastSurvey?.finishedAt ?? lastSurvey?.startedAt ?? null);
@@ -132,49 +147,35 @@ export default function Rover() {
     return allPlants;
   }, [allPlants, filter]);
 
+  // keep the address bar in step, so the view can be shared or bookmarked
+  const selRow = selected?.[0] ?? null;
+  const selCol = selected?.[1] ?? null;
   useEffect(() => {
     if (!activeZone) return;
-    const plantLabel = selected ? cellName(selected[0], selected[1]) : null;
-    setRoverContext({ zone: activeZone, plant: plantLabel });
+    const plantLabel = selRow !== null && selCol !== null ? cellName(selRow, selCol) : null;
     const next = new URLSearchParams();
     next.set("zone", activeZone);
     if (plantLabel) next.set("plant", plantLabel);
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
-    }
-  }, [activeZone, selected]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
+  }, [activeZone, selRow, selCol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedPlant = useMemo(
-    () => (selected ? allPlants.find((p) => p.row === selected[0] && p.col === selected[1]) ?? null : null),
-    [allPlants, selected],
+    () => (selRow !== null && selCol !== null ? allPlants.find((p) => p.row === selRow && p.col === selCol) ?? null : null),
+    [allPlants, selRow, selCol],
   );
 
   const blockAttentionCounts = useMemo(() => {
     const map = new Map<string, number>();
     for (const a of adviceList) {
-      const n = a.trees.filter(
-        (t) =>
-          t.plant &&
-          t.notes.some(
-            (note) =>
-              note !== "Yellow leaves: expected" &&
-              note !== "No probe reading" &&
-              note !== "No tree seen" &&
-              note !== "No plant seen",
-          ),
-      ).length;
+      const n = a.trees.filter((t) => t.plant && t.notes.length > 0).length;
       if (n > 0) map.set(a.zone, n);
     }
     if (activeZone) map.set(activeZone, summary.attention);
     return map;
   }, [adviceList, activeZone, summary.attention]);
 
-  const liveFrame = useData(
-    () => (detailOpen && selected && activeMission ? api.roverFrame(selected[0], selected[1]) : Promise.resolve(null)),
-    [detailOpen, selected?.[0], selected?.[1], activeMission?.missionId],
-  );
+  const liveFrame = useRoverFrame(detailOpen && activeMission ? activeMission.missionId : null, detailOpen ? selected : null);
 
-  const running = activeMission?.status === "queued" || activeMission?.status === "running";
   const roverPos = useMemo(() => {
     if (!running || !activeMission?.cell || activeMission.zoneId !== activeZone) return null;
     const path = serpentine(grid.rows, grid.cols);
@@ -196,14 +197,16 @@ export default function Rover() {
     return set;
   }, [savedPhotos.data, activeZone]);
 
-  const raining = beds.some((b) => b.rain === true);
+  const raining = blockAdvice?.water.raining ?? beds.some((b) => b.zone === activeZone && b.rain === true);
   const isSmallScreen = typeof window !== "undefined" && window.innerWidth <= 640;
   const sceneHeight = isSmallScreen ? 340 : 440;
-  const pageError = liveError ?? zones.error ?? conditions.error;
+  const pageError = [zones.error, conditions.error, history.error].find(Boolean);
+
+  const setSelected = (rc: [number, number] | null) => focus.setFocus(activeZone, rc ? cellName(rc[0], rc[1]) : null);
 
   function selectBlock(nextZone: string) {
-    setZone(nextZone);
-    setSelected(null);
+    focus.setFocus(nextZone, null);
+    setSearchParams({ zone: nextZone }, { replace: true });
     setDetailOpen(false);
   }
 
@@ -236,20 +239,23 @@ export default function Rover() {
 
   function handleViewHistory(plant: PlantSoilRow) {
     setDetailOpen(false);
-    setRoverContext({ zone: plant.zone, plant: plant.name });
+    focus.setFocus(plant.zone, plant.name);
     navigate(`/rover/history?zone=${encodeURIComponent(plant.zone)}&plant=${encodeURIComponent(plant.name)}`);
   }
 
-  const autoStatusText = running
-    ? `AgriRover scanning automatically · ${activeMission?.cellsScanned ?? 0} of ${activeMission?.cellsTotal ?? grid.rows * grid.cols} plants`
+  const autoStatusText = activeMission
+    ? `Round in progress · ${activeMission.cellsScanned ?? 0} of ${activeMission.cellsTotal ?? grid.rows * grid.cols} plants`
     : lastSurvey
-      ? `Monitored automatically by AgriRover · Last updated ${ago(lastSurvey.finishedAt ?? lastSurvey.startedAt)}`
-      : "Monitored automatically by AgriRover";
+      ? `Last round ${ago(lastSurvey.finishedAt ?? lastSurvey.startedAt)}${lastSurvey.simulated ? " (simulated rover)" : ""}`
+      : "No round on this block yet";
 
   return (
     <main className="main stack" style={{ paddingTop: 12 }}>
-      {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
-      {raining && !running && <Notice kind="warn">Rain detected in the tomato plots. Watering and rover rounds are paused today.</Notice>}
+      {pageError && <ErrorNotice error={errorText(pageError)} onRetry={() => { zones.refetch(); conditions.refetch(); history.refetch(); }} />}
+      {raining && !running && <Notice kind="warn">Rain on {blockLabel}: watering is paused, and the rover should stay in.</Notice>}
+      {activeZone && (
+        <RoverControl zone={activeZone} label={blockLabel} grid={grid} live={liveData} blockLabels={blockLabels} />
+      )}
 
       <div ref={viewportRef}>
         <Panel
@@ -271,7 +277,7 @@ export default function Rover() {
         >
           <div className="rv-blocks" role="group" aria-label="Block">
             {beds.length === 0 ? (
-              <span className="small muted">{zones.data === null && !zones.error ? "Loading blocks…" : "No blocks available."}</span>
+              <span className="small muted">{zones.isPending ? "Loading blocks…" : "No blocks yet. Add one in Farm › Beds."}</span>
             ) : (
               beds.map((b) => {
                 const attn = blockAttentionCounts.get(b.zone) ?? 0;
@@ -322,7 +328,7 @@ export default function Rover() {
             <span className="small muted">Click a plant in 3D to inspect AI camera analysis &amp; soil status</span>
           </div>
 
-          {zones.data === null ? (
+          {zones.isPending ? (
             <div className="cad-loading" style={{ height: sceneHeight }}>Loading land plot…</div>
           ) : !activeZone ? (
             <div className="cad-loading" style={{ height: sceneHeight }}>No land blocks configured yet.</div>
@@ -379,7 +385,7 @@ export default function Rover() {
               ? "No AI Vision alerts detected in this block."
               : filter === "attention"
                 ? "No plants need attention in this block."
-                : "No soil survey readings recorded for this block yet."}
+                : "No round has checked this block yet. Start one above."}
           </p>
         ) : (
           <div className="tablewrap">

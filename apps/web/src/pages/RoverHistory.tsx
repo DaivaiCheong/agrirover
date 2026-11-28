@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Camera, Eye, EyeOff, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
+import { useQueries } from "@tanstack/react-query";
 import { CartesianGrid, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import BedTrends, { RANGES } from "../components/BedTrends";
 import RoverMap, { RoverLegend } from "../components/RoverMap";
 import RoverVisionPhoto from "../components/RoverVisionPhoto";
-import { Empty, Kpis, Modal, Notice, Panel, Tag } from "../components/ui";
-import { api, loadProblem, type RoverCell, type SurveySummary } from "../lib/api";
+import { Empty, ErrorNotice, Kpis, Modal, Panel, Tag } from "../components/ui";
+import { api, type RoverCell, type SurveySummary } from "../lib/api";
+import { useFarmFocus } from "../lib/farmContext";
+import { errorText, qk, useConditions, useSurvey, useSurveys, useZones } from "../lib/queries";
 import { STATUS_WORD, cellName, stopInfo } from "../lib/rover";
-import { getRoverContext, parsePlantLabel, setRoverContext, targetsFromConditions } from "../lib/soil";
-import { useData } from "../lib/useData";
+import { parsePlantLabel, targetsFromConditions } from "../lib/soil";
+import type { RoundDetail } from "../lib/tomatoFinance";
 import { ago } from "../lib/usePoll";
 import { evaluatePlantVision, type PlantVisionInfo } from "../lib/vision";
 
@@ -249,16 +252,17 @@ function RoundSummaryModal({
 
 export default function RoverHistory() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const focus = useFarmFocus();
   const initialCtx = useMemo(() => {
     const qZone = searchParams.get("zone");
     const qPlant = searchParams.get("plant");
     if (qZone || qPlant) return { zone: qZone ?? "", plant: qPlant };
-    return getRoverContext();
+    return focus.zone ? { zone: focus.zone, plant: focus.plant } : null;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const zones = useData(api.zones);
-  const conditions = useData(api.conditions);
-  const surveys = useData(api.surveys);
+  const zones = useZones();
+  const conditions = useConditions();
+  const surveys = useSurveys();
 
   const [zone, setZone] = useState<string>(initialCtx?.zone ?? "");
   const [selectedPlant, setSelectedPlant] = useState<string | null>(initialCtx?.plant ?? null);
@@ -279,7 +283,7 @@ export default function RoverHistory() {
 
   useEffect(() => {
     if (!activeZone && zone !== "all") return;
-    setRoverContext({ zone: activeZone || beds[0]?.zone || "", plant: selectedPlant });
+    if (activeZone) focus.setFocus(activeZone, selectedPlant);
     const next = new URLSearchParams();
     if (zone === "all") next.set("zone", "all");
     else if (activeZone) next.set("zone", activeZone);
@@ -291,17 +295,10 @@ export default function RoverHistory() {
 
   // Load newest round cells only to populate the Plant filter dropdown cleanly
   const latestRoundId = filteredRounds[0]?.id ?? null;
-  const latestRoundFetch = useData(
-    () => (latestRoundId ? api.survey(latestRoundId) : Promise.resolve(null)),
-    [latestRoundId],
-  );
-  const latestRound = latestRoundFetch.data;
+  const latestRound = useSurvey(latestRoundId).data;
 
   // Fetch clicked round details when opening the Round Summary Pop-Up Card
-  const modalRoundFetch = useData(
-    () => (modalRoundId ? api.survey(modalRoundId) : Promise.resolve(null)),
-    [modalRoundId],
-  );
+  const modalRoundFetch = useSurvey(modalRoundId);
   const modalRound = modalRoundFetch.data;
 
   const plantRc = parsePlantLabel(selectedPlant);
@@ -326,11 +323,15 @@ export default function RoverHistory() {
         : [],
     [allRounds, activeZone, selectedPlant],
   );
-  const blockRoundIdsKey = blockRoundIds.join(",");
-  const plantSeriesData = useData(async () => {
-    if (!blockRoundIds.length || !plantRc) return [];
-    const details = await Promise.all(blockRoundIds.map((id) => api.survey(id)));
-    return details
+  // each round is fetched once and shared: the plant's history is read from the same cache as the rover view
+  const roundDetails = useQueries({
+    queries: blockRoundIds.map((id) => ({ queryKey: qk.survey(id), queryFn: () => api.survey(id), staleTime: Infinity })),
+    combine: (results) => results.map((r) => r.data).filter((d): d is RoundDetail => Boolean(d)),
+  });
+  const detailsKey = roundDetails.map((d) => d.id).join(",");
+  const plantSeriesPoints = useMemo(() => {
+    if (!roundDetails.length || !plantRc) return [];
+    return roundDetails
       .slice()
       .reverse()
       .map((d): PlantPoint | null => {
@@ -367,11 +368,13 @@ export default function RoverHistory() {
         };
       })
       .filter((x): x is PlantPoint => x !== null);
-  }, [blockRoundIdsKey, selectedPlant, stageN]);
+  }, [detailsKey, selectedPlant, stageN]); // eslint-disable-line react-hooks/exhaustive-deps
+  const plantSeriesData = { data: plantSeriesPoints, loading: roundDetails.length < blockRoundIds.length };
 
   const targets = targetsFromConditions(activeCond);
-  const waitingApi = (zones.loading || surveys.loading) && !zones.error && !surveys.error;
-  const error = zones.error ?? surveys.error ?? modalRoundFetch.error ?? conditions.error;
+  const waitingApi = (zones.isPending || surveys.isPending) && !zones.error && !surveys.error;
+  const failure = zones.error ?? surveys.error ?? modalRoundFetch.error ?? conditions.error;
+  const error = failure ? errorText(failure) : null;
   const newestAt = filteredRounds[0]?.finishedAt ?? filteredRounds[0]?.startedAt ?? null;
 
   const comparisonSnapshots = useMemo(() => {
@@ -390,8 +393,8 @@ export default function RoverHistory() {
   }
 
   return (
-    <main className="main stack" style={{ paddingTop: 12 }}>
-      {error && <Notice kind="alert">{loadProblem(error)}</Notice>}
+    <main className="main stack">
+      {error && <ErrorNotice error={error} onRetry={() => { zones.refetch(); surveys.refetch(); }} />}
 
       <Panel
         title="Soil & round history"

@@ -1,249 +1,217 @@
 import { useMemo } from "react";
-import { ArrowRight, Bot, CalendarDays, Camera, Calculator, Droplets, ShieldAlert, Sun } from "lucide-react";
-import { Link } from "react-router-dom";
-import EnvRibbon from "../components/EnvRibbon";
-import { Kpis, Notice, PageHead, Panel, Tag } from "../components/ui";
-import { api, loadProblem } from "../lib/api";
-import { litres, longToday } from "../lib/format";
-import { targetsFromConditions } from "../lib/soil";
-import { buildAllBlockEconomics, computeFinanceView, UNIT_SAVED_RIEL, UNIT_SAVED_USD, UNIT_TOTAL_COST_RIEL, UNIT_TOTAL_COST_USD, usdAndRiel } from "../lib/tomatoFinance";
-import { matchTreatmentForCondition } from "../lib/treatments";
-import { useData } from "../lib/useData";
-import { useLatestRoundsByZone } from "../lib/useLatestRounds";
-import { usePoll } from "../lib/usePoll";
+import { ArrowRight, Bot, Calculator, CalendarDays, Droplets, ShieldAlert, Sprout, Sun, Wallet } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import EnvRibbon, { StatusBadge } from "../components/EnvRibbon";
+import { Empty, ErrorNotice, Kpis, More, PageHead, Panel, Skeleton, Tag } from "../components/ui";
+import { useFarmFocus } from "../lib/farmContext";
+import { litres, longToday, num } from "../lib/format";
+import { useFarm } from "../lib/queries";
+import { targetsFromConditions, type PlantSoilRow } from "../lib/soil";
+import { usdAndRiel } from "../lib/tomatoFinance";
+import { ago } from "../lib/usePoll";
 import { evaluateAgronomyAction } from "../utils/agronomyEngine";
 
 export default function Dashboard() {
-  const cycles = useData(api.cycles);
-  const advice = usePoll(api.advice, 30000);
-  const conditions = usePoll(api.conditions, 30000);
-  const zones = useData(api.zones);
-  const surveys = useData(api.surveys);
+  const farm = useFarm();
+  const { setFocus } = useFarmFocus();
+  const navigate = useNavigate();
+  const { blocks, allRows, advice, conditions, basis, rate } = farm;
 
-  const activeZones = zones.data ?? [];
-  const activeCycles = cycles.data ?? [];
-  const activeConds = conditions.data ?? [];
-  const activeAdvice = advice.data ?? [];
-  const { roundsByZone } = useLatestRoundsByZone(surveys.data ?? []);
+  const growing = blocks.filter((b) => b.plantCount > 0);
+  const plants = growing.reduce((s, b) => s + b.plantCount, 0);
+  const lastRound = farm.surveys.find((s) => s.status === "completed" || s.status === "aborted");
+  const waterToday = advice.reduce((s, a) => s + a.water.litres, 0);
+  const waterFull = advice.reduce((s, a) => s + a.water.fullLitres, 0);
+  const waterSavedPct = waterFull > 0 ? Math.round(((waterFull - waterToday) / waterFull) * 100) : null;
+  const paused = advice.filter((a) => a.water.paused).map((a) => a.label);
+  const budget = growing.reduce((s, b) => s + b.budgetUsd, 0);
+  const spent = growing.reduce((s, b) => s + b.spentToDateUsd, 0);
 
-  const { blocks, allRows } = useMemo(
-    () =>
-      buildAllBlockEconomics({
-        cycles: activeCycles,
-        zones: activeZones,
-        conditions: activeConds,
-        roundsByZone,
-      }),
-    [activeCycles, activeZones, activeConds, roundsByZone],
+  const needYou = useMemo(
+    () => allRows
+      .filter((r) => r.plant && growing.some((b) => b.zone === r.zone) && (r.vision.status === "alert" || r.status === "attention"))
+      .sort((a, b) => Number(b.vision.status === "alert") - Number(a.vision.status === "alert")),
+    [allRows, growing],
   );
-
-  const farmReport = useMemo(
-    () => computeFinanceView({ scale: "farm", selectedZone: "g1", blocks, allRows }),
-    [blocks, allRows],
-  );
-
-  const pageError = cycles.error ?? zones.error ?? conditions.error ?? advice.error;
-  const totalWaterToday = activeAdvice.reduce((s, a) => s + a.water.litres, 0);
+  const visionCount = needYou.filter((r) => r.vision.status === "alert").length;
+  const prevented = growing.reduce((s, b) => s + b.preventedLossUsd, 0);
   const rowsByZone = useMemo(() => {
-    const map = new Map<string, typeof allRows>();
-    for (const row of allRows) {
-      const list = map.get(row.zone);
-      if (list) list.push(row);
-      else map.set(row.zone, [row]);
-    }
+    const map = new Map<string, PlantSoilRow[]>();
+    for (const r of allRows) map.set(r.zone, [...(map.get(r.zone) ?? []), r]);
     return map;
   }, [allRows]);
-  const alertPlants = allRows.filter((r) => r.plant && (r.vision.status === "alert" || r.status === "attention"));
-  const blockMap = new Map(blocks.map((b) => [b.zone, b]));
-  const condOf = new Map(activeConds.map((b) => [b.zone, b]));
-  const adviceOf = new Map(activeAdvice.map((a) => [a.zone, a]));
+  const condOf = new Map(conditions.map((c) => [c.zone, c]));
+  const adviceOf = new Map(advice.map((a) => [a.zone, a]));
+  const labelOf = new Map(blocks.map((b) => [b.zone, b.label]));
+
+  const openPlant = (p: PlantSoilRow) => {
+    setFocus(p.zone, p.name);
+    navigate(`/rover?zone=${encodeURIComponent(p.zone)}&plant=${encodeURIComponent(p.name)}`);
+  };
+
+  const tasks = needYou.slice(0, 6).flatMap((p) => {
+    const card = evaluateAgronomyAction(p, targetsFromConditions(condOf.get(p.zone)), {
+      blockPlants: rowsByZone.get(p.zone),
+      blockLabel: labelOf.get(p.zone) ?? p.zone,
+    });
+    return card ? [{ p, card }] : [];
+  });
 
   return (
     <>
       <PageHead
         icon={Sun}
-        title="Today · Tomato Farm"
-        sub={longToday()}
+        title="Today"
+        sub={farm.loading ? longToday() : `${longToday()} · ${growing.length} growing blocks, ${plants} tomato plants`}
         actions={
           <>
-            <Link className="btn btn-sm btn-ghost" to="/rover">
-              <Bot size={15} aria-hidden />Rover 3D View
-            </Link>
-            <Link className="btn btn-sm" to="/finance">
-              <Calculator size={15} aria-hidden />Cost Optimizer
-            </Link>
+            <Link className="btn btn-sm btn-ghost" to="/plan"><CalendarDays size={15} aria-hidden />Plan</Link>
+            <Link className="btn btn-sm" to="/rover"><Bot size={15} aria-hidden />Open rover</Link>
           </>
         }
       />
       <main className="main stack">
-        {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
+        {farm.error && <ErrorNotice error={farm.error} onRetry={farm.refetch} />}
         <Kpis
+          loading={farm.loading}
           items={[
             {
-              k: "Rover round today",
-              v: `${blocks.filter((b) => b.plantCount > 0).length} blocks · ${farmReport.plantCount} plants`,
-              d: <Link className="linkbtn small" to="/rover">Completed 07:15 AM · View 3D →</Link>,
+              k: "Last rover round", icon: Bot, tone: lastRound?.status === "aborted" ? "warn" : "ok",
+              v: lastRound ? ago(lastRound.finishedAt ?? lastRound.startedAt) : "No round yet",
+              d: lastRound ? <Link className="linkbtn small" to="/rover">{lastRound.bedLabel} · {lastRound.cellsScanned ?? 0} plants checked →</Link> : "Start one on the Rover page",
             },
             {
-              k: "Precision drip today",
-              v: `${litres(totalWaterToday)}`,
-              d: <Link className="linkbtn small" to="/finance">28% water saved · Finance →</Link>,
+              k: "Drip water today", icon: Droplets, tone: paused.length ? "warn" : "info",
+              v: litres(waterToday),
+              d: paused.length ? `Paused for rain: ${paused.join(", ")}`
+                : waterSavedPct !== null ? `${waterSavedPct}% less than a blanket schedule (${litres(waterFull)})` : "Needs a rover round",
             },
             {
-              k: "Vision & soil alerts",
-              v: `${farmReport.visionAlertCount} vision · ${alertPlants.length - farmReport.visionAlertCount} soil`,
-              d: <Link className="linkbtn small" to="/crop">{usdAndRiel(farmReport.preventedLossUsd, farmReport.preventedLossRiel)} prevented →</Link>,
+              k: "Plants to look at", icon: ShieldAlert, tone: needYou.length ? "warn" : "ok",
+              v: `${needYou.length}`,
+              d: needYou.length
+                ? `${visionCount} camera · ${needYou.length - visionCount} soil · ~${usdAndRiel(prevented, rate)} of crop at stake`
+                : "Nothing flagged in the last rounds",
             },
             {
-              k: "Cost per tomato plant",
-              v: usdAndRiel(UNIT_TOTAL_COST_USD, UNIT_TOTAL_COST_RIEL),
-              d: <Link className="linkbtn small" to="/finance">+${UNIT_SAVED_USD.toFixed(2)} (~{UNIT_SAVED_RIEL.toLocaleString()} ៛) saved / plant →</Link>,
+              k: "Budget per plant", icon: Wallet,
+              v: basis ? usdAndRiel(basis.roverPerPlantUsd, rate) : "—",
+              d: <Link className="linkbtn small" to="/costs">Spent ${num(spent, 2)} of ${num(budget, 2)} budget →</Link>,
             },
           ]}
         />
 
-        <div className="grid g2">
+        <div className="grid g2 stack-md">
           <Panel
-            title="Active Tomato Vision Alerts"
+            title="Plants that need you"
             icon={ShieldAlert}
-            right={
-              <Link className="linkbtn small rowflex" style={{ gap: 4 }} to="/crop">
-                <Camera size={13} aria-hidden />Open Health <ArrowRight size={13} aria-hidden />
-              </Link>
-            }
+            right={<Link className="linkbtn small" to="/crop">Plant gallery →</Link>}
           >
-            <div className="stack">
-              {alertPlants.slice(0, 4).map((p) => {
-                const block = blockMap.get(p.zone);
-                const t = matchTreatmentForCondition(p.vision.condition || p.vision.shortLabel);
-                const targetGuide = t
-                  ? `/crop?tab=guide&zone=${encodeURIComponent(p.zone)}&plant=${encodeURIComponent(p.name)}#${t.id}`
-                  : "/crop";
-                return (
+            {farm.loading || farm.roundsLoading ? (
+              <div className="stack"><Skeleton h={54} /><Skeleton h={54} /><Skeleton h={54} /></div>
+            ) : needYou.length === 0 ? (
+              <Empty icon={Sprout}>No plant is flagged in the newest rounds.</Empty>
+            ) : (
+              <div className="stack">
+                {needYou.slice(0, 5).map((p) => (
                   <article key={`${p.zone}-${p.name}`} className={`pc${p.vision.severity === "High" ? " pc-crit" : ""}`}>
                     <div className="pc-top">
-                      <span className="pc-sev">{p.vision.status === "alert" ? p.vision.shortLabel : "Soil stress"}</span>
-                      <span className="pc-block">{block?.label ?? p.zone} · {p.name}</span>
+                      <span className="pc-sev">{p.vision.status === "alert" ? `Camera · ${p.vision.confidencePct ?? "?"}%` : "Soil"}</span>
+                      <span className="pc-block">{labelOf.get(p.zone) ?? p.zone} · {p.name}</span>
                     </div>
                     <h3 className="pc-problem">{p.vision.status === "alert" ? p.vision.condition : p.issues.join(" · ")}</h3>
-                    <div className="pc-ev">
-                      <span className="pc-txt">
-                        pH {p.readings.ph?.toFixed(2) ?? "—"} · Moisture {p.readings.moisture?.toFixed(1) ?? "—"}% · Soil N{" "}
-                        {p.readings.n !== null ? `${Math.round(p.readings.n)} mg/kg` : "—"}
-                      </span>
+                    <div className="statline">
+                      <span>pH <b>{p.readings.ph?.toFixed(2) ?? "—"}</b></span>
+                      <span>Moisture <b>{p.readings.moisture !== null ? `${p.readings.moisture.toFixed(1)}%` : "—"}</b></span>
+                      <span>N <b>{p.readings.n !== null ? `${Math.round(p.readings.n)} mg/kg` : "—"}</b></span>
                     </div>
                     <div className="rv-cycle-actions">
-                      <Link className="pc-link" to="/crop">View in Health</Link>
-                      {t && <Link className="pc-link" to={targetGuide}>Treatment steps →</Link>}
+                      <button type="button" className="pc-link linkbtn" onClick={() => openPlant(p)}>Open in Rover</button>
+                      <Link className="pc-link" to={`/guide?zone=${encodeURIComponent(p.zone)}&plant=${encodeURIComponent(p.name)}`}>Treatment →</Link>
                     </div>
                   </article>
-                );
-              })}
-            </div>
+                ))}
+                {needYou.length > 5 && <Link className="linkbtn small" to="/crop">and {needYou.length - 5} more in the gallery →</Link>}
+              </div>
+            )}
           </Panel>
 
-          <Panel
-            title="Today's Top Care Tasks"
-            icon={CalendarDays}
-            pad={false}
-            right={
-              <Link className="linkbtn small rowflex" style={{ gap: 4 }} to="/plan">
-                Open Plan <ArrowRight size={13} aria-hidden />
-              </Link>
-            }
-          >
-            <div className="tablewrap">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Block &amp; Plant</th>
-                    <th>Fast-Focus Care (Action → Avoid → Why)</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {alertPlants.slice(0, 4).map((p) => {
-                    const block = blockMap.get(p.zone);
-                    const fast = evaluateAgronomyAction(p, targetsFromConditions(condOf.get(p.zone)), {
-                      blockPlants: rowsByZone.get(p.zone),
-                      blockLabel: block?.label ?? p.zone,
-                    });
-                    if (!fast) return null;
-                    return (
+          <Panel title="What to do today" icon={CalendarDays} pad={false} right={<Link className="linkbtn small" to="/plan">Full plan →</Link>}>
+            {tasks.length === 0 ? (
+              <Empty>{farm.loading ? "Working it out…" : "No treatment is due. Keep the drip schedule."}</Empty>
+            ) : (
+              <div className="tablewrap">
+                <table className="tbl">
+                  <thead><tr><th>Plant</th><th>Do this</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {tasks.map(({ p, card }) => (
                       <tr key={`task-${p.zone}-${p.name}`}>
-                        <td className="nowrap">
-                          <b>{block?.label ?? p.zone}</b>
-                          <div className="small muted">{p.name}</div>
-                        </td>
+                        <td className="nowrap"><b>{labelOf.get(p.zone) ?? p.zone}</b><div className="small muted">{p.name} · {card.title}</div></td>
                         <td className="small">
-                          <div><b>⚡ Recipe:</b> {fast.prescription.recipeSummaryLine}</div>
-                          <div className="ff-k-avoid" style={{ fontSize: 11.5, marginTop: 2 }}>
-                            <b>🚫 Avoid:</b> {fast.doNotMixList[0]}
-                          </div>
-                          <div className="muted" style={{ fontSize: 11, marginTop: 2, fontFamily: "ui-monospace,monospace" }}>
-                            🧮 {fast.prescription.formulaMathLine}
-                          </div>
+                          <More label={card.doNowSteps[0]}>
+                            <div className="stack" style={{ gap: 4 }}>
+                              <span><b>Recipe:</b> {card.prescription.recipeSummaryLine}</span>
+                              <span><b>Do not mix:</b> {card.doNotMixList[0]}</span>
+                              <span><b>Why:</b> {card.whyLine}</span>
+                              <span className="mono-sm muted">{card.prescription.formulaMathLine}</span>
+                            </div>
+                          </More>
                         </td>
-                        <td className="nowrap">
-                          <Tag kind="warn">Due today</Tag>
-                        </td>
+                        <td className="nowrap"><Tag kind="warn">Due today</Tag></td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Panel>
         </div>
 
-        <Panel
-          title="Active Tomato Blocks (G1–G6)"
-          right={
-            <span className="small muted">
-              Targets: pH 6.0–6.8 · Moisture 58–72% · EC 0.8–2.5 mS/cm · Temp 18–29 °C
-            </span>
-          }
-        >
-          <div className="grid g2">
-            {activeCycles.map((c) => {
-              const b = blockMap.get(c.zone);
-              const cond = condOf.get(c.zone);
-              const adv = adviceOf.get(c.zone);
-              return (
-                <section key={c.id} className="panel cropcard">
-                  <div className="cc-top">
-                    <div style={{ minWidth: 0 }}>
-                      <span className="cc-title">{c.bedLabel}</span>
-                      <span className="small muted">
-                        {" "}
-                        {c.variety ?? "Tomato"} · {b?.plantCount ?? c.plantCount ?? 0} tomato plants · Day {c.day}
-                      </span>
+        <Panel title="Blocks" icon={Sprout} right={<Link className="linkbtn small" to="/cycles">All crops →</Link>}>
+          {farm.loading ? (
+            <div className="grid g2"><Skeleton h={120} /><Skeleton h={120} /></div>
+          ) : growing.length === 0 ? (
+            <Empty icon={Sprout}>No crop is growing. <Link to="/cycles?add=true">Start a tomato crop</Link></Empty>
+          ) : (
+            <div className="grid g2">
+              {growing.map((b) => {
+                const cond = condOf.get(b.zone);
+                const adv = adviceOf.get(b.zone);
+                const pct = b.budgetUsd > 0 ? Math.round((b.spentToDateUsd / b.budgetUsd) * 100) : 0;
+                return (
+                  <section key={b.zone} className="panel cropcard">
+                    <div className="cc-top">
+                      <div style={{ minWidth: 0 }}>
+                        <span className="cc-title">{b.label}</span>
+                        <span className="small muted"> {b.variety ?? "Tomato"} · {b.plantCount} plants · day {b.day}</span>
+                      </div>
+                      {cond ? <StatusBadge status={cond.status} alerts={b.visionAlertCount} /> : <Tag>No readings</Tag>}
                     </div>
-                    {b && b.visionAlertCount > 0 ? (
-                      <Tag kind="warn">{b.visionAlertCount} alerts</Tag>
-                    ) : (
-                      <Tag kind="ok">Optimal</Tag>
-                    )}
-                  </div>
-                  {cond && <EnvRibbon bed={cond} />}
-                  <div className="cc-water">
-                    <Droplets size={13} aria-hidden />
-                    <span>
-                      Today: <b>{adv ? litres(adv.water.litres) : "—"}</b>
-                    </span>
-                    <span className="cc-sep" />
-                    <span>
-                      Cost: <b>${UNIT_TOTAL_COST_USD.toFixed(2)}/plant</b>
-                    </span>
-                    <Link className="linkbtn cc-open" to={`/cycles/${c.id}/tomato`}>
-                      Block details <ArrowRight size={13} aria-hidden />
-                    </Link>
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+                    {cond && <EnvRibbon bed={cond} />}
+                    <div className="meter">
+                      <div className="meter-head"><span>Spent / budget</span><b>${num(b.spentToDateUsd, 2)} / ${num(b.budgetUsd, 2)}</b></div>
+                      <div className={`bar${pct > 100 ? " bar-over" : ""}`}><i style={{ width: `${Math.min(100, pct)}%` }} /></div>
+                    </div>
+                    <div className="cc-water">
+                      <Droplets size={13} aria-hidden />
+                      <span>Today: <b>{adv ? (adv.water.paused ? "paused (rain)" : litres(adv.water.litres)) : "—"}</b></span>
+                      <span className="cc-sep" />
+                      <span>{b.visionAlertCount + b.soilAttentionCount > 0 ? `${b.visionAlertCount + b.soilAttentionCount} to check` : "Nothing flagged"}</span>
+                      {b.cycleId && (
+                        <Link className="linkbtn cc-open" to={`/cycles/${b.cycleId}/tomato`} onClick={() => setFocus(b.zone)}>
+                          Open <ArrowRight size={13} aria-hidden />
+                        </Link>
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
         </Panel>
+        <p className="small muted" style={{ textAlign: "right" }}>
+          <Calculator size={12} aria-hidden style={{ verticalAlign: -1 }} /> Budget per plant comes from <Link to="/finance">Finance › Unit cost</Link>; spending from the <Link to="/costs">cost ledger</Link>.
+        </p>
       </main>
     </>
   );

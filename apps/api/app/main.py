@@ -73,6 +73,11 @@ app.include_router(finance_routes.router, prefix=V1)
 app.include_router(health_routes.router, prefix=V1)
 
 
+@app.get("/", tags=["system"], include_in_schema=False)
+async def root():
+    return {"name": "AgriRover API", "docs": "/docs", "health": "/health", "status": f"{V1}/status"}
+
+
 @app.get("/health", tags=["system"])
 async def health():
     db = get_database()

@@ -1,13 +1,12 @@
-import json
 import uuid
 from typing import Literal
 
-import aiomqtt
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.services.broker import BrokerDown, publish, rover_topic
 from app.services.errors import NotFound
 from app.services.rover_service import live
 
@@ -36,6 +35,15 @@ class EstopIn(BaseModel):
     engaged: bool
 
 
+def sim_options(simulate: str | None, cells: int) -> dict | None:
+    """What the simulated rover meets. The real rover ignores this; the simulator reads it."""
+    if simulate == "rain":
+        return {"rainAtCell": max(1, cells // 2)}
+    if simulate == "low_battery":
+        return {"batteryV": 11.25}
+    return None
+
+
 @router.get("/live")
 async def get_live():
     return live.snapshot()
@@ -48,19 +56,31 @@ async def get_frame(row: int, col: int):
 
 @router.post("/estop")
 async def estop(body: EstopIn):
+    """Engage or release the e-stop on the rover itself. Retained, so a rover that reconnects stays stopped."""
+    try:
+        await publish(rover_topic(live.code, "estop"), {"estop": body.engaged}, retain=True)
+    except BrokerDown as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            f"{exc}. The rover did not get this: use the red button on the rover.",
+        ) from exc
     live.estop = body.engaged
     return {"estop": live.estop}
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
-async def create_mission(body: MissionIn):
+async def create_mission(body: MissionIn, db=Depends(get_db)):
     if live.running:
         raise HTTPException(status.HTTP_409_CONFLICT, "The rover is already on a round.")
     if live.estop:
-        raise HTTPException(status.HTTP_409_CONFLICT, "E-stop is engaged.")
+        raise HTTPException(status.HTTP_409_CONFLICT, "The e-stop is engaged. Release it first.")
+    if live.status == "offline":
+        raise HTTPException(status.HTTP_409_CONFLICT, "The rover is offline. Switch it on and wait for it to connect.")
+    if await db.zones.find_one({"farmName": settings.farm_name, "zone": body.zone_id}) is None:
+        raise NotFound(f"unknown bed {body.zone_id!r}")
     mission_id = str(uuid.uuid4())
     row_m = body.row_m or body.cell_m
-    payload = {
+    payload: dict = {
         "missionId": mission_id,
         "zoneId": body.zone_id,
         "rows": body.rows,
@@ -68,28 +88,24 @@ async def create_mission(body: MissionIn):
         "cellM": body.cell_m,
         "rowM": row_m,
     }
+    sim = sim_options(body.simulate, body.rows * body.cols)
+    if sim:
+        payload["sim"] = sim
     try:
-        async with aiomqtt.Client(
-            hostname=settings.mqtt_host,
-            port=settings.mqtt_port,
-            username=settings.mqtt_username or None,
-            password=settings.mqtt_password or None,
-        ) as client:
-            await client.publish("devices/rover-01/mission/set", json.dumps(payload), qos=1)
-    except Exception as exc:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"farm broker unreachable ({exc})") from exc
+        await publish(rover_topic(live.code, "mission/set"), payload)
+    except BrokerDown as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     live.queued(mission_id, body.zone_id, body.rows, body.cols, body.cell_m, row_m, body.simulate)
     return {"missionId": mission_id, "status": "queued"}
 
 
 @router.get("")
-async def list_surveys(farm: str | None = None, db=Depends(get_db)):
-    fname = farm or settings.farm_name
-    docs = await db.surveys.find(
-        {"farmName": fname},
-        {"_id": 0, "cells": 0, "farmName": 0},
-    ).sort("startedAt", -1).limit(100).to_list(length=100)
-    return docs
+async def list_surveys(zone: str | None = None, limit: int = 100, farm: str | None = None, db=Depends(get_db)):
+    q: dict = {"farmName": farm or settings.farm_name}
+    if zone:
+        q["zone"] = zone
+    limit = max(1, min(limit, 500))
+    return await db.surveys.find(q, {"_id": 0, "cells": 0, "farmName": 0}).sort("startedAt", -1).limit(limit).to_list(length=limit)
 
 
 @router.get("/{mission_id}")

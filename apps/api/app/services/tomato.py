@@ -171,6 +171,50 @@ LEAF_RANGES = [
 ]
 
 
+# What a symptom needs from the readings to be supported, from the guide's "favours" text.
+# (metric, op, limit): the evidence is met when value <op> limit.
+SYMPTOM_RULES: dict[str, list[tuple[str, str, float]]] = {
+    "yellow_leaves": [("nitrogen", "<", 80.0), ("potassium", "<", 160.0), ("soil_moisture", ">", 72.0),
+                      ("soil_ph", "<", 6.0), ("soil_ph", ">", 6.8)],
+    "leaf_curl": [("soil_moisture", "<", 58.0), ("soil_ec", ">", 2.5), ("air_temperature", ">", 32.0)],
+    "leaf_spot": [("air_humidity", ">", 85.0), ("soil_moisture", ">", 72.0)],
+    "fruit_rot": [("soil_ph", "<", 6.0), ("phosphorus", ">", 85.0), ("soil_moisture", "<", 58.0),
+                  ("soil_moisture", ">", 72.0)],
+    "pest": [("nitrogen", ">", 140.0), ("air_temperature", ">", 32.0)],
+}
+SYMPTOM_DISEASE = {"yellow_leaves": "yellow_leaves", "leaf_curl": "leaf_curl", "leaf_spot": "early_blight",
+                   "fruit_rot": "blossom_end_rot", "pest": "pest_damage"}
+
+# The fraction of a blanket schedule that precision drip delivers (115 L of 160 L per plant per cycle).
+PRECISION_SHARE = 0.72
+
+
+def plant_litres(moisture: float | None) -> float:
+    """Drip litres for one plant today: more when the root zone is drier than 62%, never under 1.4 L."""
+    if moisture is None:
+        return 2.2
+    return round(max(1.4, 2.2 - (moisture - 62.0) * 0.08), 1)
+
+
+def cell_advice(cell: dict) -> dict | None:
+    """Today's advice for one rover stop: the water it needs and why it was flagged."""
+    if not cell.get("plant"):
+        return None
+    readings = cell.get("readings") or {}
+    notes: list[str] = []
+    for metric, label, _short, unit, dec in PARAM_META:
+        status, direction = rate_metric(metric, readings.get(metric))
+        if direction is not None:
+            notes.append(f"{label} {'low' if direction == 'low' else 'high'} ({round(readings[metric], dec)} {unit})")
+    if cell.get("disease"):
+        notes.insert(0, f"Camera: {str(cell['disease']).replace('_', ' ')}")
+    elif cell.get("flagged"):
+        notes.insert(0, "Camera: yellowing above the threshold, check the leaves")
+    litres = plant_litres(readings.get("soil_moisture"))
+    return {"row": cell["row"], "col": cell["col"], "plant": True, "litres": litres,
+            "fullLitres": round(litres / PRECISION_SHARE, 1), "notes": notes}
+
+
 def stage_of(day: int | None) -> dict:
     d = max(1, day or 1)
     for st in STAGES:

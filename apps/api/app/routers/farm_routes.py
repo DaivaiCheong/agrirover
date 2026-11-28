@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -5,9 +7,12 @@ from pydantic.alias_generators import to_camel
 from app.core.config import settings
 from app.core.db import get_db
 from app.services import farm_service
+from app.services.clock import farm_today
 from app.services.errors import Invalid
 from app.services.metrics import SPECS
+from app.services.rover_service import live
 from app.services.tomato import NAME, SLUG, TOMATO_SETUPS, setup_to_dict
+from app.workers.mqtt_ingest import broker
 
 router = APIRouter()
 
@@ -77,10 +82,58 @@ async def manual_irrigation(zone_id: str, cmd: ManualCommand):
     }
 
 
+ONLINE_WITHIN_S = 15 * 60     # a field node reports every few minutes; silent for 15 min means something is wrong
+
+
+def device_status(d: dict, now: datetime) -> str:
+    if not d.get("commissioned"):
+        return "not_commissioned"
+    seen = d.get("lastSeenAt")
+    if not seen:
+        return "never"
+    then = datetime.fromisoformat(seen)
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    return "online" if (now - then).total_seconds() <= ONLINE_WITHIN_S else "stale"
+
+
 @router.get("/devices", tags=["devices"])
 async def list_devices(farm: str | None = None, db=Depends(get_db)):
     fname = farm or settings.farm_name
-    return await db.devices.find({"farmName": fname}, {"_id": 0, "farmName": 0}).sort("code", 1).to_list(length=50)
+    now = datetime.now(timezone.utc)
+    docs = await db.devices.find({"farmName": fname}, {"_id": 0, "farmName": 0}).sort("code", 1).to_list(length=50)
+    out = []
+    for d in docs:
+        is_rover = d.get("kind") == "rover"
+        out.append({
+            "code": d["code"],
+            "kind": d["kind"],
+            "zone": d.get("zone"),
+            "commissioned": bool(d.get("commissioned")),
+            "status": device_status(d, now),
+            "link": live.status if is_rover else None,
+            "lastSeenAt": (live.last_seen_at or d.get("lastSeenAt")) if is_rover else d.get("lastSeenAt"),
+            "firmwareVersion": d.get("firmwareVersion"),
+        })
+    return out
+
+
+@router.get("/status", tags=["system"])
+async def system_status(farm: str | None = None, db=Depends(get_db)):
+    """What the top bar shows: the database, the farm broker, the rover, and the farm's own date."""
+    fname = farm or settings.farm_name
+    snap = live.snapshot()
+    return {
+        "farm": fname,
+        "farmToday": farm_today().isoformat(),
+        "serverTime": datetime.now(timezone.utc).isoformat(),
+        "db": {"kind": "mongomock" if settings.mongodb_url.startswith("mongomock://") else "mongodb",
+               "zones": await db.zones.count_documents({"farmName": fname})},
+        "broker": {"connected": broker.connected, "since": broker.since, "error": broker.last_error},
+        "rover": snap["rover"],
+        "mission": {k: snap["mission"].get(k) for k in ("missionId", "zoneId", "status", "cellsScanned", "cellsTotal")}
+        if snap["mission"] else None,
+    }
 
 
 @router.get("/conditions", tags=["conditions"])
@@ -97,7 +150,7 @@ async def decisions_today(farm: str | None = None, db=Depends(get_db)):
 async def zone_series(
     zone: str,
     metrics: str = "soil_moisture",
-    hours: int = Query(24, ge=1, le=24 * 30),
+    hours: int = Query(24, ge=1, le=24 * 366),
     points: int = Query(96, ge=10, le=500),
     farm: str | None = None,
     db=Depends(get_db),

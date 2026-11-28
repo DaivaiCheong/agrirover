@@ -1,30 +1,22 @@
-import { useState } from "react";
 import { Notice } from "./ui";
-import { api } from "../lib/api";
-import { useData } from "../lib/useData";
+import { useFinanceSample, useRemoveFinanceSample } from "../lib/queries";
 
-/** Shows sample status only when actual sample ledger rows exist in the backend database. */
+/** Shows only when sample rows exist in the database, with a way to clear them. */
 export default function SampleNotice({ inMain = false }: { inMain?: boolean }) {
-  const status = useData(api.financeSample);
-  const [problem, setProblem] = useState<string | null>(null);
+  const status = useFinanceSample();
+  const remove = useRemoveFinanceSample();
 
   if (status.error || !status.data?.sample) return null;
 
-  async function remove() {
+  function clear() {
     if (!window.confirm("Delete all the sample costs, harvests and sales? Real entries are not touched.")) return;
-    try {
-      await api.removeFinanceSample();
-      window.location.reload();
-    } catch (err) {
-      setProblem((err as Error).message);
-    }
+    remove.mutate();
   }
 
   const body = (
     <Notice kind="warn">
-      <b>Sample cost entries present in database.</b>{" "}
-      <button className="linkbtn" onClick={remove}>Clear sample entries</button>
-      {problem && <> {problem}</>}
+      <b>{status.data.sample} sample entries are in the books.</b>{" "}
+      <button className="linkbtn" onClick={clear} disabled={remove.isPending}>Clear sample entries</button>
     </Notice>
   );
   return inMain ? body : <div className="main" style={{ paddingBottom: 0 }}>{body}</div>;

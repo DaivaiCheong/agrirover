@@ -1,7 +1,7 @@
 import csv
 import io
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -11,7 +11,8 @@ from pydantic.alias_generators import to_camel
 from app.core.config import settings
 from app.core.db import get_db
 from app.services import farm_service, finance_service
-from app.services.errors import Invalid, NotFound
+from app.services.clock import farm_today
+from app.services.errors import Conflict, Invalid, NotFound
 
 router = APIRouter()
 Currency = Literal["USD", "KHR"]
@@ -109,16 +110,17 @@ async def reset_spreadsheet(farm: str | None = None, db=Depends(get_db)):
 @router.get("/finance/sample", tags=["finance"])
 async def sample_status(farm: str | None = None, db=Depends(get_db)):
     fname = farm or settings.farm_name
-    sample = await db.costs.count_documents({"farmName": fname, "sample": True})
-    real = await db.costs.count_documents({"farmName": fname, "sample": {"$ne": True}})
+    sample = sum([await db[c].count_documents({"farmName": fname, "sample": True}) for c in ("costs", "harvests", "sales")])
+    real = await db.costs.count_documents({"farmName": fname, "sample": {"$ne": True}, "deleted": {"$ne": True}})
     return {"sample": sample, "real": real}
 
 
 @router.delete("/finance/sample", tags=["finance"])
 async def sample_remove(farm: str | None = None, db=Depends(get_db)):
     fname = farm or settings.farm_name
-    await db.costs.delete_many({"farmName": fname, "sample": True})
-    real = await db.costs.count_documents({"farmName": fname, "sample": {"$ne": True}})
+    for c in ("costs", "harvests", "sales"):
+        await db[c].delete_many({"farmName": fname, "sample": True})
+    real = await db.costs.count_documents({"farmName": fname, "sample": {"$ne": True}, "deleted": {"$ne": True}})
     return {"sample": 0, "real": real}
 
 
@@ -126,10 +128,10 @@ async def sample_remove(farm: str | None = None, db=Depends(get_db)):
 
 @router.get("/costs", tags=["costs"])
 async def list_costs(cycle: str | None = None, limit: int = Query(500, ge=1, le=2000), farm: str | None = None, db=Depends(get_db)):
-    q: dict = {"farmName": farm or settings.farm_name}
+    q: dict = {"farmName": farm or settings.farm_name, "deleted": {"$ne": True}}
     if cycle:
         q["plantingId"] = cycle
-    return await db.costs.find(q, {"_id": 0, "farmName": 0}).sort("date", -1).limit(limit).to_list(length=limit)
+    return await db.costs.find(q, {"_id": 0, "farmName": 0, "deleted": 0}).sort([("date", -1), ("id", -1)]).limit(limit).to_list(length=limit)
 
 
 @router.post("/costs", status_code=201, tags=["costs"])
@@ -137,10 +139,25 @@ async def add_cost(body: CostIn, farm: str | None = None, db=Depends(get_db)):
     if body.category not in CATEGORIES:
         raise Invalid(f"unknown category {body.category!r}")
     fname = farm or settings.farm_name
+    if body.planting_id and await db.cycles.find_one({"farmName": fname, "id": body.planting_id}) is None:
+        raise NotFound(f"unknown cycle {body.planting_id!r}")
     farm_doc = await farm_service.get_farm_doc(db, fname)
-    rate = float(farm_doc["settings"].get("khrPerUsd") or 4080)
-    amount = body.amount if body.amount is not None else round((body.qty or 0) * (body.unit_price or 0), 2)
-    amount_usd = amount if body.currency == "USD" else round(amount / rate, 2)
+    st = farm_doc["settings"]
+    rate = float(st.get("khrPerUsd") or 4080)
+    unit_price, unit, currency = body.unit_price, body.unit, body.currency
+    if body.category == "labour_family" and body.amount is None and unit_price is None:
+        wage = st.get("familyWageUsdPerDay")
+        if not wage:
+            raise Invalid("set the family wage in Settings, or type the amount")
+        if not body.qty:
+            raise Invalid("enter the number of days worked")
+        unit_price, unit, currency = float(wage), unit or "day", "USD"
+    if body.amount is None and (body.qty is None or unit_price is None):
+        raise Invalid("enter the amount, or a quantity and a price per unit")
+    amount = body.amount if body.amount is not None else round(body.qty * unit_price, 2)
+    if amount <= 0:
+        raise Invalid("the amount must be above 0")
+    amount_usd = amount if currency == "USD" else round(amount / rate, 2)
     doc = {
         "id": f"cost-{uuid.uuid4().hex[:8]}",
         "farmName": fname,
@@ -149,13 +166,13 @@ async def add_cost(body: CostIn, farm: str | None = None, db=Depends(get_db)):
         "category": body.category,
         "description": body.description,
         "qty": body.qty,
-        "unit": body.unit,
-        "unitPrice": body.unit_price,
+        "unit": unit,
+        "unitPrice": unit_price,
         "amount": amount,
-        "currency": body.currency,
+        "currency": currency,
         "amountUsd": amount_usd,
-        "rateUsed": rate,
-        "source": "ledger",
+        "rateUsed": rate if currency == "KHR" else None,
+        "source": "manual",
         "sample": False,
     }
     await db.costs.insert_one(dict(doc))
@@ -165,9 +182,14 @@ async def add_cost(body: CostIn, farm: str | None = None, db=Depends(get_db)):
 
 @router.delete("/costs/{entry_id}", status_code=204, tags=["costs"])
 async def delete_cost(entry_id: str, farm: str | None = None, db=Depends(get_db)):
-    res = await db.costs.delete_one({"farmName": farm or settings.farm_name, "id": entry_id})
-    if res.deleted_count == 0:
+    """Hide a typed cost (it stays in the database, marked deleted). Stock use is undone from Stock instead."""
+    fname = farm or settings.farm_name
+    doc = await db.costs.find_one({"farmName": fname, "id": entry_id, "deleted": {"$ne": True}})
+    if doc is None:
         raise NotFound("cost entry not found")
+    if doc.get("source") == "stock_use":
+        raise Conflict("this cost comes from stock used on a crop: undo that use in Farm > Stock")
+    await db.costs.update_one({"id": entry_id}, {"$set": {"deleted": True, "deletedAt": datetime.now(timezone.utc).isoformat()}})
 
 
 # ---- Stock Inventory & Moves ----
@@ -225,7 +247,7 @@ async def stock_in(item_id: str, body: StockInMove, farm: str | None = None, db=
         "date": body.move_date.isoformat(),
         "kind": "in",
         "qty": body.qty,
-        "unitCostUsd": round(unit_usd, 2),
+        "unitCostUsd": round(unit_usd, 4),
         "plantingId": None,
     })
     return updated
@@ -233,15 +255,19 @@ async def stock_in(item_id: str, body: StockInMove, farm: str | None = None, db=
 
 @router.post("/stock/items/{item_id}/use", status_code=201, tags=["stock"])
 async def stock_use(item_id: str, body: StockUseMove, farm: str | None = None, db=Depends(get_db)):
+    """Using stock on a crop is a cost of that crop, at the moving-average price. Buying it was not."""
     fname = farm or settings.farm_name
     item = await db.stock_items.find_one({"farmName": fname, "id": item_id}, {"_id": 0})
     if item is None:
         raise NotFound("stock item not found")
-    if body.qty > float(item["qtyOnHand"]):
-        raise Invalid("not enough quantity on hand")
+    cyc = await db.cycles.find_one({"farmName": fname, "id": body.planting_id}, {"_id": 0})
+    if cyc is None:
+        raise NotFound(f"unknown cycle {body.planting_id!r}")
+    if body.qty > float(item["qtyOnHand"]) + 1e-9:
+        raise Invalid(f"not enough in stock: {float(item['qtyOnHand']):g} {item['unit']} on hand")
     unit_cost = float(item["avgUnitCostUsd"])
     new_qty = round(float(item["qtyOnHand"]) - body.qty, 3)
-    new_val = round(max(0.0, float(item["valueUsd"]) - body.qty * unit_cost), 2)
+    new_val = round(max(0.0, float(item["valueUsd"]) - body.qty * unit_cost), 2) if new_qty > 0 else 0.0
     updated = await db.stock_items.find_one_and_update(
         {"id": item_id},
         {"$set": {"qtyOnHand": new_qty, "valueUsd": new_val}},
@@ -256,29 +282,61 @@ async def stock_use(item_id: str, body: StockUseMove, farm: str | None = None, d
         "date": body.move_date.isoformat(),
         "kind": "out",
         "qty": body.qty,
-        "unitCostUsd": round(unit_cost, 2),
+        "unitCostUsd": round(unit_cost, 4),
         "plantingId": body.planting_id,
     })
-    return {"item": updated}
+    amount = round(body.qty * unit_cost, 2)
+    category = item["category"] if item["category"] in CATEGORIES else "materials"
+    cost_doc = {
+        "id": f"cost-{uuid.uuid4().hex[:8]}",
+        "farmName": fname,
+        "plantingId": body.planting_id,
+        "date": body.move_date.isoformat(),
+        "category": category,
+        "description": f"{body.qty:g} {item['unit']} {item['name']} from stock",
+        "qty": body.qty,
+        "unit": item["unit"],
+        "unitPrice": round(unit_cost, 4),
+        "amount": amount,
+        "currency": "USD",
+        "amountUsd": amount,
+        "rateUsed": None,
+        "source": "stock_use",
+        "moveId": move_id,
+        "sample": False,
+    }
+    await db.costs.insert_one(dict(cost_doc))
+    cost_doc.pop("farmName", None)
+    return {"item": updated, "moveId": move_id, "cost": cost_doc}
 
 
 @router.get("/stock/items/{item_id}/moves", tags=["stock"])
 async def stock_moves(item_id: str, farm: str | None = None, db=Depends(get_db)):
-    return await db.stock_moves.find({"farmName": farm or settings.farm_name, "itemId": item_id}, {"_id": 0, "farmName": 0, "itemId": 0}).sort("date", -1).to_list(length=200)
+    return await db.stock_moves.find({"farmName": farm or settings.farm_name, "itemId": item_id}, {"_id": 0, "farmName": 0, "itemId": 0}).sort([("date", -1), ("id", -1)]).to_list(length=200)
 
 
 @router.delete("/stock/moves/{move_id}", status_code=204, tags=["stock"])
 async def undo_move(move_id: str, farm: str | None = None, db=Depends(get_db)):
+    """Undo a use (the stock comes back, its cost goes) or a purchase (only while that stock is still on hand)."""
     fname = farm or settings.farm_name
     mv = await db.stock_moves.find_one({"farmName": fname, "id": move_id})
     if mv is None:
         raise NotFound("stock move not found")
-    if mv["kind"] == "out":
-        item = await db.stock_items.find_one({"id": mv["itemId"]})
-        if item:
-            new_qty = round(float(item["qtyOnHand"]) + float(mv["qty"]), 3)
-            new_val = round(float(item["valueUsd"]) + float(mv["qty"]) * float(mv["unitCostUsd"]), 2)
-            await db.stock_items.update_one({"id": mv["itemId"]}, {"$set": {"qtyOnHand": new_qty, "valueUsd": new_val}})
+    item = await db.stock_items.find_one({"farmName": fname, "id": mv["itemId"]})
+    qty, unit_cost = float(mv["qty"]), float(mv["unitCostUsd"])
+    if item is not None:
+        on_hand, value = float(item["qtyOnHand"]), float(item["valueUsd"])
+        if mv["kind"] == "out":
+            new_qty, new_val = round(on_hand + qty, 3), round(value + qty * unit_cost, 2)
+        else:
+            if qty > on_hand + 1e-9:
+                raise Conflict("part of this purchase was already used: undo those uses first")
+            new_qty, new_val = round(on_hand - qty, 3), round(max(0.0, value - qty * unit_cost), 2)
+        new_avg = round(new_val / new_qty, 4) if new_qty > 0 else float(item["avgUnitCostUsd"])
+        await db.stock_items.update_one({"id": mv["itemId"]},
+                                        {"$set": {"qtyOnHand": new_qty, "valueUsd": new_val if new_qty > 0 else 0.0,
+                                                  "avgUnitCostUsd": new_avg}})
+    await db.costs.delete_many({"farmName": fname, "moveId": move_id})
     await db.stock_moves.delete_one({"id": move_id})
 
 
@@ -314,7 +372,7 @@ async def add_asset(body: AssetIn, farm: str | None = None, db=Depends(get_db)):
 async def retire_asset(asset_id: str, farm: str | None = None, db=Depends(get_db)):
     doc = await db.assets.find_one_and_update(
         {"farmName": farm or settings.farm_name, "id": asset_id},
-        {"$set": {"status": "retired", "retiredOn": date.today().isoformat()}},
+        {"$set": {"status": "retired", "retiredOn": farm_today().isoformat()}},
         projection={"_id": 0, "farmName": 0},
         return_document=True,
     )
@@ -353,7 +411,7 @@ def _csv_response(rows: list[list], filename: str) -> Response:
 
 @router.get("/export/costs.csv", tags=["reports"])
 async def export_costs(farm: str | None = None, db=Depends(get_db)):
-    costs = await db.costs.find({"farmName": farm or settings.farm_name}, {"_id": 0}).sort("date", 1).to_list(length=2000)
+    costs = await db.costs.find({"farmName": farm or settings.farm_name, "deleted": {"$ne": True}}, {"_id": 0}).sort("date", 1).to_list(length=2000)
     out = [["date", "planting_id", "category", "description", "qty", "unit", "currency", "amount", "amount_usd"]]
     for c in costs:
         out.append([c["date"], c.get("plantingId") or "", c["category"], c.get("description") or "", c.get("qty") or "", c.get("unit") or "", c["currency"], c["amount"], c["amountUsd"]])

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceArea, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Notice } from "./ui";
-import { api, type CondParam } from "../lib/api";
+import type { CondParam } from "../lib/api";
 import { fmtValue, rangeText, trim, unitText } from "../lib/conditions";
-import { useData } from "../lib/useData";
+import { errorText, useTelemetry } from "../lib/queries";
 
 /** The nine readings, in the order of the ribbon. */
 export const TREND_METRICS = ["soil_moisture", "soil_ph", "soil_ec", "soil_temperature", "nitrogen", "phosphorus",
@@ -117,10 +117,9 @@ export default function BedTrends({ zone, params, hours }: {
   hours: number;
 }) {
   const [view, setView] = useState<"chart" | "table">("chart");
-  const { data, error, loading } = useData(
-    () => api.telemetry(zone, TREND_METRICS, hours, Math.round(hours / 24)),
-    [zone, hours],
-  );
+  const tel = useTelemetry(zone, TREND_METRICS, hours, Math.min(500, Math.max(10, Math.round(hours / 3))));
+  const { data, isPending: loading } = tel;
+  const error = tel.error ? errorText(tel.error) : null;
   const byMetric = new Map(params.map((p) => [p.metric, p]));
 
   const from = data ? new Date(data.from).getTime() : 0;

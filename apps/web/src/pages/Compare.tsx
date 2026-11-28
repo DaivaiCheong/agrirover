@@ -1,85 +1,98 @@
-import { useEffect, useState } from "react";
-import { Empty, Field, Notice, Panel } from "../components/ui";
-import { api, type Cop } from "../lib/api";
+import { useState } from "react";
+import { GitCompare } from "lucide-react";
+import { Empty, EF, ErrorNotice, Panel } from "../components/ui";
+import type { Cop } from "../lib/api";
 import { cycleLabel, num, usd } from "../lib/format";
-import { useData } from "../lib/useData";
+import { errorText, useCompare, useCycles } from "../lib/queries";
 
-type Row = { label: string; get: (c: Cop) => number | null; fmt: (v: number | null) => string };
+type Row = { label: string; get: (c: Cop) => number | null; fmt: (v: number | null) => string; lowerIsBetter?: boolean };
 
 const ROWS: Row[] = [
-  { label: "Total cost", get: (c) => c.totalCostUsd, fmt: (v) => usd(v) },
+  { label: "Total cost", get: (c) => c.totalCostUsd, fmt: (v) => usd(v), lowerIsBetter: true },
+  { label: "Budget (workbook)", get: (c) => c.budgetUsd, fmt: (v) => usd(v) },
+  { label: "Plants", get: (c) => c.cycle.plantCount, fmt: (v) => num(v, 0) },
   { label: "Marketable kg", get: (c) => c.kgMarketable, fmt: (v) => num(v, 1) },
-  { label: "Cost per kg", get: (c) => c.copPerKg, fmt: (v) => usd(v, 3) },
-  { label: "Cost per plant", get: (c) => c.costPerPlant, fmt: (v) => usd(v, 3) },
-  { label: "Cost per m²", get: (c) => c.costPerM2, fmt: (v) => usd(v, 3) },
-  { label: "Water used (planner estimate, m³)", get: (c) => c.waterM3, fmt: (v) => num(v, 2) },
+  { label: "Cost per kg", get: (c) => c.copPerKg, fmt: (v) => usd(v, 3), lowerIsBetter: true },
+  { label: "Cost per plant", get: (c) => c.costPerPlant, fmt: (v) => usd(v, 3), lowerIsBetter: true },
+  { label: "Cost per m²", get: (c) => c.costPerM2, fmt: (v) => usd(v, 3), lowerIsBetter: true },
+  { label: "Water (plan, m³)", get: (c) => c.waterM3, fmt: (v) => num(v, 2) },
   { label: "Revenue", get: (c) => c.revenueUsd, fmt: (v) => usd(v) },
   { label: "Profit", get: (c) => c.marginUsd, fmt: (v) => usd(v) },
 ];
 
+/** Two crops side by side, from their records. A difference is a record, not a cause. */
 export default function Compare() {
-  const cycles = useData(api.cycles);
-  const [a, setA] = useState("");
-  const [b, setB] = useState("");
-
-  // start with a guided bed against a usual bed, when the farm has them
-  useEffect(() => {
-    const cs = cycles.data;
-    if (!cs || a || b) return;
-    const guided = cs.find((c) => c.trialArm === "guided");
-    const usual = cs.find((c) => c.trialArm === "usual");
-    setA(guided?.id ?? cs[0]?.id ?? "");
-    setB(usual?.id ?? cs[1]?.id ?? "");
-  }, [cycles.data, a, b]);
-
-  const both = a && b && a !== b;
-  const cmp = useData(() => (both ? api.compare(a, b) : Promise.resolve(null)), [a, b]);
+  const cycles = useCycles();
+  const list = cycles.data ?? [];
+  const guided = list.find((c) => c.trialArm === "guided");
+  const usual = list.find((c) => c.trialArm === "usual");
+  const [a, setA] = useState<string | null>(null);
+  const [b, setB] = useState<string | null>(null);
+  const first = a ?? guided?.id ?? list[0]?.id ?? "";
+  const second = b ?? usual?.id ?? list.find((c) => c.id !== first)?.id ?? "";
+  const cmp = useCompare(first, second);
   const r = cmp.data;
 
   return (
-    <>
-      <main className="main stack" style={{ paddingTop: 12 }}>
-        {(cycles.data ?? []).length < 2 ? <Empty>Needs at least two crops.</Empty> : (
-          <>
-            <div className="row2">
-              <Field label="First"><select value={a} onChange={(e) => setA(e.target.value)}>
-                {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}{c.trialArm ? ` · ${c.trialArm}` : ""}</option>)}</select></Field>
-              <Field label="Second"><select value={b} onChange={(e) => setB(e.target.value)}>
-                {(cycles.data ?? []).map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}{c.trialArm ? ` · ${c.trialArm}` : ""}</option>)}</select></Field>
+    <main className="main stack">
+      {list.length < 2 ? (
+        <Empty icon={GitCompare}>{cycles.isPending ? "Loading…" : "Comparing needs at least two crops."}</Empty>
+      ) : (
+        <>
+          <section className="panel panel-pad">
+            <div className="erp-grid-2">
+              <EF label="First crop">
+                <select className="erp-select" value={first} onChange={(e) => setA(e.target.value)}>
+                  {list.map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}{c.trialArm ? ` · ${c.trialArm}` : ""}</option>)}
+                </select>
+              </EF>
+              <EF label="Second crop">
+                <select className="erp-select" value={second} onChange={(e) => setB(e.target.value)}>
+                  {list.map((c) => <option key={c.id} value={c.id}>{cycleLabel(c)}{c.trialArm ? ` · ${c.trialArm}` : ""}</option>)}
+                </select>
+              </EF>
             </div>
-            {!both && <Notice>Choose two different crops.</Notice>}
-            {cmp.error && <Notice kind="alert">{cmp.error}</Notice>}
-            {r && (
-              <Panel title="Result" pad={false} right={<span className="small muted">Records, not causes</span>}>
+          </section>
+          {first === second && <Empty>Choose two different crops.</Empty>}
+          {cmp.error && <ErrorNotice error={errorText(cmp.error)} onRetry={() => cmp.refetch()} />}
+          {r && (
+            <Panel title="Side by side" icon={GitCompare} pad={false} right={<span className="small muted">Costs so far for open crops</span>}>
+              <div className="tablewrap">
                 <table className="tbl">
                   <thead><tr><th /><th className="r">{r.a.cycle.bedLabel}</th><th className="r">{r.b.cycle.bedLabel}</th><th className="r">First − second</th></tr></thead>
                   <tbody>
                     {ROWS.map((row) => {
                       const x = row.get(r.a), y = row.get(r.b);
+                      const better = x === null || y === null || x === y || row.lowerIsBetter === undefined ? null
+                        : (x < y) === row.lowerIsBetter ? "first" : "second";
                       return (
                         <tr key={row.label}>
-                          <td>{row.label}</td><td className="r">{row.fmt(x)}</td><td className="r">{row.fmt(y)}</td>
-                          <td className="r">{x === null || y === null ? "—" : row.fmt(x - y)}</td>
+                          <td>{row.label}</td>
+                          <td className="r">{better === "first" ? <b>{row.fmt(x)}</b> : row.fmt(x)}</td>
+                          <td className="r">{better === "second" ? <b>{row.fmt(y)}</b> : row.fmt(y)}</td>
+                          <td className="r muted">{x === null || y === null ? "—" : row.fmt(x - y)}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
-              </Panel>
-            )}
-            {r && [r.a, r.b].some((c) => c.flags.length > 0) && (
-              <Panel title="Not counted">
+              </div>
+            </Panel>
+          )}
+          {r && [r.a, r.b].some((c) => c.flags.length > 0) && (
+            <Panel title="Not counted, or estimated">
+              <div className="grid g2">
                 {[r.a, r.b].map((c) => (
-                  <div key={c.cycle.id} style={{ marginBottom: 10 }}>
+                  <div key={c.cycle.id}>
                     <b>{c.cycle.bedLabel}</b>
                     <ul className="flaglist">{c.flags.map((f) => <li key={f}>{f}</li>)}</ul>
                   </div>
                 ))}
-              </Panel>
-            )}
-          </>
-        )}
-      </main>
-    </>
+              </div>
+            </Panel>
+          )}
+        </>
+      )}
+    </main>
   );
 }

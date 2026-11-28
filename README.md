@@ -37,6 +37,31 @@ docker compose --profile sim up -d
 - FastAPI Swagger UI (`apps/api`): `http://localhost:8000/docs`
 - FastAPI Healthcheck: `http://localhost:8000/health`
 
+### Run It on a PC Without Docker
+
+Needs Python 3.11, Node 20+ and a Mosquitto broker on `localhost:1883`. With no MongoDB installed, the API can run on an
+in-memory test database (`mongomock://`): the top bar then shows **Test DB**, and the data resets when the API restarts.
+
+```powershell
+# 1. API (seeds the G1–G6 tomato farm on start)
+Push-Location apps/api
+$env:MONGODB_URL = "mongomock://localhost"   # or mongodb://localhost:27017 for a real MongoDB
+$env:MQTT_HOST = "127.0.0.1"
+python -m uvicorn app.main:app --port 8000   # on Windows, start it through an asyncio selector loop (aiomqtt needs one)
+Pop-Location
+
+# 2. Dashboard
+npm --prefix apps/web run dev                 # http://localhost:5173
+
+# 3. Optional: the simulated rover, so Rover › Start round runs end to end
+Push-Location edge/rover-agent
+$env:MQTT_HOST = "127.0.0.1"
+python -m rover run --sim-hardware
+Pop-Location
+```
+
+The top bar of every page shows the database, the MQTT broker and the rover, live.
+
 ### Local Development & Tests (Without Starting Full Docker Compose)
 
 ```powershell

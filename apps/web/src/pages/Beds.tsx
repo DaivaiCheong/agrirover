@@ -1,16 +1,17 @@
-import { useState } from "react";
-import { Activity, ArrowDown, ArrowUp, ChevronDown, ChevronRight, Clock, Droplets, MapPin, Package, Plus, Sprout } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Activity, ArrowDown, ArrowUp, ChevronDown, ChevronRight, Clock, Droplets, Layers, MapPin, Package, Plus, Sprout } from "lucide-react";
 import { Link } from "react-router-dom";
 import AddCropModal from "../components/AddCropModal";
 import BedTrends, { RANGES } from "../components/BedTrends";
 import { StatusBadge } from "../components/EnvRibbon";
-import { EF, Empty, FormModal, Kpis, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
-import { api, loadProblem, type BedConditions, type CondParam, type Cycle } from "../lib/api";
+import { EF, Empty, ErrorNotice, FormModal, Kpis, Panel, Tag, Toolbar, failMsg, type FormMsg } from "../components/ui";
+import type { BedConditions, CondParam, Cycle, ZoneNow } from "../lib/api";
 import { RIBBON_CELLS, cls, explain, fmtValue, rangeText } from "../lib/conditions";
+import { useFarmFocus } from "../lib/farmContext";
 import { litres, num, usd } from "../lib/format";
-import { getBlockSoilProfile } from "../lib/soil";
-import { useData } from "../lib/useData";
-import { ago, usePoll } from "../lib/usePoll";
+import { useAddBed, useAdvice, useConditions, useCycles, useSaveSoilProfile, useStock, useZones } from "../lib/queries";
+import { DRAINAGE_OPTIONS, TEXTURE_OPTIONS } from "../lib/soil";
+import { ago } from "../lib/usePoll";
 
 function Reading({ p }: { p: CondParam }) {
   if (p.value === null) return <span className="rd muted">—</span>;
@@ -48,110 +49,83 @@ function CropCell({ b, c, onPlant }: { b?: BedConditions; c?: Cycle; onPlant: ()
   }
   return (
     <>
-      <Link to={`/cycles/${c.id}`} onClick={(e) => e.stopPropagation()}>
-        {c.cropName}{c.variety ? ` (${c.variety})` : ""}
-      </Link>
-      <div className="mono-sm muted" title={b?.stage?.title}>
-        {b?.stage ? `Day ${b.stage.day} · ${b.stage.title}` : c.day ? `Day ${c.day}` : "Prepared"}
-      </div>
+      <Link to={`/cycles/${c.id}/tomato`} onClick={(e) => e.stopPropagation()}>{c.cropName}{c.variety ? ` (${c.variety})` : ""}</Link>
+      <div className="mono-sm muted" title={b?.stage?.title}>{b?.stage ? `Day ${b.stage.day} · ${b.stage.title}` : c.day ? `Day ${c.day}` : "Planned"}</div>
     </>
   );
 }
 
+/** Every bed: its soil, its crop, its live readings and their history. Soil profiles are saved on the server. */
 export default function Beds() {
-  const zones = useData(api.zones);
-  const cycles = useData(api.cycles);
-  const conditions = usePoll(api.conditions);
-  const stock = useData(api.stockItems);
-  const adviceRes = useData(api.advice);
+  const zones = useZones();
+  const cycles = useCycles();
+  const conditions = useConditions();
+  const stock = useStock();
+  const advice = useAdvice();
+  const { setZone } = useFarmFocus();
 
   const [openBed, setOpenBed] = useState<string | null>(null);
   const [hours, setHours] = useState<number>(RANGES[0].hours);
   const [showAddBed, setShowAddBed] = useState(false);
-  const [newLabel, setNewLabel] = useState("");
-  const [newArea, setNewArea] = useState("");
-  const [msg, setMsg] = useState<FormMsg>(null);
+  const [soilOf, setSoilOf] = useState<ZoneNow | null>(null);
   const [plantingZone, setPlantingZone] = useState<string | null>(null);
 
   const rows = zones.data ?? [];
-  const activeCycleList = cycles.data ?? [];
-  const activeCondList = conditions.data ?? [];
-  const stockRows = stock.data ?? [];
-
-  const activeCyclesByZone = new Map(activeCycleList.filter((c) => c.status === "active").map((c) => [c.zone, c]));
-  const condOf = new Map(activeCondList.map((b) => [b.zone, b]));
+  const cycleOf = new Map((cycles.data ?? []).filter((c) => c.status === "active").map((c) => [c.zone, c]));
+  const condOf = new Map((conditions.data ?? []).map((b) => [b.zone, b]));
   const openCond = openBed ? condOf.get(openBed) : undefined;
 
   const totalArea = rows.reduce((s, z) => s + (z.areaM2 ?? 0), 0);
-  const activePlants = activeCycleList.reduce((s, c) => s + (c.plantCount ?? 0), 0);
-  const occupied = rows.filter((z) => activeCyclesByZone.has(z.zone)).length;
-  const waterTodayL = (adviceRes.data ?? []).reduce((s, a) => s + a.water.litres, 0);
+  const plants = [...cycleOf.values()].reduce((s, c) => s + (c.plantCount ?? 0), 0);
+  const occupied = rows.filter((z) => cycleOf.has(z.zone)).length;
+  const adv = advice.data ?? [];
+  const waterToday = adv.reduce((s, a) => s + a.water.litres, 0);
+  const waterFull = adv.reduce((s, a) => s + a.water.fullLitres, 0);
+  const noProfile = rows.filter((z) => !z.soilProfile).length;
+  const flagged = (conditions.data ?? []).filter((c) => c.status === "warning" || c.status === "critical");
   const pageError = zones.error ?? cycles.error ?? conditions.error;
-
-  async function addBed(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newLabel.trim()) return;
-    try {
-      await api.addBed({ label: newLabel.trim(), areaM2: newArea ? Number(newArea) : undefined });
-      setMsg({ kind: "ok", text: `${newLabel.trim()} added.` });
-      setNewLabel("");
-      setNewArea("");
-      zones.reload();
-    } catch (err) {
-      setMsg({ kind: "alert", text: (err as Error).message });
-    }
-  }
 
   return (
     <>
       <Toolbar>
-        <button className="btn btn-sm" onClick={() => { setMsg(null); setShowAddBed(true); }}>
-          <Plus size={16} aria-hidden />Add bed
-        </button>
+        <button className="btn btn-sm" onClick={() => setShowAddBed(true)}><Plus size={16} aria-hidden />Add bed</button>
       </Toolbar>
 
       <main className="main stack">
-        {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
+        {pageError && <ErrorNotice error={pageError.message === "Failed to fetch" ? "Cannot reach the farm server." : pageError.message} onRetry={() => { zones.refetch(); conditions.refetch(); }} />}
         <Kpis
+          loading={zones.isPending}
           items={[
-            { k: "Total beds", v: rows.length, d: `${occupied} growing · ${rows.length - occupied} ready` },
-            { k: "Active tomato plants", v: activePlants, d: "Across G1–G5 planted blocks" },
-            { k: "Total area", v: totalArea > 0 ? `${num(totalArea, 0)} m²` : "—", d: "Loam & sandy loam plots" },
-            { k: "Water used today (Rover)", v: litres(waterTodayL), d: "28% below blanket schedule" },
+            { k: "Beds", icon: MapPin, v: rows.length, d: `${occupied} growing · ${rows.length - occupied} free` },
+            { k: "Plants", icon: Sprout, v: plants, d: `on ${num(totalArea, 0)} m²` },
+            { k: "Soil profiles", icon: Layers, v: `${rows.length - noProfile} of ${rows.length}`, tone: noProfile ? "warn" : "ok",
+              d: noProfile ? `${noProfile} bed${noProfile === 1 ? "" : "s"} without a soil profile` : "Every bed described" },
+            { k: "Drip water today", icon: Droplets, tone: "info", v: litres(waterToday),
+              d: waterFull > 0 ? `${Math.round(((waterFull - waterToday) / waterFull) * 100)}% under a blanket schedule` : "Needs a rover round" },
           ]}
         />
 
         <Panel
-          title="Beds & Land (G1–G6)"
+          title="Beds"
           icon={Activity}
           pad={false}
           right={
             <div className="seg" role="group" aria-label="History period">
               {RANGES.map((r) => (
-                <button key={r.hours} type="button" className={hours === r.hours ? "on" : ""} onClick={() => setHours(r.hours)}>
-                  {r.label}
-                </button>
+                <button key={r.hours} type="button" className={hours === r.hours ? "on" : ""} onClick={() => setHours(r.hours)}>{r.label}</button>
               ))}
             </div>
           }
         >
           {rows.length === 0 ? (
-            <Empty icon={MapPin}>No beds configured yet.</Empty>
+            <Empty icon={MapPin}>{zones.isPending ? "Loading…" : "No bed yet. Add one to start."}</Empty>
           ) : (
             <div className="tablewrap">
               <table className="tbl tm">
                 <thead>
                   <tr>
-                    <th>Bed &amp; Soil Texture</th>
-                    <th>Status</th>
-                    <th>Tomato Crop</th>
-                    <th className="r">Plants</th>
-                    {COLUMNS.map((c) => (
-                      <th key={c.key}>
-                        {c.head}
-                        {c.unit && <small> {c.unit}</small>}
-                      </th>
-                    ))}
+                    <th>Bed and soil</th><th>Status</th><th>Crop</th><th className="r">Plants</th>
+                    {COLUMNS.map((c) => <th key={c.key}>{c.head}{c.unit && <small> {c.unit}</small>}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -159,10 +133,10 @@ export default function Beds() {
                     const b = condOf.get(z.zone);
                     const params = new Map((b?.params ?? []).map((p) => [p.metric, p]));
                     const open = openBed === z.zone;
-                    const c = activeCyclesByZone.get(z.zone);
-                    const soil = z.soilProfile ?? getBlockSoilProfile(z.zone);
+                    const c = cycleOf.get(z.zone);
+                    const soil = z.soilProfile;
                     return (
-                      <tr key={z.zone} className={`pickable${open ? " open" : ""}`} onClick={() => setOpenBed(open ? null : z.zone)}>
+                      <tr key={z.zone} className={`pickable${open ? " open" : ""}`} onClick={() => { setOpenBed(open ? null : z.zone); setZone(z.zone); }}>
                         <td>
                           <button type="button" className="bedlink" aria-expanded={open} aria-label={`History of ${z.label ?? z.zone}`}>
                             {open ? <ChevronDown size={15} aria-hidden /> : <ChevronRight size={15} aria-hidden />}
@@ -170,17 +144,17 @@ export default function Beds() {
                           </button>
                           <div className="mono-sm muted">
                             {z.areaM2 ? `${num(z.areaM2, 0)} m² · ` : ""}
-                            {soil.texture}, {soil.rootingDepthCm} cm depth
+                            {soil ? `${soil.texture}, ${soil.rootingDepthCm} cm, ${soil.drainage.toLowerCase()}` : "No soil profile"}
+                            {" · "}
+                            <button type="button" className="linkbtn small" style={{ padding: 0 }} onClick={(e) => { e.stopPropagation(); setSoilOf(z); }}>
+                              {soil ? "edit soil" : "add soil"}
+                            </button>
                             {b?.recordedAt ? ` · ${ago(b.recordedAt)}` : ""}
                           </div>
                         </td>
-                        <td className="status">{b ? <StatusBadge status={b.status} alerts={b.alerts.length} /> : <Tag>Ready</Tag>}</td>
-                        <td className="crop">
-                          <CropCell b={b} c={c} onPlant={() => setPlantingZone(z.zone)} />
-                        </td>
-                        <td className="r nowrap">
-                          {c?.plantCount ? <b>{c.plantCount}</b> : <span className="muted">0</span>}
-                        </td>
+                        <td className="status">{b && c ? <StatusBadge status={b.status} alerts={b.alerts.length} /> : <Tag>{c ? "No readings" : "Free"}</Tag>}</td>
+                        <td className="crop"><CropCell b={b} c={c} onPlant={() => setPlantingZone(z.zone)} /></td>
+                        <td className="r nowrap">{c?.plantCount ? <b>{c.plantCount}</b> : <span className="muted">0</span>}</td>
                         {RIBBON_CELLS.map((cell) => (
                           <td key={cell.key} className="m">
                             {cell.metrics.map((m) => {
@@ -200,7 +174,7 @@ export default function Beds() {
           {openCond && (
             <div className="trend-section">
               <div className="trend-section-head">
-                <b>{openCond.label ?? openCond.zone} · Trend</b>
+                <b>{openCond.label ?? openCond.zone} · history</b>
                 <button type="button" className="linkbtn" onClick={() => setOpenBed(null)}>Close</button>
               </div>
               {openCond.alerts.length > 0 && (
@@ -208,90 +182,125 @@ export default function Beds() {
                   <tbody>
                     {openCond.alerts.map((a) => (
                       <tr key={a.id}>
-                        <td className="nowrap">
-                          <span className={`tag tag-${a.severity === "critical" ? "alert" : "warn"}`}>{a.title}</span>
-                        </td>
+                        <td className="nowrap"><span className={`tag tag-${a.severity === "critical" ? "alert" : "warn"}`}>{a.title}</span></td>
                         <td className="small">{a.message}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
-              <BedTrends
-                zone={openCond.zone}
-                params={openCond.params}
-                hours={hours}
-              />
-              <p className="small muted trend-source">Rover automated daily probe average · {openCond.source}</p>
+              <BedTrends zone={openCond.zone} params={openCond.params} hours={hours} />
+              <p className="small muted trend-source">Source: {openCond.source}</p>
             </div>
           )}
         </Panel>
 
-        <Panel
-          title="Water & Input Stock Overview"
-          icon={Package}
-          pad={false}
-          right={
-            <Link className="linkbtn small" to="/stock">
-              Open full stock ledger →
-            </Link>
-          }
-        >
-          <div className="panel-pad grid g2">
-            <div>
-              <span className="ts-k">Today's Drip &amp; Soil NPK Summary</span>
-              <p className="small muted" style={{ marginTop: 4 }}>
-                <Droplets size={13} aria-hidden style={{ verticalAlign: "middle", marginRight: 4 }} />
-                AgriRover logged <b>{litres(waterTodayL)}</b> across {activePlants} active tomato plants. G1, G3, G4 &amp; G5 hold
-                adequate Nitrogen (`95–110 mg/kg`), while <b>G2 R2 T2</b> (`64 mg/kg`) and <b>G3 R2 T4</b> (`pH 5.75`) trigger spot treatment.
-              </p>
-            </div>
+        <div className="grid g2">
+          <Panel title="Out of range today" icon={Activity}>
+            {flagged.length === 0 ? (
+              <Empty>Every growing bed is inside its targets.</Empty>
+            ) : (
+              <div className="stack small">
+                {flagged.map((c) => (
+                  <div key={c.zone}>
+                    <b>{c.label}</b>: {c.alerts.map((a) => a.message).join(" ")}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+          <Panel title="Stock" icon={Package} pad={false} right={<Link className="linkbtn small" to="/stock">All stock →</Link>}>
             <div className="tablewrap">
               <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Supply Item</th>
-                    <th className="r">On Hand</th>
-                    <th className="r">Value</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>Item</th><th className="r">On hand</th><th className="r">Value</th></tr></thead>
                 <tbody>
-                  {stockRows.slice(0, 4).map((s) => (
-                    <tr key={s.id}>
-                      <td><b>{s.name}</b></td>
-                      <td className="r nowrap">{num(s.qtyOnHand, 1)} {s.unit}</td>
-                      <td className="r nowrap">{usd(s.valueUsd)}</td>
-                    </tr>
+                  {(stock.data ?? []).slice(0, 5).map((s) => (
+                    <tr key={s.id}><td><b>{s.name}</b></td><td className="r nowrap">{num(s.qtyOnHand, 1)} {s.unit}</td><td className="r nowrap">{usd(s.valueUsd)}</td></tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        </Panel>
+          </Panel>
+        </div>
       </main>
 
-      {showAddBed && (
-        <FormModal title="Add bed" submit="Save bed" msg={msg} onClose={() => setShowAddBed(false)} onSubmit={addBed} width={440}>
-          <div className="erp-grid-2">
-            <EF label="Name" req>
-              <input className="erp-input" required autoFocus placeholder="G7 Greenhouse East" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} />
-            </EF>
-            <EF label="Area">
-              <div className="erp-input-group">
-                <input className="erp-input" type="number" min={1} step="any" value={newArea} onChange={(e) => setNewArea(e.target.value)} />
-                <span className="erp-input-addon">m²</span>
-              </div>
-            </EF>
-          </div>
-        </FormModal>
-      )}
-
-      <AddCropModal
-        isOpen={Boolean(plantingZone)}
-        zone={plantingZone}
-        onClose={() => setPlantingZone(null)}
-        onAdded={() => cycles.reload()}
-      />
+      {showAddBed && <AddBedDialog onClose={() => setShowAddBed(false)} />}
+      {soilOf && <SoilDialog bed={soilOf} onClose={() => setSoilOf(null)} />}
+      <AddCropModal isOpen={Boolean(plantingZone)} zone={plantingZone} onClose={() => setPlantingZone(null)} />
     </>
+  );
+}
+
+function AddBedDialog({ onClose }: { onClose: () => void }) {
+  const add = useAddBed();
+  const [label, setLabel] = useState("");
+  const [area, setArea] = useState("");
+  const [msg, setMsg] = useState<FormMsg>(null);
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await add.mutateAsync({ label: label.trim(), areaM2: area ? Number(area) : undefined });
+      setMsg({ kind: "ok", text: `${label.trim()} added. Describe its soil next.` });
+      setLabel(""); setArea("");
+    } catch (err) {
+      setMsg(failMsg(err));
+    }
+  }
+  return (
+    <FormModal title="Add a bed" submit="Save bed" msg={msg} onClose={onClose} onSubmit={save} busy={add.isPending} width={440}>
+      <div className="erp-grid-2">
+        <EF label="Name" req><input className="erp-input" required autoFocus placeholder="G7 Greenhouse East" value={label} onChange={(e) => setLabel(e.target.value)} /></EF>
+        <EF label="Area">
+          <div className="erp-input-group">
+            <input className="erp-input" type="number" min={1} step="any" value={area} onChange={(e) => setArea(e.target.value)} />
+            <span className="erp-input-addon">m²</span>
+          </div>
+        </EF>
+      </div>
+    </FormModal>
+  );
+}
+
+function SoilDialog({ bed, onClose }: { bed: ZoneNow; onClose: () => void }) {
+  const save = useSaveSoilProfile();
+  const p = bed.soilProfile;
+  const [texture, setTexture] = useState(p?.texture ?? TEXTURE_OPTIONS[0]);
+  const [depth, setDepth] = useState(String(p?.rootingDepthCm ?? ""));
+  const [drainage, setDrainage] = useState(p?.drainage ?? DRAINAGE_OPTIONS[0]);
+  const [om, setOm] = useState(String(p?.organicMatterPct ?? ""));
+  const [msg, setMsg] = useState<FormMsg>(null);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await save.mutateAsync({ zone: bed.zone, profile: { texture, rootingDepthCm: Number(depth), drainage, organicMatterPct: Number(om) } });
+      onClose();
+    } catch (err) {
+      setMsg(failMsg(err));
+    }
+  }
+  return (
+    <FormModal title={`Soil of ${bed.label ?? bed.zone}`} submit="Save soil" msg={msg} onClose={onClose} onSubmit={submit} busy={save.isPending} width={500}>
+      <div className="erp-form">
+        <p className="small muted">From a soil test or a dug pit. The rover's probe reads moisture, pH and nutrients; this is what it cannot read.</p>
+        <div className="erp-grid-2">
+          <EF label="Texture" req>
+            <select className="erp-select" value={texture} onChange={(e) => setTexture(e.target.value)}>
+              {TEXTURE_OPTIONS.map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </EF>
+          <EF label="Drainage" req>
+            <select className="erp-select" value={drainage} onChange={(e) => setDrainage(e.target.value)}>
+              {DRAINAGE_OPTIONS.map((d) => <option key={d}>{d}</option>)}
+            </select>
+          </EF>
+          <EF label="Rooting depth (cm)" req hint="Tomato wants 60 cm or more">
+            <input className="erp-input" required type="number" min={1} max={500} value={depth} onChange={(e) => setDepth(e.target.value)} />
+          </EF>
+          <EF label="Organic matter (%)" req hint="From the lab report">
+            <input className="erp-input" required type="number" min={0} max={100} step="0.1" value={om} onChange={(e) => setOm(e.target.value)} />
+          </EF>
+        </div>
+      </div>
+    </FormModal>
   );
 }

@@ -14,11 +14,13 @@ from app.services.tomato import (
     LITRES_PER_PLANT_CYCLE,
     METHOD_IDS,
     PARAM_META,
+    PRECISION_SHARE,
     PARAM_RULES,
     SETUP_BY_ID,
     SLUG,
     STAGES,
     TARGETS,
+    cell_advice,
     cycle_public_dict,
     days_between,
     rate_metric,
@@ -58,7 +60,7 @@ async def latest_zones(db: Any, farm_name: str) -> list[dict]:
         moist = m_map.get("soil_moisture", {}).get("value", z.get("moisturePct"))
         wph = m_map.get("water_ph", {}).get("value", z.get("waterPh"))
         volt = m_map.get("supply_voltage", {}).get("value", z.get("supplyVoltage"))
-        rain = bool(m_map["rain"]["value"]) if "rain" in m_map else z.get("rain", False)
+        rain = bool(m_map["rain"]["value"]) if "rain" in m_map else z.get("rain")
         rec = max((v["ts"] for v in m_map.values() if v.get("ts")), default=z.get("recordedAt"))
         out.append({
             "zone": z["zone"],
@@ -78,18 +80,19 @@ async def add_bed(db: Any, farm_name: str, label: str, area_m2: float | None = N
     name = slugify(label)
     if await db.zones.find_one({"farmName": farm_name, "zone": name}):
         raise Conflict(f"a bed named {label!r} already exists")
-    now = datetime.now(timezone.utc).isoformat()
+    # A new bed has no sensor yet: its readings stay empty until a field node or the rover reports.
     doc = {
         "farmName": farm_name,
         "zone": name,
         "label": label.strip(),
-        "areaM2": area_m2 or 50.0,
-        "soilProfile": {"texture": "Sandy loam", "rootingDepthCm": 55, "drainage": "Well drained", "organicMatterPct": 2.6},
-        "rain": False,
-        "waterPh": 6.4,
-        "supplyVoltage": 12.4,
-        "moisturePct": 62.0,
-        "recordedAt": now,
+        "areaM2": area_m2,
+        "soilProfile": None,
+        "rain": None,
+        "waterPh": None,
+        "supplyVoltage": None,
+        "moisturePct": None,
+        "recordedAt": None,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
     }
     await db.zones.insert_one(doc)
     return {"name": doc["zone"], "label": doc["label"], "areaM2": doc["areaM2"]}
@@ -251,6 +254,7 @@ async def farm_advice(db: Any, farm_name: str, zone_filter: str | None = None) -
     if zone_filter:
         query["zone"] = zone_filter
     cycles = await db.cycles.find(query, {"_id": 0}).sort("zone", 1).to_list(length=100)
+    zone_docs = {z["zone"]: z for z in await latest_zones(db, farm_name)}
 
     out: list[dict] = []
     for c in cycles:
@@ -263,9 +267,11 @@ async def farm_advice(db: Any, farm_name: str, zone_filter: str | None = None) -
             sort=[("startedAt", -1)],
         )
         cells = latest_survey.get("cells", []) if latest_survey else []
-        trees = [cell["advice"] for cell in cells if cell.get("plant") and cell.get("advice")]
-        water_l = round(sum(t.get("litres", 0) for t in trees), 1)
-        full_l = round(sum(t.get("fullLitres", 0) for t in trees), 1) or round(water_l / 0.72, 1)
+        trees = [cell.get("advice") or cell_advice(cell) for cell in cells if cell.get("plant")]
+        trees = [t for t in trees if t]
+        raining = bool((zone_docs.get(z) or {}).get("rain"))
+        water_l = 0.0 if raining else round(sum(t.get("litres", 0) for t in trees), 1)
+        full_l = round(sum(t.get("fullLitres", 0) for t in trees), 1)
         saved_l = round(max(0.0, full_l - water_l), 1)
 
         n_vals = [cell["readings"].get("nitrogen") for cell in cells if cell.get("plant") and cell.get("readings")]
@@ -300,15 +306,16 @@ async def farm_advice(db: Any, farm_name: str, zone_filter: str | None = None) -
 
         todo: list[dict] = []
         for cell in cells:
-            if not cell.get("plant") or not cell.get("disease"):
+            if not cell.get("plant") or not (cell.get("disease") or cell.get("flagged")):
                 continue
             label = f"R{cell['row'] + 1} T{cell['col'] + 1}"
+            what = cell["disease"].replace("_", " ") if cell.get("disease") else "yellowing"
             todo.append({
                 "kind": "vision",
                 "id": f"{z}-{label}",
                 "severity": "warn",
-                "text": f"Inspect {cell['disease'].replace('_', ' ')} on {z.upper()} {label}",
-                "detail": "; ".join(cell.get("advice", {}).get("notes", [])),
+                "text": f"Inspect {what} on {c['bedLabel']} {label}",
+                "detail": "; ".join((cell.get("advice") or cell_advice(cell) or {}).get("notes", [])) or None,
             })
 
         out.append({
@@ -319,10 +326,10 @@ async def farm_advice(db: Any, farm_name: str, zone_filter: str | None = None) -
             "stage": {"n": st["n"], "short": st["short"], "title": st["title"]},
             "surveyed": latest_survey is not None,
             "surveyedAt": latest_survey["finishedAt"] if latest_survey else None,
-            "simulated": False,
-            "partial": False,
-            "treesSeen": c.get("plantCount") or len(trees),
-            "treesWatered": len(trees),
+            "simulated": bool(latest_survey and latest_survey.get("simulated")),
+            "partial": bool(latest_survey and latest_survey.get("status") == "aborted"),
+            "treesSeen": len(trees),
+            "treesWatered": 0 if raining else len(trees),
             "water": {
                 "litres": water_l,
                 "fullLitres": full_l,
@@ -330,8 +337,8 @@ async def farm_advice(db: Any, farm_name: str, zone_filter: str | None = None) -
                 "hours": round(water_l / 20.0, 2),
                 "emitterLph": 2.0,
                 "firmwareLimitSeconds": 180,
-                "raining": False,
-                "paused": False,
+                "raining": raining,
+                "paused": raining,
                 "et0": 4.2,
             },
             "feed": feed,
@@ -355,12 +362,21 @@ async def farm_schedule(db: Any, farm_name: str, days: int) -> dict:
     for adv in advices:
         z = adv["zone"]
         c = cyc_by_zone.get(z, {})
-        base_l = adv["water"]["litres"] or 20.0
+        # Today is what the round asked for; later days scale it by the stage's crop coefficient (Kc).
+        # Without a round there is nothing to scale, so the plan stays empty instead of inventing a number.
+        base_l = adv["water"]["fullLitres"] * PRECISION_SHARE if adv["water"]["raining"] else adv["water"]["litres"]
+        kc_today = stage_of(adv["day"])["kc"] or 1.0
         water_series = []
         for i, iso in enumerate(dates):
             d_num = adv["day"] + i
+            if d_num > CYCLE_DAYS or not adv["surveyed"]:
+                water_series.append(None)
+                continue
             st = stage_of(d_num)
-            litres = round(base_l * (1.0 + ((i % 3) - 1) * 0.04), 1)
+            if i == 0 and adv["water"]["raining"]:
+                water_series.append({"date": iso, "day": d_num, "stage": st["short"], "litres": 0.0, "kind": "hold"})
+                continue
+            litres = round(base_l * (st["kc"] or 1.0) / kc_today, 1)
             water_series.append({
                 "date": iso,
                 "day": d_num,

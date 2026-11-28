@@ -153,7 +153,19 @@ export type LiveMission = {
   reason: string | null; cell: [number, number] | null; battery: number | null; frame: string | null;
   cellsScanned: number; cellsTotal: number; simulate: string | null; simulated: boolean | null; cells: RoverCell[];
 };
-export type RoverLive = { rover: { code: string; status: "online" | "offline" | "unknown"; estop: boolean }; mission: LiveMission | null };
+export type RoverLive = {
+  rover: { code: string; status: "online" | "offline" | "unknown"; estop: boolean; lastSeenAt: string | null };
+  mission: LiveMission | null;
+};
+
+/** The server, the farm broker and the rover, for the status bar on every page. */
+export type SystemStatus = {
+  farm: string; farmToday: string; serverTime: string;
+  db: { kind: "mongodb" | "mongomock"; zones: number };
+  broker: { connected: boolean; since: string | null; error: string | null };
+  rover: RoverLive["rover"];
+  mission: { missionId: string | null; zoneId: string | null; status: LiveMission["status"] | null; cellsScanned: number | null; cellsTotal: number | null } | null;
+};
 export type SurveySummary = {
   id: string; zone: string; bedLabel: string; status: string; abortReason: string | null; simulated: boolean;
   rows: number | null; cols: number | null; cellM: number | null; cellsScanned: number | null; plantsDetected: number | null;
@@ -281,7 +293,7 @@ export type PhotoLabels = { labels: { id: string; title: string }[]; parts: stri
 export type SavePhotoInput = { zone: string; part: string; row?: number; col?: number; label?: string; note?: string; modelLabel?: string | null; modelSeen?: string | null };
 
 export const photoImageUrl = (id: string) => `${BASE}/photos/${id}/image`;
-export const photoExportUrl = (status: "confirmed" | "to_confirm") => `${BASE}/photos/export.zip?status=${status}`;
+export const photoExportUrl = (status: "confirmed" | "to_confirm" | "all") => `${BASE}/photos/export.zip?status=${status}`;
 
 async function savePhoto(file: File, input: SavePhotoInput): Promise<SavedPhoto> {
   const body = new FormData();
@@ -324,7 +336,7 @@ export type Cycle = {
 export type CostEntry = {
   id: string; plantingId: string | null; date: string; category: string; description: string | null;
   qty: number | null; unit: string | null; unitPrice: number | null; amount: number; currency: "USD" | "KHR";
-  amountUsd: number; rateUsed: number | null; source: string; sample: boolean;
+  amountUsd: number; rateUsed: number | null; source: "manual" | "stock_use"; sample: boolean; moveId?: string;
 };
 
 export type StockItem = {
@@ -341,10 +353,14 @@ export type Asset = {
 export type Harvest = { id: string; date: string; kgTotal: number; kgMarketable: number; kgHome: number; kgLost: number; note: string | null; sample: boolean };
 export type Sale = { id: string; date: string; kg: number; pricePerKg: number; currency: "USD" | "KHR"; amountUsd: number; buyer: string | null; sample: boolean };
 
+/** A cycle's cost of production from its records, beside the budget the Finance workbook sets for it. */
 export type Cop = {
   cycle: Cycle; currency: "USD"; khrPerUsd: number | null;
   lines: { category: string; label: string; amountUsd: number; sharePct: number; estimate: boolean }[];
   totalCostUsd: number; days: number; open: boolean;
+  loggedUsd: number; allocatedUsd: number; estimateUsd: number;   // typed or from stock · equipment and land shares · estimates
+  budgetUsd: number | null; budgetPerPlantUsd: number; standardPerPlantUsd: number;
+  expectedKg: number | null;
   kgTotal: number; kgMarketable: number; kgHome: number; kgLost: number;
   revenueUsd: number; marginUsd: number | null; copPerKg: number | null; breakEvenPricePerKg: number | null;
   costPerPlant: number | null; costPerM2: number | null; kgPerM3Water: number | null; waterM3: number | null;
@@ -358,6 +374,7 @@ export type CostInput = {
 };
 
 export const api = {
+  status: () => request<SystemStatus>("/status"),
   // operate
   zones: () => request<ZoneNow[]>("/zones"),
   devices: () => request<DeviceRow[]>("/devices"),
@@ -439,7 +456,7 @@ export const api = {
   stockIn: (id: string, b: { date: string; qty: number; unitPrice: number; currency: "USD" | "KHR" }) =>
     send<StockItem>("POST", `/stock/items/${id}/in`, b),
   stockUse: (id: string, b: { date: string; qty: number; plantingId: string }) =>
-    send<{ item: StockItem }>("POST", `/stock/items/${id}/use`, b),
+    send<{ item: StockItem; moveId: string; cost: CostEntry }>("POST", `/stock/items/${id}/use`, b),
   stockMoves: (id: string) => request<StockMove[]>(`/stock/items/${id}/moves`),
   undoStockUse: (moveId: string) => send<void>("DELETE", `/stock/moves/${moveId}`),
 

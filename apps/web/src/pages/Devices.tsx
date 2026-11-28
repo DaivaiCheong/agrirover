@@ -1,62 +1,60 @@
-import { Led, Notice, Panel } from "../components/ui";
-import { api, loadProblem, type DeviceRow } from "../lib/api";
-import { ago, usePoll } from "../lib/usePoll";
+import { Cpu } from "lucide-react";
+import { Empty, ErrorNotice, Led, Panel } from "../components/ui";
+import type { DeviceRow } from "../lib/api";
+import { errorText, useDevices, useStatus } from "../lib/queries";
+import { ago } from "../lib/usePoll";
 
 const STATUS: Record<DeviceRow["status"], ["ok" | "warn" | "alert" | "idle", string]> = {
-  online: ["ok", "online"],
-  stale: ["warn", "silent"],
+  online: ["ok", "reporting"],
+  stale: ["warn", "silent for 15 min or more"],
   never: ["alert", "never heard from"],
-  not_commissioned: ["idle", "not commissioned"],
+  not_commissioned: ["idle", "not set up"],
 };
 
 function statusOf(d: DeviceRow): ["ok" | "warn" | "alert" | "idle", string] {
-  if (d.status === "not_commissioned" && d.link) {
-    return d.link === "online" ? ["ok", "telemetry online"] : ["idle", "standby"];
+  if (d.kind === "rover" && d.link) {
+    return d.link === "online" ? ["ok", "online"] : d.link === "offline" ? ["alert", "offline"] : ["idle", "not heard from since the server started"];
   }
   return STATUS[d.status];
 }
 
+/** The field nodes and the rover, as the server last heard them. Nothing here is set by hand. */
 export default function Devices() {
-  const { data, error } = usePoll(api.devices, 10000);
-  const rows = data ?? [];
+  const devices = useDevices();
+  const status = useStatus();
+  const rows = devices.data ?? [];
 
   return (
-    <main className="main stack" style={{ paddingTop: 12 }}>
-      {error && <Notice kind="alert">{loadProblem(error)}</Notice>}
-      <Panel
-        title="Field Telemetry & Rover Devices"
-        pad={false}
-        right={<span className="small muted">Automated heartbeat every 10 min</span>}
-      >
-        <div className="tablewrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Kind</th>
-                <th>Primary Block</th>
-                <th>Status</th>
-                <th>Last scan</th>
-                <th>Firmware</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((d) => {
-                const [kind, label] = statusOf(d);
-                return (
-                  <tr key={d.code}>
-                    <td><b>{d.code}</b></td>
-                    <td>{d.kind.replace(/_/g, " ")}</td>
-                    <td>{d.zone ? d.zone.toUpperCase() : "All blocks"}</td>
-                    <td><Led kind={kind}>{label}</Led></td>
-                    <td>{d.commissioned || d.lastSeenAt ? ago(d.lastSeenAt) : "—"}</td>
-                    <td>{d.firmwareVersion ?? "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+    <main className="main stack">
+      {devices.error && <ErrorNotice error={errorText(devices.error)} onRetry={() => devices.refetch()} />}
+      {status.data && !status.data.broker.connected && (
+        <ErrorNotice error={`The server is not connected to the farm broker (MQTT), so no device can report. ${status.data.broker.error ?? ""}`} />
+      )}
+      <Panel title="Devices" icon={Cpu} pad={false} right={<span className="small muted">Refreshes every 15 s</span>}>
+        {rows.length === 0 ? (
+          <Empty icon={Cpu}>{devices.isPending ? "Loading…" : "No device registered."}</Empty>
+        ) : (
+          <div className="tablewrap">
+            <table className="tbl fold">
+              <thead><tr><th>Code</th><th>Kind</th><th>Bed</th><th>Status</th><th>Last heard</th><th>Firmware</th></tr></thead>
+              <tbody>
+                {rows.map((d) => {
+                  const [kind, label] = statusOf(d);
+                  return (
+                    <tr key={d.code}>
+                      <td><b>{d.code}</b></td>
+                      <td data-label="Kind">{d.kind.replace(/_/g, " ")}</td>
+                      <td data-label="Bed">{d.zone ? d.zone.toUpperCase() : "All beds"}</td>
+                      <td data-label="Status"><Led kind={kind}>{label}</Led></td>
+                      <td data-label="Last heard">{ago(d.lastSeenAt)}</td>
+                      <td data-label="Firmware">{d.firmwareVersion ?? "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Panel>
     </main>
   );

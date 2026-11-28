@@ -1,21 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Calculator, RotateCcw, ShieldCheck, Sprout } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Notice, Panel, Tag } from "../components/ui";
-import { api, loadProblem } from "../lib/api";
+import { ErrorNotice, Notice, Panel, PageSkeleton, Tag } from "../components/ui";
 import {
   convertToRiel,
-  createDefaultSpreadsheetInputs,
   evaluateSpreadsheet,
-  PLANT_PRESETS,
   rescaleSpreadsheetByPlants,
   type LedgerRowId,
   type SpreadsheetInputs,
 } from "../lib/financeSpreadsheet";
 import { num } from "../lib/format";
-import { buildAllBlockEconomics, computeFinanceView } from "../lib/tomatoFinance";
-import { useData } from "../lib/useData";
-import { useLatestRoundsByZone } from "../lib/useLatestRounds";
+import { errorText, useFarm, useResetWorkbook, useSaveWorkbook } from "../lib/queries";
 
 type ActiveCellInfo = {
   ref: string;
@@ -30,84 +25,50 @@ function parsePositiveFloat(raw: string, fallback: number): number {
 }
 
 export default function Finance() {
-  const zones = useData(api.zones);
-  const cycles = useData(api.cycles);
-  const conditions = useData(api.conditions);
-  const surveys = useData(api.surveys);
-  const workbookRes = useData(api.financeWorkbook);
+  const farm = useFarm();
+  const saveMut = useSaveWorkbook();
+  const resetMut = useResetWorkbook();
+  const syncedAlertCount = farm.blocks.reduce((n, b) => n + (b.plantCount > 0 ? b.visionAlertCount : 0), 0);
+  const farmPlants = farm.active.reduce((n, c) => n + (c.plantCount ?? 0), 0);
+  const presets = useMemo(() => {
+    const list = [{ plants: farmPlants, label: `Farm now · ${farmPlants} plants` }, ...[100, 500, 1000].map((n) => ({ plants: n, label: `${n.toLocaleString()} plants` }))];
+    return list.filter((p, i) => p.plants > 0 && list.findIndex((q) => q.plants === p.plants) === i);
+  }, [farmPlants]);
 
-  const activeZones = zones.data ?? [];
-  const activeCycles = cycles.data ?? [];
-  const activeConds = conditions.data ?? [];
-  const { roundsByZone } = useLatestRoundsByZone(surveys.data ?? []);
-
-  const { blocks, allRows } = useMemo(
-    () =>
-      buildAllBlockEconomics({
-        cycles: activeCycles,
-        zones: activeZones,
-        conditions: activeConds,
-        roundsByZone,
-      }),
-    [activeCycles, activeZones, activeConds, roundsByZone],
-  );
-
-  const farmReport = useMemo(
-    () => computeFinanceView({ scale: "farm", selectedZone: "g1", blocks, allRows }),
-    [blocks, allRows],
-  );
-
-  const syncedAlertCount = farmReport.visionAlertCount;
-
-  const [sheet, setSheet] = useState<SpreadsheetInputs>(() => createDefaultSpreadsheetInputs(0));
-  const [hydrated, setHydrated] = useState(false);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [saveError, setSaveError] = useState<string | null>(null);
+  // the sheet being edited; it starts from the saved workbook and every change is saved back (debounced)
+  const [sheet, setSheet] = useState<SpreadsheetInputs | null>(null);
   const saveTimerRef = useRef<number | null>(null);
-
   useEffect(() => {
-    if (workbookRes.data && !hydrated) {
-      setSheet(workbookRes.data as SpreadsheetInputs);
-      setHydrated(true);
-    }
-  }, [workbookRes.data, hydrated]);
-
+    if (farm.workbook && !sheet) setSheet(farm.workbook as SpreadsheetInputs);
+  }, [farm.workbook, sheet]);
   useEffect(() => () => {
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
   }, []);
 
-  function persistWorkbook(next: SpreadsheetInputs, immediate = false) {
-    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
-    const runSave = async () => {
-      setSaveState("saving");
-      setSaveError(null);
-      try {
-        await api.saveFinanceWorkbook(next);
-        setSaveState("saved");
-      } catch (err) {
-        setSaveState("error");
-        setSaveError((err as Error).message);
-      }
-    };
-    if (immediate) {
-      void runSave();
-    } else {
-      saveTimerRef.current = window.setTimeout(runSave, 350);
-    }
-  }
+  const saveState = saveMut.isPending || saveTimerRef.current !== null ? "saving" : saveMut.isError ? "error" : "saved";
 
   function applySheetUpdate(updater: (prev: SpreadsheetInputs) => SpreadsheetInputs, immediate = false) {
-    setSheet((prev) => {
-      const next = updater(prev);
-      persistWorkbook(next, immediate);
-      return next;
-    });
+    if (!sheet) return;
+    const next = updater(sheet);
+    setSheet(next);
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    const run = () => {
+      saveTimerRef.current = null;
+      saveMut.mutate(next);
+    };
+    if (immediate) run();
+    else saveTimerRef.current = window.setTimeout(run, 400);
   }
 
-  const calc = useMemo(() => evaluateSpreadsheet(sheet), [sheet]);
   const [selectedRef, setSelectedRef] = useState<string>("E8");
+  if (!sheet) {
+    return farm.error ? <main className="main"><ErrorNotice error={farm.error} onRetry={farm.refetch} /></main> : <PageSkeleton rows={2} />;
+  }
+  const rateDiffers = farm.settings && Math.abs(farm.settings.khrPerUsd - sheet.exchangeRate) >= 1;
 
-  const activeCell: ActiveCellInfo = useMemo(() => {
+  const calc = evaluateSpreadsheet(sheet);
+
+  const activeCell: ActiveCellInfo = (() => {
     const rielStr = (u: number) => `~${convertToRiel(u, sheet.exchangeRate).toLocaleString()} ៛`;
     if (selectedRef === "B1") {
       return { ref: "B1", formula: String(sheet.plants), preview: `${sheet.plants} Active Tomato Plants` };
@@ -181,25 +142,18 @@ export default function Finance() {
       default:
         return { ref: "E8", formula: "=SUM(E2:E7)", preview: `$${calc.totalRoverCostUsd.toFixed(2)} (~${calc.totalRoverCostRiel.toLocaleString()} ៛)` };
     }
-  }, [selectedRef, sheet, calc, syncedAlertCount]);
+  })();
 
-  function handlePresetPlants(n: number) {
-    applySheetUpdate((prev) => rescaleSpreadsheetByPlants(prev, n), true);
+  function handlePresetPlants(n: number, immediate = true) {
+    applySheetUpdate((prev) => rescaleSpreadsheetByPlants(prev, n), immediate);
     setSelectedRef("B1");
   }
 
   async function handleResetFarm() {
-    setSaveState("saving");
-    setSaveError(null);
-    try {
-      const resetDoc = await api.resetFinanceWorkbook();
-      setSheet(resetDoc as SpreadsheetInputs);
-      setSelectedRef("E8");
-      setSaveState("saved");
-    } catch (err) {
-      setSaveState("error");
-      setSaveError((err as Error).message);
-    }
+    if (!window.confirm("Reset every cell of the workbook to the farm's baseline? Your edits are lost.")) return;
+    const resetDoc = await resetMut.mutateAsync();
+    setSheet(resetDoc as SpreadsheetInputs);
+    setSelectedRef("E8");
   }
 
   function updateRowField(id: LedgerRowId, field: "roverQty" | "stdQty" | "unitRateUsd", raw: string) {
@@ -218,23 +172,29 @@ export default function Finance() {
     }));
   }
 
-  const pageError = workbookRes.error ?? zones.error ?? cycles.error;
-
   return (
-    <main className="main stack" style={{ paddingTop: 12 }}>
-      {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
-      {saveError && <Notice kind="alert">{saveError}</Notice>}
+    <main className="main stack">
+      {farm.error && <ErrorNotice error={farm.error} onRetry={farm.refetch} />}
+      {saveMut.error && <ErrorNotice error={`Not saved: ${errorText(saveMut.error)}`} onRetry={() => saveMut.mutate(sheet)} />}
+      {rateDiffers && (
+        <Notice kind="info">
+          Settings use {farm.settings!.khrPerUsd.toLocaleString()} ៛ to the dollar; this sheet uses {sheet.exchangeRate.toLocaleString()} ៛.{" "}
+          <button type="button" className="linkbtn" onClick={() => applySheetUpdate((prev) => ({ ...prev, exchangeRate: farm.settings!.khrPerUsd }), true)}>
+            Use the Settings rate
+          </button>
+        </Notice>
+      )}
 
       <Panel
-        title="Tomato Farm Financial Workbook (MongoDB Live Sheet)"
+        title="Unit cost workbook"
         icon={Calculator}
         pad={false}
         right={
           <div className="rv-right">
-            {saveState === "saving" && <Tag>Saving to MongoDB…</Tag>}
-            {saveState === "saved" && <Tag kind="ok">Saved in MongoDB</Tag>}
-            {saveState === "idle" && hydrated && <Tag kind="ok">Synced with MongoDB</Tag>}
-            <button type="button" className="btn btn-sm btn-ghost" onClick={handleResetFarm}>
+            {saveState === "saving" && <Tag>Saving…</Tag>}
+            {saveState === "saved" && <Tag kind="ok">Saved</Tag>}
+            {saveState === "error" && <Tag kind="alert">Not saved</Tag>}
+            <button type="button" className="btn btn-sm btn-ghost" onClick={handleResetFarm} disabled={resetMut.isPending}>
               <RotateCcw size={14} aria-hidden />Reset to Farm Baseline
             </button>
           </div>
@@ -242,7 +202,7 @@ export default function Finance() {
       >
         <div className="rv-action-bar">
           <div className="seg" role="group" aria-label="Scale farm plant count presets">
-            {PLANT_PRESETS.map((p) => (
+            {presets.map((p) => (
               <button
                 key={p.plants}
                 type="button"
@@ -269,7 +229,7 @@ export default function Finance() {
 
         <div className="xl-sheet-head">
           <span>Sheet 1 · Operating Cost &amp; Savings Ledger</span>
-          <span className="small muted">Changes persist automatically to MongoDB (`finance_workbooks`)</span>
+          <span className="small muted">Every change is saved, and the budget on Today, Crops and By block follows it</span>
         </div>
 
         <div className="tablewrap">
@@ -299,7 +259,7 @@ export default function Finance() {
                       className="xl-input xl-input-bold"
                       value={sheet.plants}
                       onFocus={() => setSelectedRef("B1")}
-                      onChange={(e) => handlePresetPlants(parsePositiveFloat(e.target.value, sheet.plants))}
+                      onChange={(e) => handlePresetPlants(parsePositiveFloat(e.target.value, sheet.plants), false)}
                     />
                   </label>
                 </th>

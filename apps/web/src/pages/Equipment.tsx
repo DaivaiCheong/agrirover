@@ -1,9 +1,8 @@
-import { useState } from "react";
-import { Plus } from "lucide-react";
-import { EF, Empty, FormModal, Kpis, Notice, Panel, Tag, Toolbar, type FormMsg } from "../components/ui";
-import { api, loadProblem } from "../lib/api";
+import { useState, type FormEvent } from "react";
+import { Plus, Wrench } from "lucide-react";
+import { EF, Empty, ErrorNotice, FormModal, Kpis, Panel, Tag, Toolbar, failMsg, type FormMsg } from "../components/ui";
 import { todayIso, usd } from "../lib/format";
-import { useData } from "../lib/useData";
+import { errorText, useAddAsset, useAssets, useDeleteAsset, useRetireAsset } from "../lib/queries";
 
 const STATUS: Record<string, [string | undefined, string]> = {
   in_service: ["ok", "In use"],
@@ -11,48 +10,12 @@ const STATUS: Record<string, [string | undefined, string]> = {
   worn_out: ["warn", "Worn out"],
 };
 
+/** Equipment wears out a little every day; that share goes into each crop's cost report as depreciation. */
 export default function Equipment() {
-  const assets = useData(api.assets);
-
+  const assets = useAssets();
+  const retire = useRetireAsset();
+  const remove = useDeleteAsset();
   const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [cost, setCost] = useState("");
-  const [bought, setBought] = useState(todayIso());
-  const [life, setLife] = useState("");
-  const [salvage, setSalvage] = useState("");
-  const [msg, setMsg] = useState<FormMsg>(null);
-  const [listError, setListError] = useState<string | null>(null);
-
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      await api.addAsset({
-        name,
-        costUsd: Number(cost),
-        boughtOn: bought,
-        lifeYears: Number(life),
-        salvageUsd: salvage === "" ? undefined : Number(salvage),
-      });
-      setMsg({ kind: "ok", text: `${name} added.` });
-      setName("");
-      setCost("");
-      setLife("");
-      setSalvage("");
-      assets.reload();
-    } catch (err) {
-      setMsg({ kind: "alert", text: (err as Error).message });
-    }
-  }
-
-  async function act(fn: () => Promise<unknown>) {
-    try {
-      await fn();
-      setListError(null);
-      assets.reload();
-    } catch (err) {
-      setListError((err as Error).message);
-    }
-  }
 
   const rows = assets.data ?? [];
   const inUse = rows.filter((a) => a.status === "in_service");
@@ -61,54 +24,41 @@ export default function Equipment() {
   return (
     <>
       <Toolbar>
-        <button className="btn btn-sm" onClick={() => { setMsg(null); setAdding(true); }}>
-          <Plus size={16} aria-hidden />Add equipment
-        </button>
+        <button className="btn btn-sm" onClick={() => setAdding(true)}><Plus size={16} aria-hidden />Add equipment</button>
       </Toolbar>
       <main className="main stack">
-        {assets.error && <Notice kind="alert">{loadProblem(assets.error)}</Notice>}
-        {listError && <Notice kind="alert">{listError}</Notice>}
-
+        {assets.error && <ErrorNotice error={errorText(assets.error)} onRetry={() => assets.refetch()} />}
         <Kpis
+          loading={assets.isPending}
           items={[
-            { k: "In use", v: inUse.length },
-            { k: "Depreciation per day", v: usd(perDay, 3) },
-            { k: "Hardware invested", v: usd(rows.reduce((s, a) => s + a.costUsd, 0)) },
+            { k: "In use", icon: Wrench, v: inUse.length, d: `${rows.length - inUse.length} retired` },
+            { k: "Wear per day", v: usd(perDay, 3), d: "Shared across the growing crops by area" },
+            { k: "Invested", v: usd(rows.reduce((s, a) => s + a.costUsd, 0)), d: "Price paid, all equipment" },
           ]}
         />
-
-        <Panel title="Field Equipment & Rover Assets" pad={false}>
+        <Panel title="Equipment" icon={Wrench} pad={false}>
           {rows.length === 0 ? (
-            <Empty>No equipment yet.</Empty>
+            <Empty icon={Wrench}>{assets.isPending ? "Loading…" : "No equipment yet."}</Empty>
           ) : (
             <div className="tablewrap">
               <table className="tbl fold">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Bought</th>
-                    <th className="r">Price</th>
-                    <th className="r">Life, years</th>
-                    <th className="r">Per day</th>
-                    <th>Status</th>
-                    <th />
-                  </tr>
-                </thead>
+                <thead><tr><th>Name</th><th>Bought</th><th className="r">Price</th><th className="r">Life</th><th className="r">Per day</th><th>Status</th><th /></tr></thead>
                 <tbody>
                   {rows.map((a) => (
                     <tr key={a.id}>
                       <td><b>{a.name}</b></td>
                       <td data-label="Bought" className="nowrap">{a.boughtOn}</td>
                       <td data-label="Price" className="r">{usd(a.costUsd)}</td>
-                      <td data-label="Life, years" className="r">{a.lifeYears}</td>
+                      <td data-label="Life" className="r">{a.lifeYears} years</td>
                       <td data-label="Per day" className="r">{usd(a.dailyDepreciationUsd, 3)}</td>
-                      <td data-label="Status"><Tag kind={STATUS[a.status][0]}>{STATUS[a.status][1]}</Tag></td>
+                      <td data-label="Status"><Tag kind={STATUS[a.status]?.[0]}>{STATUS[a.status]?.[1] ?? a.status}{a.retiredOn ? ` ${a.retiredOn}` : ""}</Tag></td>
                       <td className="act">
                         {a.status === "in_service" && (
-                          <button className="linkbtn" onClick={() => act(() => api.retireAsset(a.id))}>Retire</button>
-                        )}
-                        {" "}
-                        <button className="linkbtn linkbtn-alert" onClick={() => window.confirm(`Remove ${a.name}?`) && act(() => api.deleteAsset(a.id))}>Remove</button>
+                          <button className="linkbtn" disabled={retire.isPending}
+                                  onClick={() => window.confirm(`Retire ${a.name} today? It stops adding wear to the crops.`) && retire.mutate(a.id)}>Retire</button>
+                        )}{" "}
+                        <button className="linkbtn linkbtn-alert" disabled={remove.isPending}
+                                onClick={() => window.confirm(`Remove ${a.name}? Its wear leaves every cost report.`) && remove.mutate(a.id)}>Remove</button>
                       </td>
                     </tr>
                   ))}
@@ -118,20 +68,40 @@ export default function Equipment() {
           )}
         </Panel>
       </main>
-
-      {adding && (
-        <FormModal title="Add equipment" submit="Save" msg={msg} onClose={() => setAdding(false)} onSubmit={add} width={480}>
-          <div className="erp-form">
-            <EF label="Name" req><input className="erp-input" required autoFocus value={name} onChange={(e) => setName(e.target.value)} /></EF>
-            <div className="erp-grid-2">
-              <EF label="Price paid (USD)" req><input className="erp-input" required inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></EF>
-              <EF label="Date bought" req><input className="erp-input" type="date" required value={bought} onChange={(e) => setBought(e.target.value)} /></EF>
-              <EF label="Life (years)" req><input className="erp-input" required inputMode="decimal" value={life} onChange={(e) => setLife(e.target.value)} /></EF>
-              <EF label="Worth at the end (USD)"><input className="erp-input" inputMode="decimal" value={salvage} onChange={(e) => setSalvage(e.target.value)} /></EF>
-            </div>
-          </div>
-        </FormModal>
-      )}
+      {adding && <AddAssetDialog onClose={() => setAdding(false)} />}
     </>
+  );
+}
+
+function AddAssetDialog({ onClose }: { onClose: () => void }) {
+  const add = useAddAsset();
+  const [name, setName] = useState("");
+  const [cost, setCost] = useState("");
+  const [bought, setBought] = useState(todayIso());
+  const [life, setLife] = useState("");
+  const [salvage, setSalvage] = useState("");
+  const [msg, setMsg] = useState<FormMsg>(null);
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await add.mutateAsync({ name, costUsd: Number(cost), boughtOn: bought, lifeYears: Number(life), salvageUsd: salvage === "" ? undefined : Number(salvage) });
+      setMsg({ kind: "ok", text: `${name} added. Its wear now counts in the crops' costs.` });
+      setName(""); setCost(""); setLife(""); setSalvage("");
+    } catch (err) {
+      setMsg(failMsg(err));
+    }
+  }
+  return (
+    <FormModal title="Add equipment" submit="Save" msg={msg} onClose={onClose} onSubmit={save} busy={add.isPending} width={480}>
+      <div className="erp-form">
+        <EF label="Name" req><input className="erp-input" required autoFocus value={name} onChange={(e) => setName(e.target.value)} /></EF>
+        <div className="erp-grid-2">
+          <EF label="Price paid (USD)" req><input className="erp-input" required inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></EF>
+          <EF label="Date bought" req><input className="erp-input" type="date" required value={bought} onChange={(e) => setBought(e.target.value)} /></EF>
+          <EF label="Life (years)" req><input className="erp-input" required inputMode="decimal" value={life} onChange={(e) => setLife(e.target.value)} /></EF>
+          <EF label="Worth at the end (USD)"><input className="erp-input" inputMode="decimal" value={salvage} onChange={(e) => setSalvage(e.target.value)} /></EF>
+        </div>
+      </div>
+    </FormModal>
   );
 }

@@ -5,6 +5,7 @@ import asyncio
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 from app.core.db import ensure_indexes, get_database
@@ -283,6 +284,11 @@ async def seed_farm(db: Any, farm_name: str | None = None) -> None:
     fname = farm_name or settings.farm_name
     today = farm_today()
     now = datetime.now(timezone.utc)
+    # the daily round runs at 07:00 on the farm (Cambodia time); the newest seeded one is the last 07:00 already past
+    local_now = datetime.now(ZoneInfo("Asia/Phnom_Penh"))
+    last_round = local_now.replace(hour=7, minute=0, second=0, microsecond=0)
+    if last_round > local_now:
+        last_round -= timedelta(days=1)
 
     # 1. Farm + Settings
     if await db.farms.find_one({"name": fname}) is None:
@@ -353,7 +359,7 @@ async def seed_farm(db: Any, farm_name: str | None = None) -> None:
 
             # Seed 14 daily completed surveys per active bed (newest first when queried)
             for d_off in range(14):
-                started = (now - timedelta(days=d_off)).replace(hour=7, minute=0, second=0, microsecond=0)
+                started = (last_round - timedelta(days=d_off)).astimezone(timezone.utc)
                 finished = started + timedelta(minutes=14)
                 cells = [
                     _build_cell(spec, r, c, d_off)
@@ -454,9 +460,9 @@ async def seed_farm(db: Any, farm_name: str | None = None) -> None:
     # 8. Initial Costs ledger
     if await db.costs.count_documents({"farmName": fname}) == 0:
         await db.costs.insert_many([
-            {"id": "cost-seed-all", "farmName": fname, "plantingId": "cycle-g1", "date": (today - timedelta(days=31)).isoformat(), "category": "seed", "description": "G1 Roma seedlings & coco-peat plugs (15 plants)", "qty": 15, "unit": "plants", "unitPrice": 0.22, "amount": 3.30, "currency": "USD", "amountUsd": 3.30, "rateUsed": KHR_PER_USD, "source": "ledger", "sample": False},
-            {"id": "cost-fert-g2", "farmName": fname, "plantingId": "cycle-g2", "date": (today - timedelta(days=10)).isoformat(), "category": "fertilizer", "description": "Calcium Nitrate & K2SO4 drip amendments", "qty": 1.6, "unit": "kg", "unitPrice": 1.15, "amount": 1.84, "currency": "USD", "amountUsd": 1.84, "rateUsed": KHR_PER_USD, "source": "ledger", "sample": False},
-            {"id": "cost-bio-g3", "farmName": fname, "plantingId": "cycle-g3", "date": (today - timedelta(days=6)).isoformat(), "category": "pesticide", "description": "Bacillus subtilis WP + Calcium Chloride foliar spot spray", "qty": 0.6, "unit": "L", "unitPrice": 2.40, "amount": 1.44, "currency": "USD", "amountUsd": 1.44, "rateUsed": KHR_PER_USD, "source": "ledger", "sample": False},
+            {"id": "cost-seed-all", "farmName": fname, "plantingId": "cycle-g1", "date": (today - timedelta(days=31)).isoformat(), "category": "seed", "description": "G1 Roma seedlings & coco-peat plugs (15 plants)", "qty": 15, "unit": "plants", "unitPrice": 0.22, "amount": 3.30, "currency": "USD", "amountUsd": 3.30, "rateUsed": KHR_PER_USD, "source": "manual", "sample": False},
+            {"id": "cost-fert-g2", "farmName": fname, "plantingId": "cycle-g2", "date": (today - timedelta(days=10)).isoformat(), "category": "fertilizer", "description": "Calcium Nitrate & K2SO4 drip amendments", "qty": 1.6, "unit": "kg", "unitPrice": 1.15, "amount": 1.84, "currency": "USD", "amountUsd": 1.84, "rateUsed": KHR_PER_USD, "source": "manual", "sample": False},
+            {"id": "cost-bio-g3", "farmName": fname, "plantingId": "cycle-g3", "date": (today - timedelta(days=6)).isoformat(), "category": "pesticide", "description": "Bacillus subtilis WP + Calcium Chloride foliar spot spray", "qty": 0.6, "unit": "L", "unitPrice": 2.40, "amount": 1.44, "currency": "USD", "amountUsd": 1.44, "rateUsed": KHR_PER_USD, "source": "manual", "sample": False},
         ])
 
     # 9. Leaf sample example

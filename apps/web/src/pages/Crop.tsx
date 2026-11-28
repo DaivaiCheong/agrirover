@@ -4,19 +4,17 @@ import { useLocation, useNavigate } from "react-router-dom";
 import PlantSoilModal from "../components/PlantSoilModal";
 import { FastFocusBlocks, MulderQuickCheck } from "../components/FastFocusCard";
 import RoverVisionPhoto from "../components/RoverVisionPhoto";
-import { Empty, Notice, Panel, Tag } from "../components/ui";
-import { api, loadProblem } from "../lib/api";
+import { Empty, ErrorNotice, Panel, Tag } from "../components/ui";
+import { useFarmFocus } from "../lib/farmContext";
+import { errorText, useAdvice, useConditions, useLatestRounds, usePhotos, useSurveys, useZones } from "../lib/queries";
 import {
   buildBlockSoilRows,
-  getBlockSoilProfile,
-  setRoverContext,
+  defaultBlockSoilProfile,
   targetsFromConditions,
   type PlantSoilRow,
   type SoilTargets,
 } from "../lib/soil";
 import { TOMATO_TREATMENTS } from "../lib/treatments";
-import { useData } from "../lib/useData";
-import { useLatestRoundsByZone } from "../lib/useLatestRounds";
 import { ago } from "../lib/usePoll";
 import { evaluateAgronomyAction, FAST_GUIDE_CARDS } from "../utils/agronomyEngine";
 
@@ -43,13 +41,14 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
     }
   }, [activeTab, highlightedId]);
 
-  const zones = useData(api.zones);
-  const conditions = useData(api.conditions);
-  const advice = useData(api.advice);
-  const surveys = useData(api.surveys);
-  const photos = useData(() => api.photos("all"));
-
-  const [zoneFilter, setZoneFilter] = useState<string>("all");
+  const zones = useZones();
+  const conditions = useConditions();
+  const advice = useAdvice();
+  const surveys = useSurveys();
+  const photos = usePhotos("all");
+  const focus = useFarmFocus();
+  const zoneFilter = focus.zone ?? "all";
+  const setZoneFilter = (z: string) => focus.setZone(z === "all" ? null : z);
   const [statusFilter, setStatusFilter] = useState<"all" | "alerts" | "healthy">("all");
   const [showBoxes, setShowBoxes] = useState(true);
   const [inspected, setInspected] = useState<GalleryItem | null>(null);
@@ -60,7 +59,7 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
   const surveyList = surveys.data ?? [];
   const savedPhotos = photos.data?.photos ?? [];
 
-  const { roundsByZone } = useLatestRoundsByZone(surveyList);
+  const { roundsByZone } = useLatestRounds(surveys.data);
   const pageError = zones.error ?? surveys.error ?? conditions.error;
 
   const allItems = useMemo<GalleryItem[]>(() => {
@@ -78,7 +77,7 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
         conditions: cond,
         advice: adv,
         photos: savedPhotos,
-        profile: getBlockSoilProfile(b.zone),
+        profile: b.soilProfile ?? defaultBlockSoilProfile(b.zone),
         capturedAt: round.finishedAt ?? round.startedAt,
       });
       for (const p of rows) {
@@ -163,23 +162,23 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
 
   function handleViewHistory(plant: PlantSoilRow) {
     setInspected(null);
-    setRoverContext({ zone: plant.zone, plant: plant.name });
+    focus.setFocus(plant.zone, plant.name);
     navigate(`/rover/history?zone=${encodeURIComponent(plant.zone)}&plant=${encodeURIComponent(plant.name)}`);
   }
 
   return (
-    <main className="main stack" style={{ paddingTop: 12 }}>
-      {pageError && <Notice kind="alert">{loadProblem(pageError)}</Notice>}
+    <main className="main stack">
+      {pageError && <ErrorNotice error={errorText(pageError)} onRetry={() => { zones.refetch(); surveys.refetch(); }} />}
       {activeTab === "gallery" ? (
         <>
           <Panel
-            title="Rover Vision Gallery"
+            title="Plant gallery"
             icon={Camera}
             pad={false}
             right={
               <div className="rv-right">
                 <span className="small muted">
-                  Monitored automatically by AgriRover{newestAt ? ` · Last updated ${ago(newestAt)}` : ""}
+                  What the rover's camera saw{newestAt ? ` · newest round ${ago(newestAt)}` : ""}
                 </span>
                 <button
                   type="button"
@@ -241,7 +240,7 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
             </div>
 
             {visibleItems.length === 0 ? (
-              <Empty>No captured tomato plant photos match this filter.</Empty>
+              <Empty>{surveys.isPending ? "Loading…" : "No plant matches this filter in the newest rounds."}</Empty>
             ) : (
               <div className="rv-gallery-grid">
                 {visibleItems.map(({ blockLabel, plant }) => {
@@ -302,7 +301,7 @@ export default function Crop({ initialTab = "gallery" }: { initialTab?: "gallery
         <>
           <MulderQuickCheck blocks={mulderBlocks} rowsByZone={rowsByZone} />
           <Panel
-            title="Tomato Disease & Treatment Guide"
+            title="Disease and treatment guide"
             icon={BookOpen}
             pad={false}
             right={
